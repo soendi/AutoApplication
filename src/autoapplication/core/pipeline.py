@@ -633,9 +633,10 @@ class Pipeline:
             received = str(message.get("receivedDateTime") or "")
             if received and received > newest:
                 newest = received
-            application = self._match_reply(message, active)
-            if application is None:
+            matched = self._match_reply(message, active)
+            if matched is None:
                 continue
+            application, via = matched
             message_id = str(message.get("id") or "")
             if not message_id:
                 continue
@@ -654,7 +655,7 @@ class Pipeline:
             )
             if not added:
                 continue
-            self._apply_reply(application, kind, sender, subject)
+            self._apply_reply(application, kind, sender, subject, via)
             found.append(
                 {
                     "application": application,
@@ -673,7 +674,8 @@ class Pipeline:
 
     def _match_reply(
         self, message: dict[str, Any], active: list[dict[str, Any]]
-    ) -> dict[str, Any] | None:
+    ) -> tuple[dict[str, Any], str] | None:
+        """Bewerbung und Weg der Zuordnung (für das Protokoll)."""
         # Zuerst die mitgereiste Kennung: sie bleibt eindeutig, auch wenn
         # Betreff und Absender nichts verraten.
         code = str(message.get("tracking") or "") or find_code(
@@ -682,26 +684,26 @@ class Pipeline:
         if code:
             application = self.store.application_by_tracking(code)
             if application is not None:
-                return application
+                return application, f"Kennung {code}"
         conversation = str(message.get("conversationId") or "")
         sender = sender_address(message)
         sender_domain = domain_of(sender)
         subject = normalize(str(message.get("subject") or ""))
         for application in active:
             if conversation and conversation == application.get("conversation_id"):
-                return application
+                return application, "Unterhaltung"
             job_row = self.store.get_job(str(application.get("job_id") or ""))
             job = Job.from_row(job_row) if job_row else None
             if job is None:
                 continue
             if sender_domain and sender_domain in job.domained():
-                return application
+                return application, f"Absenderdomain {sender_domain}"
             company = normalize(job.company)
             if len(company) >= 4 and company in subject:
-                return application
+                return application, "Firmenname"
             title = normalize(job.title)
             if len(title) >= 12 and title in subject:
-                return application
+                return application, "Stellentitel"
         return None
 
     def _apply_reply(
@@ -710,6 +712,7 @@ class Pipeline:
         kind: str,
         sender: str,
         subject: str,
+        via: str = "",
     ) -> None:
         app_id = int(application["id"])
         company = application.get("company") or "Firma"
@@ -724,7 +727,8 @@ class Pipeline:
             EINLADUNG: "Einladung zum Gespräch",
             INFO: "Antwort",
         }.get(kind, "Antwort")
-        self.store.log("antwort", f"{label} von {company}: {subject}")
+        routing = f" – zugeordnet über {via}" if via else ""
+        self.store.log("antwort", f"{label} von {company}: {subject}{routing}")
         if kind == ABSAGE:
             self.store.update_application(
                 app_id,

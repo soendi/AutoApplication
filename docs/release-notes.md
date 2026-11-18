@@ -1,3 +1,31 @@
+## AutoApplication 1.0.14
+
+Übersicht im Tab Bewerbungen: Posteingang auf Klick prüfen, Kennungen
+nachschauen und eine Statuszeile, die bei schmalem Fenster umbricht.
+
+### Neu
+
+- **„E-Mail-Eingang jetzt prüfen“ im Tab Bewerbungen.** Der Knopf gleicht
+  gesendete Bewerbungen und eingegangene Antworten sofort ab – ohne Umweg über
+  die Übersicht.
+- **Kennung im Dialog „Anschreiben anzeigen“.** Über dem Brieftext steht die
+  Kennung der Bewerbung (z. B. `AA-7K4P-Q9XM-3TRZ`) zum Markieren und Kopieren.
+  Damit lässt sich bei einer falsch zugeordneten Antwort nachsehen, welche
+  Kennung die Bewerbung trägt.
+- **Protokoll zeigt den Weg der Zuordnung.** Jede verbuchte Antwort nennt im
+  Protokoll, wodurch sie zugeordnet wurde: «zugeordnet über Kennung …»,
+  «Unterhaltung», «Absenderdomain …», «Firmenname» oder «Stellentitel». So ist
+  erkennbar, ob die Kennung greift oder nur ein Rückfall.
+
+### Geändert
+
+- **Status-Häkchen brechen um.** Die Zeile mit den acht Häkchen und dem Zähler
+  setzt bei schmalem Fenster oder grösserer Schrift in die nächste Zeile um,
+  statt rechts abgeschnitten zu werden (neu dafür: ein umbrechendes Layout).
+  Geprüft bei 420–1200 px Fensterbreite mit 9 pt und 13 pt Schrift: alle acht
+  Häkchen und der Zähler bleiben vollständig sichtbar, die Tabelle beginnt
+  jeweils unter der letzten Zeile.
+
 ## AutoApplication 1.0.13
 
 Die Bewerbungsmail geht an die richtige Adresse und spricht die richtige Person

@@ -1,4 +1,4 @@
-# AutoApplication 1.0.13
+# AutoApplication 1.0.14
 
 Stellen von ostjob.ch suchen, Bewerbungen als Entwurf in Outlook oder Gmail
 vorbereiten und Antworten bis zur Zusage verfolgen – als Windows-Programm mit
@@ -49,14 +49,18 @@ stillen Updates.
    den Firmennamen oder den Stellentitel. Eine **Absage** archiviert die Bewerbung, eine **Zusage** oder
    **Einladung** erscheint als Hinweis. Im Tab **Bewerbungen** filtern Häkchen
    nach Status – jeder Status einzeln oder mehrere kombiniert; ohne Häkchen
-   stehen alle Bewerbungen in der Liste.
+   stehen alle Bewerbungen in der Liste. Bei schmalem Fenster oder grösserer
+   Schrift bricht die Häkchenzeile um, statt rechts abgeschnitten zu werden.
+   Der Knopf „E-Mail-Eingang jetzt prüfen“ stösst den Abgleich sofort an, und
+   unter „Anschreiben anzeigen“ steht die Kennung der Bewerbung zum Nachschauen;
+   im Protokoll steht bei jeder Antwort, wodurch sie zugeordnet wurde.
 7. **Nachfassen.** Ohne Antwort nach 14 Tagen zeigt die Übersicht die
    Bewerbung als fällig; auf Klick entsteht die Nachfrage nach Vorlage als
    Entwurf – einmal je Bewerbung.
 
 ## Installation
 
-`AutoApplication-1.0.13-Setup.exe` von der
+`AutoApplication-1.0.14-Setup.exe` von der
 [Release-Seite](https://github.com/soendi/AutoApplication/releases/latest)
 herunterladen und ausführen. Windows 10 und 11, kein Administrator- und kein
 Python-Zubehör nötig.

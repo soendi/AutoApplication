@@ -251,6 +251,11 @@ def test_reply_rejection_archives(tmp_path) -> None:
     assert application["status"] == "absage"
     assert application["archived_at"]
     assert store.get_job("ostjob:1")["status"] == "archiviert"
+    # Das Protokoll nennt den Weg der Zuordnung.
+    assert any(
+        "zugeordnet über Unterhaltung" in event["message"]
+        for event in store.events()
+    )
 
     # Dieselbe Mail wird nicht ein zweites Mal verbucht.
     assert pipeline.check_replies() == []
@@ -374,6 +379,10 @@ def test_reply_is_matched_by_tracking_code(tmp_path) -> None:
     found = pipeline.check_replies()
     assert len(found) == 1
     assert found[0]["application"]["id"] == application["id"]
+    assert any(
+        f"zugeordnet über Kennung {code}" in event["message"]
+        for event in store.events()
+    )
 
 
 def test_follow_up_reuses_tracking_code(tmp_path) -> None:

@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 
 from ..core.pipeline import due_label, reply_summary
 from ..core.text import format_date, now_iso
+from .flow_layout import FlowLayout
 
 STATUS_LABELS = {
     "entwurf": "Entwurf",
@@ -47,8 +48,9 @@ class ApplicationsPage(QWidget):
         layout.setContentsMargins(18, 16, 18, 16)
         layout.setSpacing(10)
 
-        filters = QHBoxLayout()
-        filters.setSpacing(12)
+        # Umbrechende Zeile: schmales Fenster oder grössere Schrift schiebt
+        # Häkchen und Zähler in die nächste Zeile, statt sie abzuschneiden.
+        filters = FlowLayout(spacing=12)
         label = QLabel("Status")
         label.setObjectName("Hint")
         filters.addWidget(label)
@@ -62,7 +64,6 @@ class ApplicationsPage(QWidget):
             box.toggled.connect(self.refresh)
             self.status_boxes[key] = box
             filters.addWidget(box)
-        filters.addStretch(1)
         self.hint = QLabel("")
         self.hint.setObjectName("Hint")
         filters.addWidget(self.hint)
@@ -92,12 +93,18 @@ class ApplicationsPage(QWidget):
         self.follow_button.clicked.connect(self.follow_up)
         self.archive_button = QPushButton("Archivieren")
         self.archive_button.clicked.connect(self.archive)
+        self.mail_button = QPushButton("E-Mail-Eingang jetzt prüfen")
+        self.mail_button.setToolTip(
+            "Gesendete Bewerbungen und eingegangene Antworten sofort abgleichen."
+        )
+        self.mail_button.clicked.connect(self.window.check_mail)
         for button in (
             self.letter_button,
             self.draft_button,
             self.sent_button,
             self.follow_button,
             self.archive_button,
+            self.mail_button,
         ):
             buttons.addWidget(button)
         buttons.addStretch(1)
@@ -188,7 +195,12 @@ class ApplicationsPage(QWidget):
                 f"Betreff: {application.get('follow_up_subject')}\n\n"
                 f"{application.get('follow_up_body') or ''}"
             )
-        dialog = LetterDialog(self, str(application.get("subject") or "Anschreiben"), text)
+        dialog = LetterDialog(
+            self,
+            str(application.get("subject") or "Anschreiben"),
+            text,
+            tracking=str(application.get("tracking") or ""),
+        )
         dialog.exec()
 
     def open_draft(self) -> None:
@@ -254,11 +266,33 @@ class ApplicationsPage(QWidget):
 
 
 class LetterDialog(QDialog):
-    def __init__(self, parent: QWidget, title: str, text: str) -> None:
+    def __init__(
+        self,
+        parent: QWidget,
+        title: str,
+        text: str,
+        *,
+        tracking: str = "",
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle(title)
         self.resize(680, 560)
         layout = QVBoxLayout(self)
+        if tracking:
+            # Zum Nachschauen: mit dieser Kennung wird eine Antwort zugeordnet.
+            code = QLabel(f"Kennung dieser Bewerbung: {tracking}")
+            code.setTextInteractionFlags(
+                Qt.TextInteractionFlag.TextSelectableByMouse
+            )
+            code.setStyleSheet(
+                "background:#10131a; border:1px solid #2b313c; border-radius:6px;"
+                "padding:6px; letter-spacing:1px;"
+            )
+            code.setToolTip(
+                "Diese Kennung reist unsichtbar in der Mail mit; Antworten werden "
+                "darüber zugeordnet. Text markieren und kopieren genügt."
+            )
+            layout.addWidget(code)
         view = QPlainTextEdit()
         view.setPlainText(text)
         view.setReadOnly(True)
