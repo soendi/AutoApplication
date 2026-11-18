@@ -1,4 +1,4 @@
-# AutoApplication 1.0.10
+# AutoApplication 1.0.11
 
 Stellen von ostjob.ch suchen, Bewerbungen als Entwurf in Outlook oder Gmail
 vorbereiten und Antworten bis zur Zusage verfolgen – als Windows-Programm mit
@@ -27,11 +27,12 @@ stillen Updates.
    Stelle ohne Bewerbung. Passende Stellen werden nur vorgemerkt.
 4. **Entwurf auf Klick.** Erst wenn du eine Stelle in der Liste auswählst und
    **„E-Mail vorbereiten“** wählst, schreibt die KI Betreff und Mailtext sowie
-   ein Anschreiben, das als PDF angehängt wird. Das PDF folgt dem Aufbau eines
-   Geschäftsbriefs: Briefkopf mit Name und Kontaktdaten, Ort und Datum rechts,
-   Empfängerblock, fetter Betreff, Grussformel mit Namen und Fusszeile mit
-   Seitenzahl. Dazu kommen die Unterlagen aus dem Unterlagenordner (Lebenslauf,
-   Zeugnisse, Diplome). Die Anrede lautet
+   ein Anschreiben, das als PDF angehängt wird. Das PDF sieht aus wie ein
+   normaler Brief: Absenderadresse oben links in Textgrösse und schwarz, die
+   Empfängeradresse links auf der Höhe des Fenstercouverts (rund 4,6 cm unter
+   dem oberen Rand), Datum rechts, fetter Betreff, Grussformel mit Namen – ohne
+   Linien und ohne Fusszeile. Dazu kommen die Unterlagen aus dem
+   Unterlagenordner (Lebenslauf, Zeugnisse, Diplome). Die Anrede lautet
    „Sehr geehrter Herr …“ oder „Sehr geehrte Frau …“, wenn die Anzeige eine
    Ansprechperson mit Herr/Frau nennt; sonst „Sehr geehrte Damen und Herren“.
    Der Entwurf landet in Outlook oder Gmail und wird von Hand gesendet.
@@ -52,7 +53,7 @@ stillen Updates.
 
 ## Installation
 
-`AutoApplication-1.0.10-Setup.exe` von der
+`AutoApplication-1.0.11-Setup.exe` von der
 [Release-Seite](https://github.com/soendi/AutoApplication/releases/latest)
 herunterladen und ausführen. Windows 10 und 11, kein Administrator- und kein
 Python-Zubehör nötig.

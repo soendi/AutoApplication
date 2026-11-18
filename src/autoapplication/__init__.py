@@ -3,5 +3,5 @@
 __all__ = ["APP_NAME", "APP_TAGLINE", "APP_VERSION"]
 
 APP_NAME = "AutoApplication"
-APP_VERSION = "1.0.10"
+APP_VERSION = "1.0.11"
 APP_TAGLINE = "Stellen suchen, Bewerbungen vorbereiten, Antworten verfolgen"

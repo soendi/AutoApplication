@@ -1,3 +1,17 @@
+## AutoApplication 1.0.11
+
+Das Anschreiben sieht aus wie ein normaler Brief und passt ins Fenstercouvert.
+
+### Geändert
+
+- **Empfängeradresse im Couvertfenster.** Der Empfängerblock beginnt 2,2 cm vom
+  linken Rand und 4,6 cm unter dem oberen Rand – dort, wo das Fenster eines
+  Fenstercouverts sitzt (Fenster links).
+- **Absenderadresse oben links in Textgrösse.** Name, Strasse, Ort und Kontakt
+  stehen in derselben Schriftgrösse und Farbe (schwarz) wie der Brieftext.
+- **Ohne Linien und ohne Fusszeile.** Die Trennstriche über und unter dem Brief
+  sowie die Fusszeile mit Seitenzahl sind entfernt.
+
 ## AutoApplication 1.0.10
 
 Jede Bewerbung trägt eine einmalige, unsichtbare Kennung – Antworten werden
