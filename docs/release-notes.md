@@ -1,3 +1,28 @@
+## AutoApplication 1.0.6
+
+Gmail ohne Microsoft-Konto: neue Anbindung über IMAP und SMTP mit App-Passwort.
+
+### Neu
+
+- **Gmail (IMAP/SMTP, App-Passwort)** als E-Mail-Anbindung. Unter Einstellungen
+  → Gmail werden Adresse und das 16-stellige App-Passwort eingetragen; mit
+  „Verbindung testen“ lassen sich IMAP- und SMTP-Anmeldung prüfen.
+- **Entwürfe landen direkt in Gmail** (Ordner „Entwürfe“, per IMAP APPEND) und
+  erscheinen damit auch in Outlook, das das Konto abruft. Gesendet wird über
+  `smtp.gmail.com:587`.
+- **Versand und Antworten** werden über den Ordner „Gesendet“ und den
+  Posteingang verfolgt – gleiche Abläufe wie bei Outlook.
+- Kein Google-Cloud-Projekt, keine Client-ID, kein Client-Geheimnis; das
+  App-Passwort bleibt lokal in `einstellungen.json`.
+
+### Hinweise
+
+- App-Passwörter setzen eine aktive 2-Faktor-Authentifizierung voraus
+  (Google-Konto → Sicherheit → App-Passwörter). Bei Advanced Protection oder
+  einer Workspace-Sperre sind sie nicht verfügbar.
+- Microsoft Graph bleibt für Outlook zuständig; ein in Outlook hinzugefügtes
+  Gmail-Konto ist für Graph weiterhin nicht erreichbar.
+
 ## AutoApplication 1.0.5
 
 Google-Anbindung entfernt – AutoApplication nutzt Outlook (Microsoft Graph).

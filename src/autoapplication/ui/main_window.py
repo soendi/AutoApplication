@@ -280,12 +280,12 @@ class MainWindow(QMainWindow):
     def check_mail(self) -> None:
         if not self.pipeline.mail_ready():
             provider = self.pipeline.mail_provider()
-            name = "Outlook"
+            name = "Gmail" if provider == "imap" else "Outlook"
             QMessageBox.information(
                 self,
                 "E-Mail-Anbindung",
-                f"{name} ist noch nicht verbunden. Unter Einstellungen die "
-                "Anbindung wählen und anmelden – danach werden Entwürfe, "
+                f"{name} ist noch nicht eingerichtet. Unter Einstellungen die "
+                "Zugangsdaten eintragen – danach werden Entwürfe, "
                 "Versand und Antworten automatisch verfolgt.",
             )
             self.show_page("settings")

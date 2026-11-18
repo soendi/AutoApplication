@@ -1,7 +1,7 @@
 """Der Tageslauf von AutoApplication.
 
 1. Neue Stellen von ostjob.ch holen und Stichworte bestimmen.
-2. Passende Vorlage waehlen und eine Bewerbung als Outlook-Entwurf ablegen.
+2. Passende Vorlage waehlen und eine Bewerbung als Mail-Entwurf ablegen.
 3. Gesendete Entwuerfe und Antworten im Posteingang verfolgen.
 4. Nach zwei Wochen ohne Antwort eine Nachfrage vorbereiten.
 """
@@ -26,6 +26,7 @@ from .ai import (
 )
 from .config import Settings, templates_path, token_path
 from .documents import collect, describe, write_cover_letter
+from .imap_mail import GmailImapClient, ImapError
 from .models import Job
 from .ostjob import OstjobClient, OstjobError, search_jobs
 from .outlook import GraphAuth, OutlookClient, OutlookError, message_body, sender_address
@@ -95,6 +96,7 @@ class Pipeline:
         *,
         ai_client: AiClient | None = None,
         outlook_client: OutlookClient | None = None,
+        imap_client: GmailImapClient | None = None,
         ostjob_client: OstjobClient | None = None,
         notifier: Callable[[str, str], None] | None = None,
         templates_file: Path | None = None,
@@ -103,6 +105,7 @@ class Pipeline:
         self.store = store
         self._ai = ai_client or AiClient(settings)
         self._outlook = outlook_client
+        self._imap = imap_client
         self._ostjob = ostjob_client
         self.notifier = notifier
         self.templates_file = templates_file or templates_path()
@@ -133,9 +136,15 @@ class Pipeline:
         return self.mail_ready()
 
     def mail_ready(self) -> bool:
-        if self._outlook is not None:
+        if self._outlook is not None or self._imap is not None:
             return True
-        if self.mail_provider() != "outlook":
+        provider = self.mail_provider()
+        if provider == "imap":
+            return bool(
+                self.settings.text("imap.email").strip()
+                and self.settings.text("imap.password")
+            )
+        if provider != "outlook":
             return False
         if not self.settings.flag("outlook.enabled"):
             return False
@@ -150,9 +159,16 @@ class Pipeline:
         """Client der gewaehlten E-Mail-Anbindung."""
         return self.mail()
 
-    def mail(self) -> OutlookClient:
+    def mail(self) -> OutlookClient | GmailImapClient:
+        if self._imap is not None and self.mail_provider() == "imap":
+            return self._imap
         if self._outlook is not None:
             return self._outlook
+        if self.mail_provider() == "imap":
+            return GmailImapClient(
+                self.settings.text("imap.email"),
+                self.settings.text("imap.password"),
+            )
         return OutlookClient(self.auth())
 
     def notify(self, title: str, message: str) -> None:
@@ -340,7 +356,7 @@ class Pipeline:
                     draft_id = str(draft.get("id") or "")
                     conversation_id = str(draft.get("conversationId") or "")
                     web_link = str(draft.get("webLink") or "")
-                except OutlookError as exc:
+                except (OutlookError, ImapError) as exc:
                     problem = str(exc)
                     summary.errors.append(problem)
                     self.store.log("fehler", f"E-Mail-Entwurf: {problem}")
@@ -505,7 +521,7 @@ class Pipeline:
                 continue
             try:
                 sent = client.find_sent(conversation)
-            except OutlookError as exc:
+            except (OutlookError, ImapError) as exc:
                 self.store.log("fehler", f"Versandprüfung: {exc}")
                 return count
             if not sent:
@@ -542,7 +558,7 @@ class Pipeline:
             ).isoformat(timespec="seconds")
         try:
             messages = client.inbox_since(since)
-        except OutlookError as exc:
+        except (OutlookError, ImapError) as exc:
             self.store.log("fehler", f"Posteingang: {exc}")
             return []
 
@@ -671,7 +687,7 @@ class Pipeline:
             try:
                 if self.prepare_follow_up(int(application["id"])):
                     count += 1
-            except (OutlookError, ValueError) as exc:
+            except (OutlookError, ImapError, ValueError) as exc:
                 self.store.log("fehler", f"Nachfrage-Entwurf: {exc}")
         return count
 
@@ -684,7 +700,7 @@ class Pipeline:
             if self.settings.flag("automation.check_replies", True):
                 self.check_replies()
             self.prepare_follow_ups(moment)
-        except OutlookError as exc:
+        except (OutlookError, ImapError) as exc:
             summary.errors.append(str(exc))
             self.store.log("fehler", f"E-Mail-Anbindung: {exc}")
         self.store.meta_set("letzter_tageslauf", now_iso())

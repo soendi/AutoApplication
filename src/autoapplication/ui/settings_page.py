@@ -24,10 +24,13 @@ from PySide6.QtWidgets import (
 )
 
 from ..core.ai import GROQ_BASE, GROQ_MODEL, OPENAI_BASE, OPENAI_MODEL
+from ..core.imap_mail import GmailImapClient
 from .dialogs import DeviceLoginDialog
+from .workers import Task
 
 MAIL_PROVIDERS = (
     ("Outlook (Microsoft Graph)", "outlook"),
+    ("Gmail (IMAP/SMTP, App-Passwort)", "imap"),
     ("Keine – nur im Programm", "none"),
 )
 
@@ -46,6 +49,7 @@ class SettingsPage(QWidget):
     def __init__(self, window: Any) -> None:
         super().__init__()
         self.window = window
+        self._tasks: list[Task] = []
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -284,6 +288,38 @@ class SettingsPage(QWidget):
         inner.addWidget(outlook)
 
         # ------------------------------------------------------------------
+        imap = QGroupBox("Gmail (IMAP/SMTP)")
+        imap_form = QFormLayout(imap)
+        self.imap_email = QLineEdit()
+        self.imap_email.setPlaceholderText("ihre.adresse@gmail.com")
+        self.imap_password = QLineEdit()
+        self.imap_password.setEchoMode(QLineEdit.EchoMode.Password)
+        self.imap_password.setPlaceholderText("16-stelliges App-Passwort")
+        self.imap_status = QLabel("")
+        self.imap_status.setObjectName("Hint")
+        imap_row = QWidget()
+        imap_layout = QHBoxLayout(imap_row)
+        imap_layout.setContentsMargins(0, 0, 0, 0)
+        self.imap_test_button = QPushButton("Verbindung testen")
+        self.imap_test_button.clicked.connect(self.test_imap)
+        imap_layout.addWidget(self.imap_test_button)
+        imap_layout.addWidget(self.imap_status, 1)
+        imap_form.addRow("Gmail-Adresse", self.imap_email)
+        imap_form.addRow("App-Passwort", self.imap_password)
+        imap_form.addRow("", imap_row)
+        imap_hint = QLabel(
+            "Im Google-Konto die 2-Faktor-Authentifizierung aktivieren, dann "
+            "unter Sicherheit > App-Passwörter eines für AutoApplication "
+            "erzeugen und hier eintragen. Entwürfe landen in Gmail unter "
+            "Entwürfe, gesendet wird über smtp.gmail.com. Das App-Passwort "
+            "bleibt lokal in den Einstellungen."
+        )
+        imap_hint.setWordWrap(True)
+        imap_hint.setObjectName("Hint")
+        imap_form.addRow("", imap_hint)
+        inner.addWidget(imap)
+
+        # ------------------------------------------------------------------
         documents = QGroupBox("Unterlagen")
         documents_form = QFormLayout(documents)
         folder_row = QWidget()
@@ -356,6 +392,7 @@ class SettingsPage(QWidget):
         Formular nicht verloren geht.
         """
         self._refresh_outlook_status()
+        self._refresh_imap_status()
 
     def load(self) -> None:
         settings = self.window.settings
@@ -410,6 +447,8 @@ class SettingsPage(QWidget):
         self.client_id.setText(settings.text("outlook.client_id"))
         self.tenant.setText(settings.text("outlook.tenant", "common"))
         self.account.setText(settings.text("outlook.account"))
+        self.imap_email.setText(settings.text("imap.email"))
+        self.imap_password.setText(settings.text("imap.password"))
 
         self.documents_folder.setText(settings.text("documents.folder"))
         self.attach.setChecked(settings.flag("documents.attach", True))
@@ -422,6 +461,7 @@ class SettingsPage(QWidget):
         self.follow_up_days.setValue(int(settings.number("automation.follow_up_days", 14)))
         self.notify_desktop.setChecked(settings.flag("automation.notify_desktop", True))
         self._refresh_outlook_status()
+        self._refresh_imap_status()
 
     # ------------------------------------------------------------------
     def save(self) -> None:
@@ -483,6 +523,8 @@ class SettingsPage(QWidget):
         settings.set("outlook.client_id", self.client_id.text().strip())
         settings.set("outlook.tenant", self.tenant.text().strip() or "common")
         settings.set("outlook.account", self.account.text().strip())
+        settings.set("imap.email", self.imap_email.text().strip())
+        settings.set("imap.password", self.imap_password.text())
 
         settings.set("documents.folder", self.documents_folder.text().strip())
         settings.set("documents.attach", self.attach.isChecked())
@@ -497,6 +539,7 @@ class SettingsPage(QWidget):
         settings.save()
         self.window.reload_settings()
         self._refresh_outlook_status()
+        self._refresh_imap_status()
         self.window.store.log("einstellungen", "Einstellungen gespeichert.")
         self.window.statusBar().showMessage("Einstellungen gespeichert.", 6000)
 
@@ -527,6 +570,53 @@ class SettingsPage(QWidget):
             connected = False
         self._set_status(self.outlook_status, connected)
         self.disconnect_button.setEnabled(connected)
+
+    def _refresh_imap_status(self) -> None:
+        ready = bool(self.imap_email.text().strip() and self.imap_password.text())
+        self.imap_status.setText(
+            "● App-Passwort gespeichert" if ready else "○ nicht eingerichtet"
+        )
+        self.imap_status.setObjectName("Ok" if ready else "Hint")
+        self.imap_status.style().unpolish(self.imap_status)
+        self.imap_status.style().polish(self.imap_status)
+
+    def test_imap(self) -> None:
+        email = self.imap_email.text().strip()
+        password = self.imap_password.text()
+        if not email or not password:
+            QMessageBox.warning(
+                self,
+                "Gmail",
+                "Bitte Gmail-Adresse und App-Passwort eintragen.",
+            )
+            return
+        client = GmailImapClient(email, password)
+        self.imap_test_button.setEnabled(False)
+        self.imap_status.setText("Prüfe Verbindung …")
+        task = Task(client.test_connection, self)
+        self._tasks.append(task)
+        task.done.connect(self._imap_ok)
+        task.failed.connect(self._imap_failed)
+        task.finished.connect(
+            lambda: self._tasks.remove(task) if task in self._tasks else None
+        )
+        task.start()
+
+    def _imap_ok(self, message: Any) -> None:
+        self.imap_test_button.setEnabled(True)
+        self.imap_status.setText("● verbunden")
+        self.imap_status.setObjectName("Ok")
+        self.imap_status.style().unpolish(self.imap_status)
+        self.imap_status.style().polish(self.imap_status)
+        QMessageBox.information(self, "Gmail", str(message))
+
+    def _imap_failed(self, message: str) -> None:
+        self.imap_test_button.setEnabled(True)
+        self.imap_status.setText("○ nicht verbunden")
+        self.imap_status.setObjectName("Hint")
+        self.imap_status.style().unpolish(self.imap_status)
+        self.imap_status.style().polish(self.imap_status)
+        QMessageBox.warning(self, "Gmail", message)
 
     @staticmethod
     def _set_status(label: QLabel, connected: bool) -> None:

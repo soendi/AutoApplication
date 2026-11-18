@@ -117,6 +117,7 @@ def _pipeline(
     auto_draft=True,
     outlook=None,
     ai=None,
+    imap=None,
     api_enabled=True,
 ):
     settings = Settings(tmp_path / "einstellungen.json")
@@ -133,6 +134,7 @@ def _pipeline(
         store,
         ai_client=ai or FakeAI(),
         outlook_client=outlook,
+        imap_client=imap,
         ostjob_client=FakeOstjob(jobs if jobs is not None else [MATCHING, UNRELATED]),
         templates_file=tmp_path / "vorlagen.json",
     )
@@ -314,3 +316,13 @@ def test_manual_follow_up(tmp_path) -> None:
     assert store.get_application(application_id)["follow_up_subject"]
     with pytest.raises(ValueError):
         pipeline.prepare_follow_up(9999)
+
+
+def test_imap_provider_uses_imap_client(tmp_path) -> None:
+    imap = FakeOutlook()
+    pipeline, store, outlook, settings = _pipeline(tmp_path, imap=imap)
+    settings.set("mail.provider", "imap")
+    summary = pipeline.run_search()
+    assert summary.drafts == 1
+    assert len(imap.drafts) == 1
+    assert len(outlook.drafts) == 0

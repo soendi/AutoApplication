@@ -71,6 +71,10 @@ DEFAULTS: dict[str, Any] = {
         "tenant": "common",
         "account": "",
     },
+    "imap": {
+        "email": "",
+        "password": "",
+    },
     "documents": {
         "folder": "",
         "attach": True,
@@ -273,7 +277,7 @@ class Settings:
     def mail_provider(self) -> str:
         """Welche E-Mail-Anbindung genutzt wird: outlook oder none."""
         provider = self.text("mail.provider", "outlook").strip().lower()
-        return provider if provider in {"outlook", "none"} else "outlook"
+        return provider if provider in {"outlook", "imap", "none"} else "outlook"
 
 
 def ensure_home() -> Path:

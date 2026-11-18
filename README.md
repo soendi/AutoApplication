@@ -1,6 +1,6 @@
-# AutoApplication 1.0.5
+# AutoApplication 1.0.6
 
-Stellen von ostjob.ch suchen, Bewerbungen als Entwurf in Outlook
+Stellen von ostjob.ch suchen, Bewerbungen als Entwurf in Outlook oder Gmail
 vorbereiten und Antworten bis zur Zusage verfolgen – als Windows-Programm mit
 stillen Updates.
 
@@ -27,8 +27,8 @@ stillen Updates.
 4. **Entwurf statt Versand.** Die KI schreibt Betreff und Mailtext sowie ein
    Anschreiben, das als PDF an die Bewerbung gehängt wird. Dazu kommen die
    Unterlagen aus dem Unterlagenordner (Lebenslauf, Zeugnisse, Diplome). Das
-   Ganze landet als **Entwurf in Outlook**. Geprüft und gesendet wird
-   von Hand.
+   Ganze landet als **Entwurf in Outlook oder Gmail**. Geprüft und gesendet
+   wird von Hand.
 5. **Versand erkennen.** Taucht die Mail in „Gesendete Elemente“ auf, steht das
    Versanddatum in der Bewerbungstabelle.
 6. **Antworten auswerten.** Das Postfach wird auf Antworten der Firma geprüft –
@@ -40,7 +40,7 @@ stillen Updates.
 
 ## Installation
 
-`AutoApplication-1.0.5-Setup.exe` von der
+`AutoApplication-1.0.6-Setup.exe` von der
 [Release-Seite](https://github.com/soendi/AutoApplication/releases/latest)
 herunterladen und ausführen. Windows 10 und 11, kein Administrator- und kein
 Python-Zubehör nötig.
@@ -81,7 +81,7 @@ Stellenbeschreibung; in Vorlagen stehen sie als `{interessen}` und
 ### E-Mail-Anbindung
 
 Unter **Einstellungen → E-Mail-Anbindung** wird gewählt, wohin der Entwurf
-geht: Outlook oder „Keine – nur im Programm“. Ohne Anbindung
+geht: Outlook, Gmail (IMAP/SMTP) oder „Keine – nur im Programm“. Ohne Anbindung
 bleibt der Text in der Bewerbungstabelle und lässt sich von dort kopieren.
 
 ### Outlook (Microsoft Graph)
@@ -102,6 +102,27 @@ AutoApplication meldet sich ohne Passwort im Programm an (Gerätecode):
 
 Die Anmeldung wird in `outlook_token.json` im Benutzerordner gespeichert (nur
 für den eigenen Benutzer lesbar) und automatisch erneuert. „Trennen“ löscht sie.
+
+### Gmail (IMAP/SMTP mit App-Passwort)
+
+Ohne Google-Cloud-Projekt und ohne Microsoft-Konto: AutoApplication meldet sich
+mit der Gmail-Adresse und einem App-Passwort an.
+
+1. Im Google-Konto die **2-Faktor-Authentifizierung** aktivieren
+   (`myaccount.google.com/security`).
+2. Unter **Sicherheit → App-Passwörter** (`myaccount.google.com/apppasswords`)
+   ein Passwort für „AutoApplication“ erzeugen und die 16 Zeichen notieren.
+3. Unter **Einstellungen → Gmail** Adresse und App-Passwort eintragen und
+   **„Verbindung testen“** wählen.
+4. Unter **E-Mail-Anbindung** „Gmail (IMAP/SMTP, App-Passwort)“ auswählen.
+
+Entwürfe landen per IMAP in Gmail unter **Entwürfe** (und damit auch in jedem
+Mailprogramm, das das Konto abruft); gesendet wird über `smtp.gmail.com:587`.
+Der Versand wird im Ordner „Gesendet“ erkannt, Antworten im Posteingang.
+Das App-Passwort steht nur in `einstellungen.json` im Benutzerordner.
+
+App-Passwörter gibt es nicht bei Google Advanced Protection oder wenn ein
+Workspace-Administrator sie sperrt; dann bleibt nur die Google-OAuth-Anbindung.
 
 ### KI (optional) – OpenAI-kompatibel oder Groq
 
@@ -210,7 +231,7 @@ Aufbau:
 ```
 src/autoapplication/
   app.py              Start, Selbsttest, Tageslauf ohne Fenster
-  core/               Konfiguration, Ablage, ostjob.ch, KI, Vorlagen, Outlook, Ablauf, Updater
+  core/               Konfiguration, Ablage, ostjob.ch, KI, Vorlagen, Outlook, Gmail (IMAP), Ablauf, Updater
   data/templates.json Standardvorlagen
   ui/                 Oberfläche (PySide6)
 packaging/            PyInstaller-Spec, Inno-Setup, Build-Skript, Symbol
