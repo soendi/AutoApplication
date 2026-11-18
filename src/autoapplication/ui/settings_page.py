@@ -289,6 +289,11 @@ class SettingsPage(QWidget):
         google_form = QFormLayout(google)
         self.google_client_id = QLineEdit()
         self.google_client_id.setPlaceholderText("Client-ID des Google-OAuth-Clients")
+        self.google_client_secret = QLineEdit()
+        self.google_client_secret.setEchoMode(QLineEdit.EchoMode.Password)
+        self.google_client_secret.setPlaceholderText(
+            "Client-Geheimnis (verlangt Google beim Token-Tausch)"
+        )
         self.google_status = QLabel("")
         self.google_status.setObjectName("Hint")
         google_row = QWidget()
@@ -303,14 +308,16 @@ class SettingsPage(QWidget):
         google_layout.addWidget(self.google_disconnect_button)
         google_layout.addWidget(self.google_status, 1)
         google_form.addRow("Client-ID", self.google_client_id)
+        google_form.addRow("Client-Geheimnis", self.google_client_secret)
         google_form.addRow("", google_row)
         google_hint = QLabel(
             "In der Google Cloud Console die Gmail-API aktivieren und einen "
-            "OAuth-Client vom Typ „Desktop app“ anlegen; ein Client-Geheimnis "
-            "wird nicht gebraucht. Als Weiterleitung `http://127.0.0.1` "
-            "eintragen, die Client-ID hier einsetzen und „Google-Konto "
-            "verbinden“ wählen. Es öffnet sich die normale Google-Anmeldung im "
-            "Browser; danach kehrt die Freigabe automatisch zurück. "
+            "OAuth-Client vom Typ „Desktop app“ anlegen. Client-ID und "
+            "Client-Geheimnis hier einsetzen und „Google-Konto verbinden“ "
+            "wählen: Es öffnet sich die normale Google-Anmeldung im Browser, "
+            "danach kehrt die Freigabe automatisch zurück. Google verlangt das "
+            "Client-Geheimnis beim Token-Tausch, auch mit PKCE; es bleibt lokal "
+            "in den Einstellungen und gehört nicht ins Repository. "
             "Berechtigung: Gmail lesen, Entwürfe anlegen und senden."
         )
         google_hint.setWordWrap(True)
@@ -447,6 +454,7 @@ class SettingsPage(QWidget):
         self.tenant.setText(settings.text("outlook.tenant", "common"))
         self.account.setText(settings.text("outlook.account"))
         self.google_client_id.setText(settings.text("google.client_id"))
+        self.google_client_secret.setText(settings.text("google.client_secret"))
 
         self.documents_folder.setText(settings.text("documents.folder"))
         self.attach.setChecked(settings.flag("documents.attach", True))
@@ -522,6 +530,7 @@ class SettingsPage(QWidget):
         settings.set("outlook.tenant", self.tenant.text().strip() or "common")
         settings.set("outlook.account", self.account.text().strip())
         settings.set("google.client_id", self.google_client_id.text().strip())
+        settings.set("google.client_secret", self.google_client_secret.text().strip())
 
         settings.set("documents.folder", self.documents_folder.text().strip())
         settings.set("documents.attach", self.attach.isChecked())
@@ -622,6 +631,15 @@ class SettingsPage(QWidget):
                 self,
                 "Client-ID fehlt",
                 "Bitte zuerst die Client-ID des Google-OAuth-Clients eintragen.",
+            )
+            return
+        if not self.google_client_secret.text().strip():
+            QMessageBox.warning(
+                self,
+                "Client-Geheimnis fehlt",
+                "Google verlangt beim Anmelden das Client-Geheimnis des "
+                "Desktop-Clients. Bitte unter Einstellungen > Google eintragen "
+                "(es bleibt lokal gespeichert).",
             )
             return
         self.mail_provider.setCurrentIndex(

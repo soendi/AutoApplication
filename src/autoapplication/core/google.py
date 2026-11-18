@@ -180,10 +180,14 @@ class GoogleAuth:
     def __init__(
         self,
         client_id: str,
+        client_secret: str = "",
         token_file: Path | None = None,
         request: Callable[..., tuple[int, dict[str, Any]]] | None = None,
     ) -> None:
         self.client_id = client_id.strip()
+        # Google verlangt beim Desktop-Client das Client-Geheimnis beim
+        # Token-Tausch, auch mit PKCE. Es bleibt lokal in den Einstellungen.
+        self.client_secret = client_secret.strip()
         self.token_file = token_file
         self.request = request or _request
         self.tokens = GoogleTokens()
@@ -290,18 +294,19 @@ class GoogleAuth:
         if not code:
             raise GoogleError("Google lieferte keinen Anmeldecode.")
 
+        fields = {
+            "grant_type": "authorization_code",
+            "client_id": self.client_id,
+            "code": code,
+            "code_verifier": login.code_verifier,
+            "redirect_uri": login.redirect_uri,
+        }
+        if self.client_secret:
+            fields["client_secret"] = self.client_secret
         status, payload = self.request(
             "POST",
             TOKEN_URL,
-            data=urllib.parse.urlencode(
-                {
-                    "grant_type": "authorization_code",
-                    "client_id": self.client_id,
-                    "code": code,
-                    "code_verifier": login.code_verifier,
-                    "redirect_uri": login.redirect_uri,
-                }
-            ).encode(),
+            data=urllib.parse.urlencode(fields).encode(),
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
         if status >= 400:
@@ -338,16 +343,17 @@ class GoogleAuth:
                 "Google ist noch nicht verbunden. Bitte unter Einstellungen "
                 "> Google anmelden."
             )
+        fields = {
+            "grant_type": "refresh_token",
+            "client_id": self.client_id,
+            "refresh_token": self.tokens.refresh_token,
+        }
+        if self.client_secret:
+            fields["client_secret"] = self.client_secret
         status, payload = self.request(
             "POST",
             TOKEN_URL,
-            data=urllib.parse.urlencode(
-                {
-                    "grant_type": "refresh_token",
-                    "client_id": self.client_id,
-                    "refresh_token": self.tokens.refresh_token,
-                }
-            ).encode(),
+            data=urllib.parse.urlencode(fields).encode(),
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
         if status >= 400:

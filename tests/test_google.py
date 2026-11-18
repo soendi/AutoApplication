@@ -31,7 +31,7 @@ class FakeRequest:
 
 
 def _client(responses: list[tuple[int, dict]]) -> tuple[GmailClient, FakeRequest]:
-    auth = GoogleAuth("client-id", token_file=None)
+    auth = GoogleAuth("client-id", "secret", token_file=None)
     auth.tokens = GoogleTokens(access_token="token", expires_at=time.time() + 3600)
     request = FakeRequest(responses)
     return GmailClient(auth, request=request), request
@@ -61,12 +61,14 @@ def test_login_builds_google_url_with_pkce() -> None:
         auth.cancel_login(login)
 
 
-def test_login_completes_without_client_secret(tmp_path) -> None:
+def test_login_completes_with_client_secret(tmp_path) -> None:
     request = FakeRequest(
         [(200, {"access_token": "a1", "refresh_token": "r1", "expires_in": 3600})]
     )
     token_file = tmp_path / "google_token.json"
-    auth = GoogleAuth("client-id", token_file=token_file, request=request)
+    auth = GoogleAuth(
+        "client-id", "secret", token_file=token_file, request=request
+    )
     assert auth.connected() is False
 
     login = auth.start_login()
@@ -83,7 +85,7 @@ def test_login_completes_without_client_secret(tmp_path) -> None:
     body = request.calls[0]["data"].decode()
     assert "grant_type=authorization_code" in body
     assert "code_verifier=" in body
-    assert "client_secret" not in body
+    assert "client_secret=secret" in body
 
     auth.disconnect()
     assert auth.connected() is False
@@ -107,16 +109,16 @@ def test_login_handles_denied_access() -> None:
         auth.poll_device_flow(login)
 
 
-def test_refresh_token_needs_no_secret(tmp_path) -> None:
+def test_refresh_token_sends_client_secret(tmp_path) -> None:
     request = FakeRequest(
         [(200, {"access_token": "neu", "expires_in": 3600})]
     )
-    auth = GoogleAuth("client-id", token_file=None, request=request)
+    auth = GoogleAuth("client-id", "secret", token_file=None, request=request)
     auth.tokens = GoogleTokens(refresh_token="r1", expires_at=0)
     assert auth.token() == "neu"
     body = request.calls[0]["data"].decode()
     assert "grant_type=refresh_token" in body
-    assert "client_secret" not in body
+    assert "client_secret=secret" in body
 
 
 def test_message_contains_attachment(tmp_path) -> None:

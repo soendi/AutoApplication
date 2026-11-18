@@ -1,3 +1,20 @@
+## AutoApplication 1.0.4
+
+Google-Anmeldung läuft jetzt vollständig durch.
+
+### Neu
+
+- **Client-Geheimnis wieder eintragbar.** Google verlangt beim Desktop-Client
+  das Client-Geheimnis beim Token-Tausch – auch mit PKCE (geprüft: ohne Secret
+  antwortet der Token-Endpunkt mit „client_secret is missing“). Das Feld steht
+  unter Einstellungen → Google, wird lokal in `einstellungen.json` gespeichert
+  und nur an Google gesendet. Ins Repository gehört es nicht.
+- **Anmeldung und Erneuerung** senden das Geheimnis mit, sodass der
+  Browser-Login und die automatische Token-Erneuerung funktionieren.
+- Hinweis zur Google-Konsole: Desktop-Client, Gmail API aktiv, Berechtigung
+  `gmail.modify` unter Data Access, bei externer Zielgruppe Testnutzer
+  eintragen. Im Testing-Modus laufen Google-Freigaben nach sieben Tagen ab.
+
 ## AutoApplication 1.0.3
 
 Die KI schreibt die Bewerbung und liest die Anzeige aus.

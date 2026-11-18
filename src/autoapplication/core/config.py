@@ -73,6 +73,7 @@ DEFAULTS: dict[str, Any] = {
     },
     "google": {
         "client_id": "",
+        "client_secret": "",
         "account": "",
     },
     "documents": {
