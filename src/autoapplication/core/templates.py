@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 FOLLOW_UP_ID = "nachfassen"
 # Fassung der Standardvorlagen. Steht in der Datei eine aeltere Fassung,
 # werden die mitgelieferten Vorlagen nachgezogen (Revision je Vorlage).
-TEMPLATES_VERSION = 2
+TEMPLATES_VERSION = 3
 
 
 @dataclass

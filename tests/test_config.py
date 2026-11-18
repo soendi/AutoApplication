@@ -15,6 +15,20 @@ def test_defaults_are_complete() -> None:
     assert DEFAULTS["mail"]["provider"] == "outlook"
 
 
+def test_old_experience_default_is_replaced(tmp_path) -> None:
+    path = tmp_path / "einstellungen.json"
+    path.write_text(json.dumps({"profile": {"erfahrung_jahre": "acht"}}), encoding="utf-8")
+    settings = Settings(path).load()
+    assert settings.text("profile.erfahrung_jahre") == DEFAULTS["profile"]["erfahrung_jahre"]
+    assert DEFAULTS["profile"]["erfahrung_jahre"] == "über zwanzig"
+
+
+def test_own_experience_value_is_kept(tmp_path) -> None:
+    path = tmp_path / "einstellungen.json"
+    path.write_text(json.dumps({"profile": {"erfahrung_jahre": "zwölf"}}), encoding="utf-8")
+    assert Settings(path).load().text("profile.erfahrung_jahre") == "zwölf"
+
+
 def test_interests_and_skills_are_separate(tmp_path) -> None:
     settings = Settings(tmp_path / "e.json")
     settings.set("profile.interessen", ["Logistik", "Nachhaltigkeit"])

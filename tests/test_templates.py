@@ -128,7 +128,7 @@ def test_first_load_seeds_file(tmp_path) -> None:
     assert path.exists()
     assert loaded
     payload = json.loads(path.read_text(encoding="utf-8"))
-    assert payload["version"] == 2
+    assert payload["version"] == 3
 
 
 def test_broken_file_uses_defaults(tmp_path) -> None:
@@ -136,6 +136,15 @@ def test_broken_file_uses_defaults(tmp_path) -> None:
     path.write_text("{kaputt", encoding="utf-8")
     loaded = load_templates(path)
     assert loaded == load_defaults()
+
+
+def test_defaults_name_the_real_stations() -> None:
+    templates = load_defaults()
+    bodies = " ".join(template.body for template in templates)
+    assert "Keller & Dürr" in bodies
+    assert "Escatec" in bodies
+    assert "zuletzt als Shipping Officer" not in bodies
+    assert "{erfahrung}" in bodies
 
 
 def test_defaults_use_salutation_placeholder() -> None:

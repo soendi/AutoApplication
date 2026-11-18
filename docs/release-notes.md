@@ -1,3 +1,22 @@
+## AutoApplication 1.0.12
+
+Die Vorlagen nennen jetzt die echten Stationen; die Erfahrungsjahre haben einen
+sinnvollen Standard.
+
+### Geändert
+
+- **Erfahrung stimmt mit dem Lebenslauf.** Statt «zuletzt als Shipping Officer»
+  stehen die tatsächlichen Stationen: Shipping Officer bei der Escatec
+  Switzerland AG (über elf Jahre), davor Emons Transporte und Schenker Schweiz
+  (Luftfracht), seit Juli 2026 Techniker bei der Keller & Dürr Kassensysteme AG.
+  Ausbildung als Informatiker (Leica) und Spediteur, User Help Desk bei Hilti
+  sowie die Sprachkenntnisse bleiben wie im Lebenslauf.
+- **Neuer Standard für die Erfahrungsjahre:** «über zwanzig» statt «acht» – die
+  Berufserfahrung reicht von 2003 bis heute. Der alte Vorgabewert «acht» wird
+  beim Start ersetzt; ein selbst gesetzter Wert bleibt unverändert.
+- Bestehende `vorlagen.json` wird auf Revision 3 gehoben; eigene Vorlagen und
+  selbst bearbeitete Standardvorlagen bleiben unangetastet.
+
 ## AutoApplication 1.0.11
 
 Das Anschreiben sieht aus wie ein normaler Brief und passt ins Fenstercouvert.

@@ -1,16 +1,16 @@
 {
-  "version": 2,
+  "version": 3,
   "templates": [
     {
       "id": "spedition",
       "name": "Spedition und Logistik",
       "description": "Bewerbung mit Bezug auf die bisherige Arbeit in Spedition, Export und Transportlogistik.",
-      "revision": 2,
+      "revision": 3,
       "keywords": [
         "Spedition",
         "Speditionslogistik",
         "Speditionskaufmann",
-        "Speditionskaufm\u00e4nnin",
+        "Speditionskaufmännin",
         "Speditionssachbearbeiter",
         "Logistik",
         "Logistiksachbearbeiter",
@@ -19,7 +19,7 @@
         "Disposition",
         "Transportdisposition",
         "Fracht",
-        "St\u00fcckgut",
+        "Stückgut",
         "Sammelgut",
         "Luftfracht",
         "Seefracht",
@@ -36,15 +36,15 @@
         "Warenfluss",
         "ERP"
       ],
-      "subject": "Bewerbung als {titel} \u2013 {vorname} {nachname}",
-      "body": "{anrede}\n\nmit grossem Interesse habe ich Ihre Stellenanzeige als {titel} bei {firma} in {ort} gelesen. Seit {erfahrung} Jahren arbeite ich in Spedition, Export und Logistik \u2013 zuletzt als Shipping Officer bei der Escatec Switzerland AG in Heerbrugg, davor bei Emons Transporte und Schenker Schweiz.\n\nIn diesen Jahren habe ich Sendungen von der Abholung bis zur Zustellung begleitet: Disposition, Kommissionierung, transportsichere Verpackung, Fracht- und Zolldokumente, das Einholen und Vergleichen von Speditionsofferten und die \u00dcberwachung von Terminen. Ich arbeite mit ERP-Systemen (Infor Cloud Suite), kenne die Anforderungen von Luft-, Land- und Seefracht und weiss, wie wichtig saubere Papiere und dokumentierte Exportkontrollen sind.\n\nMeine St\u00e4rken liegen im Organisieren und im Kontakt: Ich behalte mehrere Auftr\u00e4ge gleichzeitig im Blick, kommuniziere klar mit Kunden, Fahrern und Partnern und bleibe auch unter Termindruck zuverl\u00e4ssig. Als fachliche Anlaufstelle f\u00fcr Versand- und Exportfragen habe ich intern Schulungen gegeben und Kolleginnen und Kollegen im Tagesgesch\u00e4ft unterst\u00fctzt.\n\nGerne bringe ich diese Erfahrung in Ihr Team ein und stelle mich Ihnen in einem pers\u00f6nlichen Gespr\u00e4ch vor. Ich bin {verfuegbar} verf\u00fcgbar.\n\nFreundliche Gr\u00fcsse\n{vorname} {nachname}\n{strasse}, {plz} {wohnort}\n{telefon} \u00b7 {email}",
+      "subject": "Bewerbung als {titel} – {vorname} {nachname}",
+      "body": "{anrede}\n\nmit grossem Interesse habe ich Ihre Stellenanzeige als {titel} bei {firma} in {ort} gelesen. Seit {erfahrung} Jahren arbeite ich in Logistik und Export: von 2005 bis 2011 in der Luftfracht bei Schenker Schweiz, anschliessend bei Emons Transporte und über elf Jahre als Shipping Officer bei der Escatec Switzerland AG. Seit Juli 2026 bin ich als Techniker bei der Keller & Dürr Kassensysteme AG tätig.\n\nIn diesen Jahren habe ich Sendungen von der Abholung bis zur Zustellung begleitet: Disposition, Kommissionierung, transportsichere Verpackung, Fracht- und Zolldokumente, das Einholen und Vergleichen von Speditionsofferten und die Überwachung von Terminen. Ich arbeite mit ERP-Systemen (Infor Cloud Suite), kenne die Anforderungen von Luft-, Land- und Seefracht und weiss, wie wichtig saubere Papiere und dokumentierte Exportkontrollen sind.\n\nMeine Stärken liegen im Organisieren und im Kontakt: Ich behalte mehrere Aufträge gleichzeitig im Blick, kommuniziere klar mit Kunden, Fahrern und Partnern und bleibe auch unter Termindruck zuverlässig. Als fachliche Anlaufstelle für Versand- und Exportfragen habe ich intern Schulungen gegeben und Kolleginnen und Kollegen im Tagesgeschäft unterstützt.\n\nGerne bringe ich diese Erfahrung in Ihr Team ein und stelle mich Ihnen in einem persönlichen Gespräch vor. Ich bin {verfuegbar} verfügbar.\n\nFreundliche Grüsse\n{vorname} {nachname}\n{strasse}, {plz} {wohnort}\n{telefon} · {email}",
       "follow_up": false
     },
     {
       "id": "export_zoll",
       "name": "Export, Zoll und Aussenhandel",
-      "description": "Bewerbung f\u00fcr Exportabwicklung, Zolldeklaration und Aussenhandel.",
-      "revision": 2,
+      "description": "Bewerbung für Exportabwicklung, Zolldeklaration und Aussenhandel.",
+      "revision": 3,
       "keywords": [
         "Export",
         "Exportabwicklung",
@@ -59,7 +59,7 @@
         "Import",
         "Transit",
         "Ursprungsnachweis",
-        "Pr\u00e4ferenznachweis",
+        "Präferenznachweis",
         "Frachtpapiere",
         "Handelsdokumente",
         "Akkreditiv",
@@ -67,15 +67,15 @@
         "Inkasso",
         "Versandabwicklung"
       ],
-      "subject": "Bewerbung als {titel} \u2013 {vorname} {nachname}",
-      "body": "{anrede}\n\nauf ostjob.ch bin ich auf Ihre Stellenanzeige als {titel} bei {firma} in {ort} aufmerksam geworden. Seit {erfahrung} Jahren arbeite ich an der Schnittstelle zwischen Ware, Dokumenten und Zoll \u2013 zuletzt als Shipping Officer bei der Escatec Switzerland AG, davor bei Emons Transporte und Schenker Schweiz.\n\nIn dieser Zeit habe ich Liefer-, Export- und Zolldokumente erstellt, Exportkontrollen durchgef\u00fchrt und dokumentiert, Transportofferten eingeholt und verglichen sowie Sendungen in die USA, nach China, Singapur und Indien abgewickelt \u2013 inklusive Spezial-, Cross-Trade- und Letter-of-Credit-Sendungen. Transitverfahren, Ursprungs- und Pr\u00e4ferenznachweise sowie die Anforderungen an eine l\u00fcckenlose Dokumentation sind mir vertraut.\n\nSorgfalt und Termintreue sind f\u00fcr mich zentral: Ich pr\u00fcfe Unterlagen, bevor sie das Haus verlassen, halte Fristen ein und melde fr\u00fch, wenn sich etwas \u00e4ndert. Intern habe ich Schulungen zu Exportkontrollen gegeben und Kolleginnen und Kollegen im Tagesgesch\u00e4ft unterst\u00fctzt.\n\nGerne \u00fcbernehme ich diese Aufgaben in Ihrem Unternehmen und stelle mich Ihnen pers\u00f6nlich vor. Ich bin {verfuegbar} verf\u00fcgbar.\n\nFreundliche Gr\u00fcsse\n{vorname} {nachname}\n{strasse}, {plz} {wohnort}\n{telefon} \u00b7 {email}",
+      "subject": "Bewerbung als {titel} – {vorname} {nachname}",
+      "body": "{anrede}\n\nauf ostjob.ch bin ich auf Ihre Stellenanzeige als {titel} bei {firma} in {ort} aufmerksam geworden. Seit {erfahrung} Jahren arbeite ich an der Schnittstelle zwischen Ware, Dokumenten und Zoll: über elf Jahre als Shipping Officer bei der Escatec Switzerland AG, davor bei Emons Transporte und Schenker Schweiz. Seit Juli 2026 betreue ich als Techniker bei der Keller & Dürr Kassensysteme AG Kassensysteme und ihre Schnittstellen zu Zahlungsterminals und Hotelsoftware.\n\nIn dieser Zeit habe ich Liefer-, Export- und Zolldokumente erstellt, Exportkontrollen durchgeführt und dokumentiert, Transportofferten eingeholt und verglichen sowie Sendungen in die USA, nach China, Singapur und Indien abgewickelt – inklusive Spezial-, Cross-Trade- und Letter-of-Credit-Sendungen. Transitverfahren, Ursprungs- und Präferenznachweise sowie die Anforderungen an eine lückenlose Dokumentation sind mir vertraut.\n\nSorgfalt und Termintreue sind für mich zentral: Ich prüfe Unterlagen, bevor sie das Haus verlassen, halte Fristen ein und melde früh, wenn sich etwas ändert. Intern habe ich Schulungen zu Exportkontrollen gegeben und Kolleginnen und Kollegen im Tagesgeschäft unterstützt.\n\nGerne übernehme ich diese Aufgaben in Ihrem Unternehmen und stelle mich Ihnen persönlich vor. Ich bin {verfuegbar} verfügbar.\n\nFreundliche Grüsse\n{vorname} {nachname}\n{strasse}, {plz} {wohnort}\n{telefon} · {email}",
       "follow_up": false
     },
     {
       "id": "lager",
       "name": "Lager und Kommissionierung",
-      "description": "Bewerbung f\u00fcr Lager, Kommissionierung, Warenannahme und Warenausgang.",
-      "revision": 2,
+      "description": "Bewerbung für Lager, Kommissionierung, Warenannahme und Warenausgang.",
+      "revision": 3,
       "keywords": [
         "Kommissionierung",
         "Kommissionierer",
@@ -94,15 +94,15 @@
         "Verpackung",
         "Picking"
       ],
-      "subject": "Bewerbung als {titel} \u2013 {vorname} {nachname}",
-      "body": "{anrede}\n\nIhre Stellenanzeige als {titel} bei {firma} in {ort} hat mein Interesse geweckt. \u00dcber elf Jahre lang habe ich bei der Escatec Switzerland AG den Weg der Ware vom Eingang bis zur Auslieferung begleitet: Warenannahme und Kontrolle, Kommissionierung nach Picking-Listen, Verbuchung im ERP-System (Infor Cloud Suite) und transportsichere Verpackung.\n\nDabei kam es auf Tempo und Genauigkeit gleichzeitig an: die richtige Menge am richtigen Ort, vollst\u00e4ndige Papiere und ein sauberer Warenausgang. Bei Engp\u00e4ssen habe ich mit Disposition und Speditionen nach L\u00f6sungen gesucht, statt Aufgaben liegen zu lassen.\n\nIch packe an, arbeite zuverl\u00e4ssig und bin es gewohnt, im Team mit klaren Priorit\u00e4ten zu arbeiten. Mit Stapler, Scanner und Lagerverwaltung kenne ich mich aus; in Ihre Systeme und Abl\u00e4ufe arbeite ich mich z\u00fcgig ein.\n\nGerne stelle ich mich Ihnen pers\u00f6nlich vor. Ich bin {verfuegbar} verf\u00fcgbar.\n\nFreundliche Gr\u00fcsse\n{vorname} {nachname}\n{strasse}, {plz} {wohnort}\n{telefon} \u00b7 {email}",
+      "subject": "Bewerbung als {titel} – {vorname} {nachname}",
+      "body": "{anrede}\n\nIhre Stellenanzeige als {titel} bei {firma} in {ort} hat mein Interesse geweckt. Über elf Jahre lang habe ich bei der Escatec Switzerland AG den Weg der Ware vom Eingang bis zur Auslieferung begleitet: Warenannahme und Kontrolle, Kommissionierung nach Picking-Listen, Verbuchung im ERP-System (Infor Cloud Suite) und transportsichere Verpackung. Seit Juli 2026 arbeite ich als Techniker bei der Keller & Dürr Kassensysteme AG und kenne dadurch auch die Seite der Anwender, die täglich mit Scanner, Terminal und Software arbeiten.\n\nDabei kam es auf Tempo und Genauigkeit gleichzeitig an: die richtige Menge am richtigen Ort, vollständige Papiere und ein sauberer Warenausgang. Bei Engpässen habe ich mit Disposition und Speditionen nach Lösungen gesucht, statt Aufgaben liegen zu lassen.\n\nIch packe an, arbeite zuverlässig und bin es gewohnt, im Team mit klaren Prioritäten zu arbeiten. Mit Stapler, Scanner und Lagerverwaltung kenne ich mich aus; in Ihre Systeme und Abläufe arbeite ich mich zügig ein.\n\nGerne stelle ich mich Ihnen persönlich vor. Ich bin {verfuegbar} verfügbar.\n\nFreundliche Grüsse\n{vorname} {nachname}\n{strasse}, {plz} {wohnort}\n{telefon} · {email}",
       "follow_up": false
     },
     {
       "id": "technik_service",
       "name": "Technischer Kundendienst und Kassensysteme",
-      "description": "Bewerbung f\u00fcr Servicetechnik, Installation, Inbetriebnahme und Kundenbetreuung vor Ort.",
-      "revision": 2,
+      "description": "Bewerbung für Servicetechnik, Installation, Inbetriebnahme und Kundenbetreuung vor Ort.",
+      "revision": 3,
       "keywords": [
         "Kassensystem",
         "Kassensysteme",
@@ -117,7 +117,7 @@
         "Fernwartung",
         "Wartung",
         "Reparatur",
-        "St\u00f6rungsbehebung",
+        "Störungsbehebung",
         "Hardware",
         "Peripherie",
         "Schnittstellen",
@@ -125,15 +125,15 @@
         "Systemtechnik",
         "Kundendienst"
       ],
-      "subject": "Bewerbung als {titel} \u2013 {vorname} {nachname}",
-      "body": "{anrede}\n\nmit Interesse habe ich gelesen, dass Sie f\u00fcr {firma} in {ort} eine Stelle als {titel} suchen. Seit Juli 2026 arbeite ich als Techniker bei der Keller & D\u00fcrr Kassensysteme AG: Ich installiere Kassensysteme und POS-Hardware, richte Software, Artikel, Preise und Bediener ein und betreue Gastronomie- und Detailhandelsbetriebe im Alltag.\n\nVor Ort und per Fernwartung analysiere ich St\u00f6rungen an Hardware und Software, tausche Komponenten, spiele Updates ein und binde Zahlungsterminals, Schankanlagen und Hotelsoftware an. Dabei z\u00e4hlt f\u00fcr mich nicht nur die Reparatur, sondern dass der Betrieb beim Kunden schnell wieder l\u00e4uft \u2013 ruhig erkl\u00e4rt, sauber dokumentiert und mit einem Termin, der eingehalten wird.\n\nMeine Basis daf\u00fcr ist breit: eine Ausbildung als Informatiker bei Leica Geosystems, Erfahrung im User Help Desk bei der Hilti AG und \u00fcber elf Jahre in der Logistik, wo ich gelernt habe, Prozesse und Schnittstellen zu verstehen. Kunden und Anwender schule ich gerne und erkl\u00e4re technische Zusammenh\u00e4nge verst\u00e4ndlich.\n\nGerne stelle ich mich Ihnen pers\u00f6nlich vor. Ich bin {verfuegbar} verf\u00fcgbar.\n\nFreundliche Gr\u00fcsse\n{vorname} {nachname}\n{strasse}, {plz} {wohnort}\n{telefon} \u00b7 {email}",
+      "subject": "Bewerbung als {titel} – {vorname} {nachname}",
+      "body": "{anrede}\n\nmit Interesse habe ich gelesen, dass Sie für {firma} in {ort} eine Stelle als {titel} suchen. Seit Juli 2026 arbeite ich als Techniker bei der Keller & Dürr Kassensysteme AG: Ich installiere Kassensysteme und POS-Hardware, richte Software, Artikel, Preise und Bediener ein und betreue Gastronomie- und Detailhandelsbetriebe im Alltag.\n\nVor Ort und per Fernwartung analysiere ich Störungen an Hardware und Software, tausche Komponenten, spiele Updates ein und binde Zahlungsterminals, Schankanlagen und Hotelsoftware an. Dabei zählt für mich nicht nur die Reparatur, sondern dass der Betrieb beim Kunden schnell wieder läuft – ruhig erklärt, sauber dokumentiert und mit einem Termin, der eingehalten wird.\n\nMeine Basis dafür ist breit: eine Ausbildung als Informatiker bei Leica Geosystems, Erfahrung im User Help Desk bei der Hilti AG und über elf Jahre als Shipping Officer bei der Escatec Switzerland AG, wo ich gelernt habe, Prozesse und Schnittstellen zu verstehen. Kunden und Anwender schule ich gerne und erkläre technische Zusammenhänge verständlich.\n\nGerne stelle ich mich Ihnen persönlich vor. Ich bin {verfuegbar} verfügbar.\n\nFreundliche Grüsse\n{vorname} {nachname}\n{strasse}, {plz} {wohnort}\n{telefon} · {email}",
       "follow_up": false
     },
     {
       "id": "it_support",
       "name": "IT-Support und Anwenderbetreuung",
-      "description": "Bewerbung f\u00fcr Helpdesk, First-Level-Support und Anwendungsbetreuung.",
-      "revision": 2,
+      "description": "Bewerbung für Helpdesk, First-Level-Support und Anwendungsbetreuung.",
+      "revision": 3,
       "keywords": [
         "Helpdesk",
         "User Help Desk",
@@ -153,15 +153,15 @@
         "Informatik",
         "Digitalisierung"
       ],
-      "subject": "Bewerbung als {titel} \u2013 {vorname} {nachname}",
-      "body": "{anrede}\n\nIhre Stellenanzeige als {titel} bei {firma} in {ort} spricht mich an, weil ich Technik und Menschen gerne zusammenbringe. Seit Juli 2026 betreue ich als Techniker bei der Keller & D\u00fcrr Kassensysteme AG Kassensoftware und POS-Hardware: Installation, Konfiguration, Updates und Fehlersuche \u2013 am Telefon, per Fernwartung und direkt beim Kunden.\n\nFr\u00fcher habe ich im User Help Desk der Hilti AG gearbeitet und eine Ausbildung als Informatiker bei Leica Geosystems begonnen; die Systeme der Logistik (Infor Cloud Suite, Versand- und Zolldokumentation) habe ich \u00fcber Jahre t\u00e4glich genutzt und mitgestaltet. Ich arbeite strukturiert, frage nach, bis ich die Ursache kenne, und dokumentiere L\u00f6sungen so, dass sie beim n\u00e4chsten Mal helfen.\n\nAnwender nehme ich mit: Ich erkl\u00e4re in verst\u00e4ndlichen Schritten, bleibe freundlich, auch wenn es eilig ist, und suche nach einer L\u00f6sung, statt eine Fehlermeldung weiterzugeben. Deutsch ist meine Muttersprache, Englisch und Franz\u00f6sisch spreche und schreibe ich gut.\n\nGerne \u00fcberzeuge ich Sie in einem pers\u00f6nlichen Gespr\u00e4ch. Ich bin {verfuegbar} verf\u00fcgbar.\n\nFreundliche Gr\u00fcsse\n{vorname} {nachname}\n{strasse}, {plz} {wohnort}\n{telefon} \u00b7 {email}",
+      "subject": "Bewerbung als {titel} – {vorname} {nachname}",
+      "body": "{anrede}\n\nIhre Stellenanzeige als {titel} bei {firma} in {ort} spricht mich an, weil ich Technik und Menschen gerne zusammenbringe. Seit Juli 2026 betreue ich als Techniker bei der Keller & Dürr Kassensysteme AG Kassensoftware und POS-Hardware: Installation, Konfiguration, Updates und Fehlersuche – am Telefon, per Fernwartung und direkt beim Kunden.\n\nFrüher habe ich im User Help Desk der Hilti AG gearbeitet, eine Ausbildung als Informatiker bei Leica Geosystems begonnen und über elf Jahre als Shipping Officer bei der Escatec Switzerland AG die Systeme der Logistik (Infor Cloud Suite, Versand- und Zolldokumentation) täglich genutzt und mitgestaltet. Ich arbeite strukturiert, frage nach, bis ich die Ursache kenne, und dokumentiere Lösungen so, dass sie beim nächsten Mal helfen.\n\nAnwender nehme ich mit: Ich erkläre in verständlichen Schritten, bleibe freundlich, auch wenn es eilig ist, und suche nach einer Lösung, statt eine Fehlermeldung weiterzugeben. Deutsch ist meine Muttersprache, Englisch und Französisch spreche und schreibe ich gut.\n\nGerne überzeuge ich Sie in einem persönlichen Gespräch. Ich bin {verfuegbar} verfügbar.\n\nFreundliche Grüsse\n{vorname} {nachname}\n{strasse}, {plz} {wohnort}\n{telefon} · {email}",
       "follow_up": false
     },
     {
       "id": "kundenbetreuung",
       "name": "Kundenberatung und Verkaufsinnendienst",
-      "description": "Bewerbung f\u00fcr Kundenberatung, Verkaufsinnendienst und Auftragsbearbeitung.",
-      "revision": 2,
+      "description": "Bewerbung für Kundenberatung, Verkaufsinnendienst und Auftragsbearbeitung.",
+      "revision": 3,
       "keywords": [
         "Kundenberater",
         "Kundenberatung",
@@ -179,23 +179,23 @@
         "CRM",
         "Kundenkontakt"
       ],
-      "subject": "Bewerbung als {titel} \u2013 {vorname} {nachname}",
-      "body": "{anrede}\n\nauf der Suche nach einer neuen Aufgabe bin ich auf Ihre Stellenanzeige als {titel} bei {firma} in {ort} gestossen. Kundenkontakt ist f\u00fcr mich nichts Neues: Bei der Escatec Switzerland AG war ich \u00fcber elf Jahre die Anlaufstelle f\u00fcr Versand-, Transport- und Exportfragen und habe t\u00e4glich mit Kunden, Speditionen und internen Stellen kommuniziert.\n\nIch bin es gewohnt, Anfragen aufzunehmen, Offerten zu erstellen, Auftr\u00e4ge nachzuf\u00fchren und bei Problemen eine L\u00f6sung zu finden, die f\u00fcr beide Seiten passt. Als Techniker bei der Keller & D\u00fcrr Kassensysteme AG betreue ich heute Gastronomie- und Detailhandelsbetriebe, schule Anwender und bleibe auch dann ruhig und verbindlich, wenn mehrere Dinge gleichzeitig dr\u00e4ngen.\n\nWas mich ausmacht: Ich h\u00f6re zu, bevor ich antworte, halte Zusagen ein und arbeite sorgf\u00e4ltig mit CRM- und ERP-Systemen. Verkauf ist f\u00fcr mich vor allem gutes Handwerk \u2013 ehrliche Beratung, klare Offerten und ein Kontakt, der auch nach dem Auftrag noch stimmt.\n\nGerne stelle ich mich Ihnen pers\u00f6nlich vor. Ich bin {verfuegbar} verf\u00fcgbar.\n\nFreundliche Gr\u00fcsse\n{vorname} {nachname}\n{strasse}, {plz} {wohnort}\n{telefon} \u00b7 {email}",
+      "subject": "Bewerbung als {titel} – {vorname} {nachname}",
+      "body": "{anrede}\n\nauf der Suche nach einer neuen Aufgabe bin ich auf Ihre Stellenanzeige als {titel} bei {firma} in {ort} gestossen. Kundenkontakt ist für mich nichts Neues: Über elf Jahre war ich bei der Escatec Switzerland AG die Anlaufstelle für Versand-, Transport- und Exportfragen und habe täglich mit Kunden, Speditionen und internen Stellen kommuniziert. Seit Juli 2026 betreue ich als Techniker bei der Keller & Dürr Kassensysteme AG Gastronomie- und Detailhandelsbetriebe, schule Anwender und halte den Betrieb am Laufen.\n\nIch bin es gewohnt, Anfragen aufzunehmen, Offerten zu erstellen, Aufträge nachzuführen und bei Problemen eine Lösung zu finden, die für beide Seiten passt. Auch wenn mehrere Dinge gleichzeitig drängen, bleibe ich ruhig und verbindlich.\n\nWas mich ausmacht: Ich höre zu, bevor ich antworte, halte Zusagen ein und arbeite sorgfältig mit CRM- und ERP-Systemen. Verkauf ist für mich vor allem gutes Handwerk – ehrliche Beratung, klare Offerten und ein Kontakt, der auch nach dem Auftrag noch stimmt.\n\nGerne stelle ich mich Ihnen persönlich vor. Ich bin {verfuegbar} verfügbar.\n\nFreundliche Grüsse\n{vorname} {nachname}\n{strasse}, {plz} {wohnort}\n{telefon} · {email}",
       "follow_up": false
     },
     {
       "id": "tapetenwechsel",
       "name": "Administration und Sachbearbeitung",
-      "description": "Bewerbung mit Wechselwunsch in B\u00fcro, Verwaltung und Sachbearbeitung.",
-      "revision": 2,
+      "description": "Bewerbung mit Wechselwunsch in Büro, Verwaltung und Sachbearbeitung.",
+      "revision": 3,
       "keywords": [
         "Sachbearbeitung",
         "Sachbearbeiter",
         "Sachbearbeiterin",
         "Administration",
         "Verwaltung",
-        "B\u00fcro",
-        "B\u00fcroassistenz",
+        "Büro",
+        "Büroassistenz",
         "Backoffice",
         "Assistenz",
         "Sekretariat",
@@ -205,18 +205,18 @@
         "Organisation",
         "Rezeption"
       ],
-      "subject": "Bewerbung als {titel} \u2013 {vorname} {nachname}",
-      "body": "{anrede}\n\nmit Interesse habe ich Ihre Stellenanzeige als {titel} bei {firma} in {ort} gelesen. Seit {erfahrung} Jahren arbeite ich in der Logistik; die Arbeit gef\u00e4llt mir, und genau deshalb suche ich bewusst einen Tapetenwechsel: Ich m\u00f6chte meine Erfahrung in Administration und Kundenkontakt in einem neuen Umfeld einsetzen und mich fachlich weiterentwickeln.\n\nBei der Escatec Switzerland AG habe ich \u00fcber elf Jahre die Versandadministration verantwortet: Auftr\u00e4ge im ERP-System verbucht, Liefer- und Zolldokumente erstellt, Offerten verglichen, Termine \u00fcberwacht und Anfragen von Kunden und Partnern beantwortet. Dabei habe ich gelernt, genau zu arbeiten, Fristen im Blick zu behalten und Unterlagen so abzulegen, dass sie auch sp\u00e4ter auffindbar sind.\n\nB\u00fcroarbeit, Korrespondenz in Deutsch, Englisch und Franz\u00f6sisch sowie der Umgang mit IT-Systemen sind f\u00fcr mich Alltag. Neue Abl\u00e4ufe eigne ich mir z\u00fcgig an, und ich bringe die Ruhe mit, die es braucht, wenn mehrere Anliegen gleichzeitig hereinkommen.\n\nGerne \u00fcberzeuge ich Sie in einem pers\u00f6nlichen Gespr\u00e4ch von meiner Motivation. Ich bin {verfuegbar} verf\u00fcgbar.\n\nFreundliche Gr\u00fcsse\n{vorname} {nachname}\n{strasse}, {plz} {wohnort}\n{telefon} \u00b7 {email}",
+      "subject": "Bewerbung als {titel} – {vorname} {nachname}",
+      "body": "{anrede}\n\nmit Interesse habe ich Ihre Stellenanzeige als {titel} bei {firma} in {ort} gelesen. Seit {erfahrung} Jahren arbeite ich in Logistik, Export und technischem Kundendienst – über elf Jahre davon in der Versandadministration bei der Escatec Switzerland AG, heute als Techniker bei der Keller & Dürr Kassensysteme AG. Die Arbeit gefällt mir, und genau deshalb suche ich bewusst einen Tapetenwechsel: Ich möchte meine Erfahrung in Administration und Kundenkontakt in einem neuen Umfeld einsetzen und mich fachlich weiterentwickeln.\n\nBei der Escatec Switzerland AG habe ich Aufträge im ERP-System verbucht, Liefer- und Zolldokumente erstellt, Offerten verglichen, Termine überwacht und Anfragen von Kunden und Partnern beantwortet. Dabei habe ich gelernt, genau zu arbeiten, Fristen im Blick zu behalten und Unterlagen so abzulegen, dass sie auch später auffindbar sind.\n\nBüroarbeit, Korrespondenz in Deutsch, Englisch und Französisch sowie der Umgang mit IT-Systemen sind für mich Alltag. Neue Abläufe eigne ich mir zügig an, und ich bringe die Ruhe mit, die es braucht, wenn mehrere Anliegen gleichzeitig hereinkommen.\n\nGerne überzeuge ich Sie in einem persönlichen Gespräch von meiner Motivation. Ich bin {verfuegbar} verfügbar.\n\nFreundliche Grüsse\n{vorname} {nachname}\n{strasse}, {plz} {wohnort}\n{telefon} · {email}",
       "follow_up": false
     },
     {
       "id": "nachfassen",
       "name": "Nachfrage nach zwei Wochen",
       "description": "Freundliche Nachfrage, wenn keine Antwort eingegangen ist.",
-      "revision": 2,
+      "revision": 3,
       "keywords": [],
-      "subject": "Nachfrage zu meiner Bewerbung als {titel} \u2013 {vorname} {nachname}",
-      "body": "{anrede}\n\nam {bewerbungsdatum} habe ich mich bei {firma} auf die Stelle als {titel} beworben. Da ich bis heute keine R\u00fcckmeldung erhalten habe, erlaube ich mir, mich nach dem Stand meiner Bewerbung zu erkundigen.\n\nDie Stelle interessiert mich weiterhin sehr, und ich stehe Ihnen f\u00fcr Fragen gerne zur Verf\u00fcgung. \u00dcber eine kurze R\u00fcckmeldung \u2013 auch per E-Mail an {email} \u2013 freue ich mich.\n\nFreundliche Gr\u00fcsse\n{vorname} {nachname}\n{strasse}, {plz} {wohnort}\n{telefon} \u00b7 {email}",
+      "subject": "Nachfrage zu meiner Bewerbung als {titel} – {vorname} {nachname}",
+      "body": "{anrede}\n\nam {bewerbungsdatum} habe ich mich bei {firma} auf die Stelle als {titel} beworben. Da ich bis heute keine Rückmeldung erhalten habe, erlaube ich mir, mich nach dem Stand meiner Bewerbung zu erkundigen.\n\nDie Stelle interessiert mich weiterhin sehr, und ich stehe Ihnen für Fragen gerne zur Verfügung. Über eine kurze Rückmeldung – auch per E-Mail an {email} – freue ich mich.\n\nFreundliche Grüsse\n{vorname} {nachname}\n{strasse}, {plz} {wohnort}\n{telefon} · {email}",
       "follow_up": true
     }
   ]

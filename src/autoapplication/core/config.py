@@ -25,7 +25,7 @@ DEFAULTS: dict[str, Any] = {
         "wohnort": "",
         "telefon": "",
         "email": "",
-        "erfahrung_jahre": "acht",
+        "erfahrung_jahre": "über zwanzig",
         "verfuegbar": "sofort",
         "interessen": [],
         "faehigkeiten": [],
@@ -152,7 +152,18 @@ class Settings:
         except ValueError:
             return self
         self.data = _merge(DEFAULTS, loaded)
+        self._upgrade()
         return self
+
+    def _upgrade(self) -> None:
+        """Alten Standardwert ersetzen: "acht" war nie eine Angabe des Nutzers.
+
+        Die Jahreszahl steht in den Vorlagen; mit dem alten Vorgabewert stand
+        dort eine zu kleine Zahl. Wer den Wert bewusst gesetzt hat, findet ihn
+        unveraendert vor, sobald er von "acht" abweicht.
+        """
+        if self.text("profile.erfahrung_jahre").strip().lower() == "acht":
+            self.set("profile.erfahrung_jahre", DEFAULTS["profile"]["erfahrung_jahre"])
 
     def save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)

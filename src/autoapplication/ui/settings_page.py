@@ -73,7 +73,7 @@ class SettingsPage(QWidget):
         self.telefon = QLineEdit()
         self.email = QLineEdit()
         self.erfahrung = QLineEdit()
-        self.erfahrung.setPlaceholderText("z. B. acht")
+        self.erfahrung.setPlaceholderText("z. B. über zwanzig")
         self.verfuegbar = QLineEdit()
         self.verfuegbar.setPlaceholderText("z. B. sofort oder ab 1. März")
         self.interessen = QPlainTextEdit()

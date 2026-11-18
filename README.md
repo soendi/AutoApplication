@@ -1,4 +1,4 @@
-# AutoApplication 1.0.11
+# AutoApplication 1.0.12
 
 Stellen von ostjob.ch suchen, Bewerbungen als Entwurf in Outlook oder Gmail
 vorbereiten und Antworten bis zur Zusage verfolgen – als Windows-Programm mit
@@ -53,7 +53,7 @@ stillen Updates.
 
 ## Installation
 
-`AutoApplication-1.0.11-Setup.exe` von der
+`AutoApplication-1.0.12-Setup.exe` von der
 [Release-Seite](https://github.com/soendi/AutoApplication/releases/latest)
 herunterladen und ausführen. Windows 10 und 11, kein Administrator- und kein
 Python-Zubehör nötig.
@@ -214,7 +214,7 @@ Platzhalter in Betreff und Text:
 | `{stellen_id}` | Inseratsnummer |
 | `{datum}` | heutiges Datum |
 | `{vorname}`, `{nachname}`, `{strasse}`, `{plz}`, `{wohnort}`, `{telefon}`, `{email}` | Angaben aus dem Profil |
-| `{erfahrung}` | „Jahre Erfahrung“ aus dem Profil (z. B. `acht`) |
+| `{erfahrung}` | Jahre Erfahrung aus dem Profil (Standard: `über zwanzig`) |
 | `{verfuegbar}` | Verfügbarkeit aus dem Profil |
 | `{interessen}`, `{faehigkeiten}` | Stichworte aus dem Profil |
 | `{bewerbungsdatum}`, `{tage}` | nur in der Nachfrage-Vorlage |
