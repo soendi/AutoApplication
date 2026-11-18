@@ -346,14 +346,24 @@ class Store:
         return dict(row) if row else None
 
     def list_applications(
-        self, status: str | None = None, limit: int = 500
+        self,
+        status: str | None = None,
+        limit: int = 500,
+        *,
+        statuses: list[str] | None = None,
     ) -> list[dict[str, Any]]:
+        """Bewerbungen auflisten - optional nach einem oder mehreren Stati."""
         query = """
             SELECT a.*, j.title, j.company, j.city, j.url
             FROM applications a LEFT JOIN jobs j ON j.id = a.job_id
         """
         values: list[Any] = []
-        if status:
+        wanted = [item for item in (statuses or []) if item]
+        if wanted:
+            placeholders = ", ".join("?" for _ in wanted)
+            query += f" WHERE a.status IN ({placeholders})"
+            values.extend(wanted)
+        elif status:
             query += " WHERE a.status = ?"
             values.append(status)
         query += " ORDER BY a.id DESC LIMIT ?"

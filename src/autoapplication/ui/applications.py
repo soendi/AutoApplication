@@ -7,7 +7,7 @@ from typing import Any
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
-    QComboBox,
+    QCheckBox,
     QDialog,
     QHBoxLayout,
     QHeaderView,
@@ -48,12 +48,20 @@ class ApplicationsPage(QWidget):
         layout.setSpacing(10)
 
         filters = QHBoxLayout()
-        self.status = QComboBox()
-        self.status.addItem("Alle Bewerbungen", "")
-        for key, label in STATUS_LABELS.items():
-            self.status.addItem(label, key)
-        self.status.currentIndexChanged.connect(self.refresh)
-        filters.addWidget(self.status)
+        filters.setSpacing(12)
+        label = QLabel("Status")
+        label.setObjectName("Hint")
+        filters.addWidget(label)
+        self.status_boxes: dict[str, QCheckBox] = {}
+        for key, text in STATUS_LABELS.items():
+            box = QCheckBox(text)
+            box.setToolTip(
+                "Nur Bewerbungen mit diesem Status. Mehrere Häkchen zeigen "
+                "die Bewerbungen aller gewählten Status; ohne Häkchen alle."
+            )
+            box.toggled.connect(self.refresh)
+            self.status_boxes[key] = box
+            filters.addWidget(box)
         filters.addStretch(1)
         self.hint = QLabel("")
         self.hint.setObjectName("Hint")
@@ -98,9 +106,13 @@ class ApplicationsPage(QWidget):
         self._rows: list[dict[str, Any]] = []
 
     # ------------------------------------------------------------------
+    def selected_statuses(self) -> list[str]:
+        """Angehakte Status; ohne Häkchen werden alle Bewerbungen gezeigt."""
+        return [key for key, box in self.status_boxes.items() if box.isChecked()]
+
     def refresh(self) -> None:
-        status = self.status.currentData() or None
-        self._rows = self.window.store.list_applications(status=status or None)
+        statuses = self.selected_statuses()
+        self._rows = self.window.store.list_applications(statuses=statuses)
         days = int(self.window.settings.number("automation.follow_up_days", 14) or 14)
         self.table.setRowCount(len(self._rows))
         for row, application in enumerate(self._rows):
@@ -127,7 +139,10 @@ class ApplicationsPage(QWidget):
                     item.setTextAlignment(Qt.AlignCenter)
                 self.table.setItem(row, column, item)
             self.table.setRowHeight(row, 28)
-        self.hint.setText(f"{len(self._rows)} Bewerbungen")
+        hint = f"{len(self._rows)} Bewerbungen"
+        if statuses:
+            hint += " (gefiltert)"
+        self.hint.setText(hint)
         self._update_buttons()
 
     def _selected(self) -> dict[str, Any] | None:

@@ -1,3 +1,18 @@
+## AutoApplication 1.0.9
+
+Statusfilter im Tab Bewerbungen als Häkchen – einzeln und kombiniert.
+
+### Neu
+
+- **Filter per Häkchen.** Statt der Auswahlliste stehen im Tab „Bewerbungen“
+  alle möglichen Status als Kontrollkästchen: Entwurf, Gesendet, Nachgefragt,
+  Einladung, Zusage, Absage, Archiviert und Antwort. Jedes Häkchen lässt sich
+  allein setzen, mehrere zusammen zeigen die Bewerbungen aller gewählten
+  Status. Ohne Häkchen bleibt die ganze Liste sichtbar; der Zähler nennt
+  zusätzlich, wenn gefiltert wird.
+- Die Ablage fragt die Status jetzt mit einer einzigen Abfrage ab
+  (`IN (...)`), damit die Kombination auch bei vielen Bewerbungen schnell bleibt.
+
 ## AutoApplication 1.0.8
 
 Mehr Vorlagen aus dem Lebenslauf und ein einheitliches Anschreiben im

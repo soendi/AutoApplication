@@ -64,6 +64,27 @@ def test_application_lifecycle(tmp_path) -> None:
     assert store.active_applications() == []
 
 
+def test_list_applications_filters_several_statuses(tmp_path) -> None:
+    store = Store(tmp_path / "daten.db")
+    store.upsert_job(_job(), now=now_iso())
+    sent = store.add_application(
+        "ostjob:1", "spedition", "A", "Text", status="gesendet"
+    )
+    rejected = store.add_application(
+        "ostjob:1", "spedition", "B", "Text", status="absage"
+    )
+    store.add_application("ostjob:1", "spedition", "C", "Text", status="entwurf")
+
+    combined = store.list_applications(statuses=["gesendet", "absage"])
+    assert {row["id"] for row in combined} == {sent, rejected}
+    assert [row["id"] for row in store.list_applications(statuses=["absage"])] == [
+        rejected
+    ]
+    # Ohne Häkchen bleibt die ganze Liste stehen.
+    assert len(store.list_applications(statuses=[])) == 3
+    assert len(store.list_applications()) == 3
+
+
 def test_due_follow_ups_after_two_weeks(tmp_path) -> None:
     store = Store(tmp_path / "daten.db")
     store.upsert_job(_job(), now=now_iso())
