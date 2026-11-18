@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterator
 
 from .text import strip_html
+from .tracking import find_code, html_body
 
 log = logging.getLogger(__name__)
 
@@ -183,6 +184,7 @@ class GmailImapClient:
         body: str,
         to_address: str = "",
         attachments: list[Path] | None = None,
+        tracking: str = "",
     ) -> dict[str, Any]:
         """Bewerbung als Entwurf in Gmail ablegen - gesendet wird von Hand."""
         token = uuid.uuid4().hex
@@ -196,7 +198,13 @@ class GmailImapClient:
         # Eigener Kopf, damit der Versand auch dann erkannt wird, wenn Gmail
         # die Message-ID beim Senden ersetzt.
         message["X-AutoApplication-ID"] = token
+        if tracking:
+            message["X-AutoApplication-Ref"] = tracking
         message.set_content(body)
+        # Der HTML-Teil traegt die Kennung unsichtbar am Ende; der reine
+        # Text bleibt davon unberuehrt, damit nichts sichtbar wird.
+        if tracking:
+            message.add_alternative(html_body(body, tracking), subtype="html")
 
         total = 0
         for path in attachments or []:
@@ -299,12 +307,14 @@ class GmailImapClient:
                 if "<" in sender and ">" in sender:
                     address = sender[sender.index("<") + 1: sender.rindex(">")]
                 text = self._text(message)
+                subject = str(message.get("Subject") or "")
                 result.append(
                     {
                         "id": str(message.get("Message-ID") or number.decode("ascii", "replace")),
                         "receivedDateTime": _iso(message.get("Date")),
-                        "subject": str(message.get("Subject") or ""),
+                        "subject": subject,
                         "conversationId": "",
+                        "tracking": self._tracking(message, text, subject),
                         "bodyPreview": text[:200],
                         "from": {"emailAddress": {"address": address.strip()}},
                         "body": {"contentType": "Text", "content": text},
@@ -335,6 +345,29 @@ class GmailImapClient:
             if isinstance(part, tuple) and len(part) >= 2:
                 return bytes(part[1])
         return None
+
+    @staticmethod
+    def _tracking(message: Any, text: str, subject: str) -> str:
+        """Kennung aus Kopfzeilen, Text oder zitiertem HTML-Teil lesen."""
+        for header in ("References", "In-Reply-To"):
+            found = find_code(str(message.get(header) or ""))
+            if found:
+                return found
+        found = find_code(f"{subject}\n{text}")
+        if found:
+            return found
+        parts = message.walk() if message.is_multipart() else [message]
+        for part in parts:
+            if part.get_content_type() != "text/html":
+                continue
+            try:
+                content = str(part.get_content())
+            except (LookupError, UnicodeDecodeError, ValueError):
+                continue
+            found = find_code(content)
+            if found:
+                return found
+        return ""
 
     @staticmethod
     def _text(message: Any) -> str:

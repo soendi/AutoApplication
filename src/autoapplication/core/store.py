@@ -36,6 +36,7 @@ JOB_FIELDS = {
 }
 
 APPLICATION_FIELDS = {
+    "tracking",
     "status",
     "sent_at",
     "last_reply_at",
@@ -91,6 +92,7 @@ CREATE TABLE IF NOT EXISTS applications (
     draft_id TEXT NOT NULL DEFAULT '',
     conversation_id TEXT NOT NULL DEFAULT '',
     web_link TEXT NOT NULL DEFAULT '',
+    tracking TEXT NOT NULL DEFAULT '',
     internet_message_id TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'entwurf',
     created_at TEXT NOT NULL DEFAULT '',
@@ -146,6 +148,13 @@ class Store:
         if "contact_name" not in columns:
             db.execute(
                 "ALTER TABLE jobs ADD COLUMN contact_name TEXT NOT NULL DEFAULT ''"
+            )
+        app_columns = {
+            row["name"] for row in db.execute("PRAGMA table_info(applications)")
+        }
+        if "tracking" not in app_columns:
+            db.execute(
+                "ALTER TABLE applications ADD COLUMN tracking TEXT NOT NULL DEFAULT ''"
             )
 
     # ------------------------------------------------------------------
@@ -289,14 +298,15 @@ class Store:
         web_link: str = "",
         status: str = "entwurf",
         created_at: str = "",
+        tracking: str = "",
     ) -> int:
         with self._db() as db:
             cursor = db.execute(
                 """
                 INSERT INTO applications (
                     job_id, template_id, subject, body, draft_id, conversation_id,
-                    web_link, status, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    web_link, status, created_at, tracking
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     job_id,
@@ -308,6 +318,7 @@ class Store:
                     web_link,
                     status,
                     created_at,
+                    tracking,
                 ),
             )
             return int(cursor.lastrowid or 0)
@@ -334,6 +345,22 @@ class Store:
                 WHERE a.id = ?
                 """,
                 (app_id,),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def application_by_tracking(self, tracking: str) -> dict[str, Any] | None:
+        """Bewerbung anhand der in der Mail mitgereisten Kennung finden."""
+        code = (tracking or "").strip()
+        if not code:
+            return None
+        with self._db() as db:
+            row = db.execute(
+                """
+                SELECT a.*, j.title, j.company, j.city, j.url
+                FROM applications a LEFT JOIN jobs j ON j.id = a.job_id
+                WHERE a.tracking = ? ORDER BY a.id DESC LIMIT 1
+                """,
+                (code,),
             ).fetchone()
         return dict(row) if row else None
 

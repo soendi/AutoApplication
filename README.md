@@ -1,4 +1,4 @@
-# AutoApplication 1.0.9
+# AutoApplication 1.0.10
 
 Stellen von ostjob.ch suchen, Bewerbungen als Entwurf in Outlook oder Gmail
 vorbereiten und Antworten bis zur Zusage verfolgen – als Windows-Programm mit
@@ -37,9 +37,12 @@ stillen Updates.
    Der Entwurf landet in Outlook oder Gmail und wird von Hand gesendet.
 5. **Versand erkennen.** Taucht die Mail in „Gesendete Elemente“ auf, steht das
    Versanddatum in der Bewerbungstabelle.
-6. **Antworten auswerten.** Das Postfach wird auf Antworten der Firma geprüft –
-   über die Unterhaltung, die Absenderdomain, den Firmennamen oder den
-   Stellentitel. Eine **Absage** archiviert die Bewerbung, eine **Zusage** oder
+6. **Antworten auswerten.** Jede Bewerbung trägt eine einmalige Kennung
+   (z. B. `AA-7K4P-Q9XM-3TRZ`), die im HTML-Teil der Mail unsichtbar mitreist
+   (weisser Text in Schriftgrösse 0, dazu HTML-Kommentar und Mailkopf
+   `X-AutoApplication-Ref`). Das Postfach wird auf Antworten der Firma geprüft –
+   zuerst über diese Kennung, dann über die Unterhaltung, die Absenderdomain,
+   den Firmennamen oder den Stellentitel. Eine **Absage** archiviert die Bewerbung, eine **Zusage** oder
    **Einladung** erscheint als Hinweis. Im Tab **Bewerbungen** filtern Häkchen
    nach Status – jeder Status einzeln oder mehrere kombiniert; ohne Häkchen
    stehen alle Bewerbungen in der Liste.
@@ -49,7 +52,7 @@ stillen Updates.
 
 ## Installation
 
-`AutoApplication-1.0.9-Setup.exe` von der
+`AutoApplication-1.0.10-Setup.exe` von der
 [Release-Seite](https://github.com/soendi/AutoApplication/releases/latest)
 herunterladen und ausführen. Windows 10 und 11, kein Administrator- und kein
 Python-Zubehör nötig.
@@ -301,3 +304,6 @@ Das Skript braucht Python und Inno Setup 6 (`ISCC.exe`).
   Online-Bewerbung im Feld „Stelle öffnen“ benutzt).
 - Die Antwortauswertung ist eine Einordnung, keine Rechtsauskunft: Absagen und
   Zusagen werden erkannt, Sonderfälle bleiben als „Antwort“ stehen.
+- Die Kennung reist im zitierten Mailtext mit. Antwortet jemand in reinem Text
+  und ohne Zitat der ursprünglichen Mail, fehlt sie – dann greifen wieder
+  Unterhaltung, Absenderdomain, Firmenname und Stellentitel.

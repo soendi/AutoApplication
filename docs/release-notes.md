@@ -1,3 +1,25 @@
+## AutoApplication 1.0.10
+
+Jede Bewerbung trägt eine einmalige, unsichtbare Kennung – Antworten werden
+damit sicher zugeordnet.
+
+### Neu
+
+- **Einmalige Kennung je Bewerbung.** Beim Vorbereiten entsteht eine zufällige
+  Kombination aus Buchstaben, Ziffern und Bindestrichen, z. B.
+  `AA-7K4P-Q9XM-3TRZ`. Sie wird in der Ablage gespeichert und reist in jeder
+  Mail mit – auch in der Nachfrage.
+- **Unsichtbar in der Mail.** Die Kennung steht im HTML-Teil ganz unten als
+  weisser Text in Schriftgrösse 0, zusätzlich als HTML-Kommentar und im
+  Mailkopf `X-AutoApplication-Ref`. Der reine Text-Teil bleibt frei davon; der
+  Empfänger sieht nichts.
+- **Sichere Zuordnung.** Beim Prüfen des Posteingangs liest AutoApplication die
+  Kennung aus den Kopfzeilen (`References`, `In-Reply-To`), aus dem zitierten
+  HTML-Teil oder aus dem Mailtext und ordnet die Antwort der richtigen
+  Bewerbung zu – auch wenn Betreff, Absender und Unterhaltung nicht passen.
+  Unterhaltung, Absenderdomain, Firmenname und Stellentitel bleiben als
+  Rückfall erhalten.
+
 ## AutoApplication 1.0.9
 
 Statusfilter im Tab Bewerbungen als Häkchen – einzeln und kombiniert.

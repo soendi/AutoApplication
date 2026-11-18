@@ -64,6 +64,19 @@ def test_application_lifecycle(tmp_path) -> None:
     assert store.active_applications() == []
 
 
+def test_application_tracking_code(tmp_path) -> None:
+    store = Store(tmp_path / "daten.db")
+    store.upsert_job(_job(), now=now_iso())
+    app_id = store.add_application(
+        "ostjob:1", "spedition", "B", "T", tracking="AA-7K4P-Q9XM-3TRZ"
+    )
+    assert store.get_application(app_id)["tracking"] == "AA-7K4P-Q9XM-3TRZ"
+    assert store.application_by_tracking("AA-7K4P-Q9XM-3TRZ")["id"] == app_id
+    assert store.application_by_tracking("AA-ZZZZ-ZZZZ-ZZZZ") is None
+    # Ohne Kennung darf keine alte Bewerbung ohne Kennung herausfallen.
+    assert store.application_by_tracking("") is None
+
+
 def test_list_applications_filters_several_statuses(tmp_path) -> None:
     store = Store(tmp_path / "daten.db")
     store.upsert_job(_job(), now=now_iso())

@@ -88,12 +88,15 @@ class FakeOutlook:
         self.sent: dict | None = None
         self.messages: list[dict] = []
 
-    def create_draft(self, subject, body, to_address="", attachments=None):
+    def create_draft(
+        self, subject, body, to_address="", attachments=None, tracking=""
+    ):
         self.drafts.append(
             {
                 "subject": subject,
                 "body": body,
                 "to": to_address,
+                "tracking": tracking,
                 "attachments": [str(path) for path in attachments or []],
             }
         )
@@ -334,6 +337,58 @@ def test_imap_provider_uses_imap_client(tmp_path) -> None:
     pipeline.prepare_application(MATCHING.id)
     assert len(imap.drafts) == 1
     assert len(outlook.drafts) == 0
+
+
+def test_every_application_gets_a_tracking_code(tmp_path) -> None:
+    pipeline, store, outlook, _ = _pipeline(tmp_path)
+    pipeline.run_search()
+    pipeline.prepare_application(MATCHING.id)
+    application = store.list_applications()[0]
+    code = application["tracking"]
+    assert code.startswith("AA-") and len(code) == 17
+    assert outlook.drafts[0]["tracking"] == code
+    assert store.application_by_tracking(code)["id"] == application["id"]
+
+
+def test_reply_is_matched_by_tracking_code(tmp_path) -> None:
+    pipeline, store, outlook, _ = _pipeline(tmp_path)
+    pipeline.run_search()
+    pipeline.prepare_application(MATCHING.id)
+    application = store.list_applications()[0]
+    code = application["tracking"]
+    outlook.sent = {"sentDateTime": "2026-11-18T08:15:00+00:00"}
+    pipeline.sync_sent()
+    # Betreff und Absender passen zu keiner Bewerbung - nur die Kennung tut es.
+    outlook.messages = [
+        {
+            "id": "inbox9",
+            "conversationId": "",
+            "receivedDateTime": "2026-11-18T09:00:00Z",
+            "subject": "Rückfrage zu Ihrer Nachricht",
+            "body": {
+                "contentType": "Text",
+                "content": "Leider eine Absage.\n\n> AutoApplication-Referenz " + code,
+            },
+        }
+    ]
+    found = pipeline.check_replies()
+    assert len(found) == 1
+    assert found[0]["application"]["id"] == application["id"]
+
+
+def test_follow_up_reuses_tracking_code(tmp_path) -> None:
+    pipeline, store, outlook, _ = _pipeline(tmp_path, jobs=[])
+    store.upsert_job(MATCHING)
+    application_id = store.add_application(
+        MATCHING.id, "spedition", "Betreff", "Text", status="gesendet"
+    )
+    store.update_application(
+        application_id,
+        sent_at=(date.today() - timedelta(days=15)).isoformat(),
+        tracking="AA-7K4P-Q9XM-3TRZ",
+    )
+    assert pipeline.prepare_follow_ups() == 1
+    assert outlook.drafts[0]["tracking"] == "AA-7K4P-Q9XM-3TRZ"
 
 
 def test_ai_greeting_is_replaced_with_contact(tmp_path) -> None:

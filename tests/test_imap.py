@@ -138,6 +138,61 @@ def test_create_draft_appends_message_with_attachment(tmp_path) -> None:
     assert fake.logged_out
 
 
+def test_create_draft_embeds_tracking_invisible() -> None:
+    fake = FakeImap()
+    client = _client(fake)
+    code = "AA-7K4P-Q9XM-3TRZ"
+    result = client.create_draft(
+        "Bewerbung als Lagerist", "Guten Tag", "firma@example.com", tracking=code
+    )
+    raw = fake.appended[0][2]
+    message = BytesParser(policy=policy.default).parsebytes(raw)
+    assert message["X-AutoApplication-Ref"] == code
+    assert message["X-AutoApplication-ID"] == result["conversationId"]
+    # Im reinen Text steht die Kennung nicht - sie soll niemandem auffallen.
+    plain = message.get_body(("plain",)).get_content()
+    assert "AA-7K4P" not in plain
+    html = message.get_body(("html",)).get_content()
+    assert code in html
+    assert "font-size:0" in html and "#ffffff" in html
+
+
+def test_inbox_since_reads_tracking_from_quoted_html() -> None:
+    code = "AA-7K4P-Q9XM-3TRZ"
+    quoted = (
+        "<p>Leider eine Absage.</p>"
+        '<blockquote><div style="font-size:0;color:#ffffff">'
+        f"AutoApplication-Referenz {code}</div></blockquote>"
+    )
+    fake = FakeImap(
+        inbox=[_message("Re: Bewerbung", "hr@firma.example", quoted, html=True)]
+    )
+    client = _client(fake)
+    messages = client.inbox_since("2026-11-01T00:00:00+00:00")
+    assert messages[0]["tracking"] == code
+    assert messages[0]["body"]["content"].startswith("Leider eine Absage")
+
+
+def test_inbox_since_reads_tracking_from_references() -> None:
+    message = EmailMessage()
+    message["From"] = "hr@firma.example"
+    message["Subject"] = "Ihre Bewerbung"
+    message["Date"] = formatdate(localtime=True)
+    message["Message-ID"] = "<antwort@firma.example>"
+    message["References"] = "<abc@autoapplication.local> <AA-7K4P-Q9XM-3TRZ@autoapplication.local>"
+    message.set_content("Guten Tag")
+    fake = FakeImap(inbox=[message.as_bytes()])
+    client = _client(fake)
+    messages = client.inbox_since("2026-11-01T00:00:00+00:00")
+    assert messages[0]["tracking"] == "AA-7K4P-Q9XM-3TRZ"
+
+
+def test_inbox_since_without_tracking_is_empty() -> None:
+    fake = FakeImap(inbox=[_message("Newsletter", "news@example.com")])
+    client = _client(fake)
+    assert client.inbox_since("2026-11-01T00:00:00+00:00")[0]["tracking"] == ""
+
+
 def test_wrong_app_password_is_explained() -> None:
     client = GmailImapClient(
         "ich@example.com",

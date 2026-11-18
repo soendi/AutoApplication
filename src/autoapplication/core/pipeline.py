@@ -49,6 +49,7 @@ from .text import (
     salutation,
     short,
 )
+from .tracking import find_code, new_code
 
 log = logging.getLogger(__name__)
 
@@ -246,6 +247,12 @@ class Pipeline:
                 return self._with_salutation(text, anrede)
         return self._with_salutation(fallback, anrede)
 
+    def _tracking_code(self) -> str:
+        """Einmalige Kennung, die in jeder Mail unsichtbar mitreist."""
+        return new_code(
+            lambda code: self.store.application_by_tracking(code) is not None
+        )
+
     def _attachments(
         self,
         job: Job,
@@ -412,12 +419,13 @@ class Pipeline:
             )
         subject, body = self._write_mail(template, job, digest)
         attachments = self._attachments(job, digest, body)
+        tracking = self._tracking_code()
         draft_id = ""
         conversation_id = ""
         web_link = ""
         if self.outlook_ready():
             draft = self.outlook().create_draft(
-                subject, body, job.contact_address(), attachments
+                subject, body, job.contact_address(), attachments, tracking=tracking
             )
             draft_id = str(draft.get("id") or "")
             conversation_id = str(draft.get("conversationId") or "")
@@ -432,6 +440,7 @@ class Pipeline:
             web_link=web_link,
             status=STATUS_ENTWURF,
             created_at=now_iso(),
+            tracking=tracking,
         )
         self.store.set_job_analysis(job.id, score, template.id, keywords)
         self.store.update_job(job.id, status="beworben")
@@ -456,6 +465,11 @@ class Pipeline:
             raise ValueError("Keine Vorlage für Nachfragen vorhanden.")
         job_row = self.store.get_job(str(application.get("job_id") or ""))
         job = Job.from_row(job_row) if job_row else None
+        # Die Nachfrage traegt dieselbe Kennung wie die Bewerbung - auch fuer
+        # Bewerbungen aus frueheren Fassungen, die noch keine haben.
+        tracking = str(application.get("tracking") or "") or self._tracking_code()
+        if not str(application.get("tracking") or ""):
+            self.store.update_application(application_id, tracking=tracking)
         days = int(self.settings.number("automation.follow_up_days", 14) or 14)
         subject, body = render_mail(
             template,
@@ -472,7 +486,10 @@ class Pipeline:
         web_link = ""
         if self.outlook_ready():
             draft = self.outlook().create_draft(
-                subject, body, job.contact_address() if job else ""
+                subject,
+                body,
+                job.contact_address() if job else "",
+                tracking=tracking,
             )
             draft_id = str(draft.get("id") or "")
             conversation_id = str(draft.get("conversationId") or "")
@@ -595,6 +612,15 @@ class Pipeline:
     def _match_reply(
         self, message: dict[str, Any], active: list[dict[str, Any]]
     ) -> dict[str, Any] | None:
+        # Zuerst die mitgereiste Kennung: sie bleibt eindeutig, auch wenn
+        # Betreff und Absender nichts verraten.
+        code = str(message.get("tracking") or "") or find_code(
+            f"{message.get('subject') or ''}\n{message_body(message)}"
+        )
+        if code:
+            application = self.store.application_by_tracking(code)
+            if application is not None:
+                return application
         conversation = str(message.get("conversationId") or "")
         sender = sender_address(message)
         sender_domain = domain_of(sender)

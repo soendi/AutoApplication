@@ -18,6 +18,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
+from .tracking import html_body
+
 log = logging.getLogger(__name__)
 
 GRAPH = "https://graph.microsoft.com/v1.0"
@@ -291,11 +293,16 @@ class OutlookClient:
         body: str,
         to_address: str = "",
         attachments: list[Path] | None = None,
+        tracking: str = "",
     ) -> dict[str, Any]:
         """Bewerbung als Entwurf ablegen - gesendet wird von Hand."""
         message: dict[str, Any] = {
             "subject": subject,
-            "body": {"contentType": "Text", "content": body},
+            "body": (
+                {"contentType": "HTML", "content": html_body(body, tracking)}
+                if tracking
+                else {"contentType": "Text", "content": body}
+            ),
         }
         if to_address and "@" in to_address:
             message["toRecipients"] = [{"emailAddress": {"address": to_address}}]
