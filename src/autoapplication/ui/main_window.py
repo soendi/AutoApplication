@@ -194,6 +194,20 @@ class MainWindow(QMainWindow):
         if hasattr(page, "refresh"):
             page.refresh()
 
+    def show_page(self, name: str) -> None:
+        """Direkt zu einer Ansicht wechseln (z. B. aus der Übersicht)."""
+        pages = {
+            "overview": self.overview,
+            "jobs": self.jobs,
+            "applications": self.applications,
+            "templates": self.templates,
+            "settings": self.settings_page,
+            "log": self.log_page,
+        }
+        page = pages.get(name)
+        if page is not None:
+            self.tabs.setCurrentWidget(page)
+
     def reload_settings(self) -> None:
         self.settings_page.load()
         self._setup_tray_visibility()
@@ -248,6 +262,15 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------------
     def run_search(self) -> None:
+        if not self.settings.flag("search.api_enabled", False):
+            QMessageBox.information(
+                self,
+                "Stellen-API ausgeschaltet",
+                "Die Stellen-API von ostjob.ch ist ausgeschaltet. Unter "
+                "Einstellungen > Suche lässt sie sich einschalten.",
+            )
+            self.show_page("settings")
+            return
         self.run_task(
             self.pipeline.run_search,
             done=lambda summary: self.statusBar().showMessage(summary.as_text(), 20_000),
@@ -255,14 +278,17 @@ class MainWindow(QMainWindow):
         )
 
     def check_mail(self) -> None:
-        if not self.pipeline.outlook_ready():
+        if not self.pipeline.mail_ready():
+            provider = self.pipeline.mail_provider()
+            name = "Google (Gmail)" if provider == "google" else "Outlook"
             QMessageBox.information(
                 self,
-                "Outlook",
-                "Outlook ist noch nicht verbunden. Unter Einstellungen > Outlook "
-                "anmelden – danach werden Entwürfe, Versand und Antworten "
-                "automatisch verfolgt.",
+                "E-Mail-Anbindung",
+                f"{name} ist noch nicht verbunden. Unter Einstellungen die "
+                "Anbindung wählen und anmelden – danach werden Entwürfe, "
+                "Versand und Antworten automatisch verfolgt.",
             )
+            self.show_page("settings")
             return
 
         def work() -> tuple[int, int]:
@@ -364,8 +390,8 @@ class MainWindow(QMainWindow):
             self,
             f"Über {APP_NAME}",
             f"<b>{APP_NAME}</b> {APP_VERSION}<br>{APP_TAGLINE}<br><br>"
-            "Stellen von ostjob.ch, Bewerbungen als Outlook-Entwurf, "
-            "Antworten und Nachfragen an einem Ort.<br><br>"
+            "Stellen von ostjob.ch, Bewerbungen als Entwurf in Outlook oder "
+            "Gmail, Antworten und Nachfragen an einem Ort.<br><br>"
             "Alle Angaben liegen unter "
             f"<code>{Path.home() / 'AutoApplication'}</code>.",
         )

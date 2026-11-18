@@ -27,8 +27,11 @@ DEFAULTS: dict[str, Any] = {
         "email": "",
         "erfahrung_jahre": "acht",
         "verfuegbar": "sofort",
+        "interessen": [],
+        "faehigkeiten": [],
     },
     "search": {
+        "api_enabled": False,
         "queries": ["Spedition", "Logistik"],
         "place": "",
         "place_code": "",
@@ -53,15 +56,24 @@ DEFAULTS: dict[str, Any] = {
     },
     "ai": {
         "enabled": False,
+        "provider": "openai",
         "base_url": "https://api.openai.com/v1",
         "model": "gpt-4o-mini",
         "api_key": "",
         "timeout": 45,
     },
+    "mail": {
+        "provider": "outlook",
+    },
     "outlook": {
         "enabled": False,
         "client_id": "",
         "tenant": "common",
+        "account": "",
+    },
+    "google": {
+        "client_id": "",
+        "client_secret": "",
         "account": "",
     },
     "documents": {
@@ -101,6 +113,10 @@ def templates_path() -> Path:
 
 def token_path() -> Path:
     return app_home() / "outlook_token.json"
+
+
+def google_token_path() -> Path:
+    return app_home() / "google_token.json"
 
 
 def log_path() -> Path:
@@ -193,7 +209,12 @@ class Settings:
         stored = self.text("ai.api_key").strip()
         if stored:
             return stored
-        for name in ("AUTOAPPLICATION_AI_KEY", "OPENAI_API_KEY"):
+        names = ["AUTOAPPLICATION_AI_KEY"]
+        if self.text("ai.provider", "openai").strip().lower() == "groq":
+            names += ["GROQ_API_KEY", "OPENAI_API_KEY"]
+        else:
+            names += ["OPENAI_API_KEY", "GROQ_API_KEY"]
+        for name in names:
             value = os.environ.get(name, "").strip()
             if value:
                 return value
@@ -201,7 +222,15 @@ class Settings:
 
     def profile(self) -> dict[str, str]:
         profile = self.get("profile", {})
-        return {key: str(value or "") for key, value in profile.items()}
+        result: dict[str, str] = {}
+        for key, value in profile.items():
+            if isinstance(value, list):
+                result[key] = ", ".join(str(item) for item in value)
+            else:
+                result[key] = str(value or "")
+        for key in ("interessen", "faehigkeiten"):
+            result[key] = ", ".join(self._terms(f"profile.{key}"))
+        return result
 
     def search_terms(self) -> list[str]:
         value = self.get("search.queries", [])
@@ -229,6 +258,30 @@ class Settings:
         code = self.text("search.place_code")
         value = self.text("search.place_value") or place
         return place, code, value
+
+    def _terms(self, dotted: str) -> list[str]:
+        """Stichwortliste aus Einstellungen lesen - Liste oder Freitext."""
+        value = self.get(dotted, [])
+        if isinstance(value, str):
+            parts = value.replace(";", ",").splitlines()
+            entries: list[str] = []
+            for line in parts:
+                entries.extend(line.split(","))
+            return [entry.strip() for entry in entries if entry.strip()]
+        return [str(entry).strip() for entry in value or [] if str(entry).strip()]
+
+    def interests(self) -> list[str]:
+        """Interessen in Stichworten - unabhaengig von den Faehigkeiten."""
+        return self._terms("profile.interessen")
+
+    def skills(self) -> list[str]:
+        """Faehigkeiten in Stichworten."""
+        return self._terms("profile.faehigkeiten")
+
+    def mail_provider(self) -> str:
+        """Welche E-Mail-Anbindung genutzt wird: outlook, google oder none."""
+        provider = self.text("mail.provider", "outlook").strip().lower()
+        return provider if provider in {"outlook", "google", "none"} else "outlook"
 
 
 def ensure_home() -> Path:

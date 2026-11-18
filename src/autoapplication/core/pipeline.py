@@ -15,8 +15,9 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .ai import ABSAGE, EINLADUNG, INFO, ZUSAGE, AiClient, classify_local
-from .config import Settings, templates_path, token_path
+from .config import Settings, google_token_path, templates_path, token_path
 from .documents import collect, describe
+from .google import GmailClient, GoogleAuth
 from .models import Job
 from .ostjob import OstjobClient, OstjobError, search_jobs
 from .outlook import GraphAuth, OutlookClient, OutlookError, message_body, sender_address
@@ -86,6 +87,7 @@ class Pipeline:
         *,
         ai_client: AiClient | None = None,
         outlook_client: OutlookClient | None = None,
+        google_client: GmailClient | None = None,
         ostjob_client: OstjobClient | None = None,
         notifier: Callable[[str, str], None] | None = None,
         templates_file: Path | None = None,
@@ -94,6 +96,7 @@ class Pipeline:
         self.store = store
         self._ai = ai_client or AiClient(settings)
         self._outlook = outlook_client
+        self._google = google_client
         self._ostjob = ostjob_client
         self.notifier = notifier
         self.templates_file = templates_file or templates_path()
@@ -116,21 +119,55 @@ class Pipeline:
             token_file=token_path(),
         )
 
+    def google_auth(self) -> GoogleAuth:
+        return GoogleAuth(
+            self.settings.text("google.client_id"),
+            client_secret=self.settings.text("google.client_secret"),
+            token_file=google_token_path(),
+        )
+
+    def mail_provider(self) -> str:
+        return self.settings.mail_provider()
+
     def outlook_ready(self) -> bool:
-        if self._outlook is not None:
+        """Ist die gewaehlte E-Mail-Anbindung bereit fuer Entwuerfe?"""
+        return self.mail_ready()
+
+    def mail_ready(self) -> bool:
+        if self._outlook is not None or self._google is not None:
             return True
-        if not self.settings.flag("outlook.enabled"):
-            return False
-        if not self.settings.text("outlook.client_id").strip():
-            return False
-        try:
-            return self.auth().connected()
-        except OutlookError:
-            return False
+        provider = self.mail_provider()
+        if provider == "outlook":
+            if not self.settings.flag("outlook.enabled"):
+                return False
+            if not self.settings.text("outlook.client_id").strip():
+                return False
+            try:
+                return self.auth().connected()
+            except OutlookError:
+                return False
+        if provider == "google":
+            if not self.settings.text("google.client_id").strip():
+                return False
+            if not self.settings.text("google.client_secret").strip():
+                return False
+            try:
+                return self.google_auth().connected()
+            except OutlookError:
+                return False
+        return False
 
     def outlook(self) -> OutlookClient:
+        """Client der gewaehlten E-Mail-Anbindung."""
+        return self.mail()
+
+    def mail(self) -> OutlookClient | GmailClient:
+        if self._google is not None and self.mail_provider() == "google":
+            return self._google
         if self._outlook is not None:
             return self._outlook
+        if self.mail_provider() == "google":
+            return GmailClient(self.google_auth())
         return OutlookClient(self.auth())
 
     def notify(self, title: str, message: str) -> None:
@@ -148,8 +185,15 @@ class Pipeline:
         moment = now or datetime.now(timezone.utc)
         stamp = moment.isoformat(timespec="seconds")
         summary = RunSummary()
+        if not self.settings.flag("search.api_enabled", False):
+            summary.errors.append(
+                "Die Stellen-API von ostjob.ch ist ausgeschaltet "
+                "(Einstellungen > Suche)."
+            )
+            self.store.log("hinweis", "Stellensuche übersprungen: API ist ausgeschaltet.")
+            return summary
         templates = self.templates()
-        terms = vocabulary(templates)
+        terms = vocabulary(templates) + self.settings.skills()
         try:
             jobs = search_jobs(self.settings, client=self._ostjob, now=moment)
         except OstjobError as exc:
@@ -223,7 +267,7 @@ class Pipeline:
                 except OutlookError as exc:
                     problem = str(exc)
                     summary.errors.append(problem)
-                    self.store.log("fehler", f"Outlook-Entwurf: {problem}")
+                    self.store.log("fehler", f"E-Mail-Entwurf: {problem}")
             application_id = self.store.add_application(
                 job.id,
                 template.id,
@@ -252,7 +296,7 @@ class Pipeline:
             if is_new:
                 self.notify(
                     "Bewerbung vorbereitet",
-                    f"{job.company}: {job.title} liegt als Entwurf in Outlook.",
+                    f"{job.company}: {job.title} liegt als Entwurf bereit.",
                 )
 
         self.store.meta_set("letzter_lauf", stamp)
@@ -266,7 +310,9 @@ class Pipeline:
             raise ValueError("Diese Stelle steht nicht in der Ablage.")
         job = Job.from_row(row)
         templates = self.templates()
-        keywords = self._ai.keywords(job, vocabulary(templates))
+        keywords = self._ai.keywords(
+            job, vocabulary(templates) + self.settings.skills()
+        )
         min_score = int(self.settings.number("matching.min_score", 2) or 2)
         template, score, matches = choose_template(templates, job, keywords, min_score)
         if template is None:
@@ -555,7 +601,7 @@ class Pipeline:
             self.prepare_follow_ups(moment)
         except OutlookError as exc:
             summary.errors.append(str(exc))
-            self.store.log("fehler", f"Outlook: {exc}")
+            self.store.log("fehler", f"E-Mail-Anbindung: {exc}")
         self.store.meta_set("letzter_tageslauf", now_iso())
         return summary
 

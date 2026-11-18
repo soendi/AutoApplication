@@ -1,4 +1,4 @@
-"""Einstellungen: Person, Suche, KI, Outlook, Unterlagen, Automatik."""
+"""Einstellungen: Person, Suche, KI, E-Mail, Unterlagen, Automatik."""
 
 from __future__ import annotations
 
@@ -23,7 +23,24 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..core.ai import GROQ_BASE, GROQ_MODEL, OPENAI_BASE, OPENAI_MODEL
 from .dialogs import DeviceLoginDialog
+
+MAIL_PROVIDERS = (
+    ("Outlook (Microsoft Graph)", "outlook"),
+    ("Google (Gmail)", "google"),
+    ("Keine – nur im Programm", "none"),
+)
+
+AI_PROVIDERS = (
+    ("OpenAI oder kompatible Schnittstelle", "openai"),
+    ("Groq", "groq"),
+)
+
+
+def _split_terms(value: str) -> list[str]:
+    parts = [part.strip() for part in re.split(r"[\n,;]", value)]
+    return [part for part in parts if part]
 
 
 class SettingsPage(QWidget):
@@ -56,6 +73,12 @@ class SettingsPage(QWidget):
         self.erfahrung.setPlaceholderText("z. B. acht")
         self.verfuegbar = QLineEdit()
         self.verfuegbar.setPlaceholderText("z. B. sofort oder ab 1. März")
+        self.interessen = QPlainTextEdit()
+        self.interessen.setFixedHeight(58)
+        self.interessen.setPlaceholderText("Stichworte, z. B. Logistik, Nachhaltigkeit, Kundenkontakt")
+        self.faehigkeiten = QPlainTextEdit()
+        self.faehigkeiten.setFixedHeight(58)
+        self.faehigkeiten.setPlaceholderText("Stichworte, z. B. Disposition, SAP, Staplerschein")
         for label, field in (
             ("Vorname", self.vorname),
             ("Nachname", self.nachname),
@@ -66,13 +89,26 @@ class SettingsPage(QWidget):
             ("E-Mail", self.email),
             ("Jahre Erfahrung (Wort)", self.erfahrung),
             ("Verfügbar", self.verfuegbar),
+            ("Interessen (Stichworte)", self.interessen),
+            ("Fähigkeiten (Stichworte)", self.faehigkeiten),
         ):
             person_form.addRow(label, field)
+        person_hint = QLabel(
+            "Interessen und Fähigkeiten werden getrennt gespeichert und müssen "
+            "sich nicht decken: Sie können etwas, interessieren sich aber eher "
+            "für etwas anderes. Beides fliesst in die KI-Auswertung ein."
+        )
+        person_hint.setWordWrap(True)
+        person_hint.setObjectName("Hint")
+        person_form.addRow("", person_hint)
         inner.addWidget(person)
 
         # ------------------------------------------------------------------
         search = QGroupBox("Suche auf ostjob.ch")
         search_form = QFormLayout(search)
+        self.api_enabled = QCheckBox(
+            "Stellen über die API von ostjob.ch abrufen (Standard: aus)"
+        )
         self.queries = QPlainTextEdit()
         self.queries.setFixedHeight(68)
         self.queries.setPlaceholderText("Ein Suchbegriff pro Zeile, z. B. Spedition")
@@ -114,6 +150,7 @@ class SettingsPage(QWidget):
         self.max_age = QSpinBox()
         self.max_age.setRange(0, 365)
         self.max_age.setSuffix(" Tage")
+        search_form.addRow("", self.api_enabled)
         for label, field in (
             ("Suchbegriffe", self.queries),
             ("Ort", self.place),
@@ -134,8 +171,10 @@ class SettingsPage(QWidget):
         ):
             search_form.addRow(label, field)
         hint = QLabel(
-            "Ort, Ortskennung und Koordinaten stehen in der Adresszeile von "
-            "ostjob.ch, wenn dort eine Umkreissuche läuft. Ohne Koordinaten "
+            "Ohne Häkchen oben fragt AutoApplication die Stellen-API nicht ab – "
+            "weder beim Start noch beim täglichen Lauf noch über „Jetzt Stellen "
+            "suchen“. Ort, Ortskennung und Koordinaten stehen in der Adresszeile "
+            "von ostjob.ch, wenn dort eine Umkreissuche läuft. Ohne Koordinaten "
             "entfällt die Entfernungsangabe."
         )
         hint.setWordWrap(True)
@@ -147,7 +186,7 @@ class SettingsPage(QWidget):
         matching = QGroupBox("Bewerbungen")
         matching_form = QFormLayout(matching)
         self.auto_draft = QCheckBox(
-            "Passende Stellen automatisch als Outlook-Entwurf vorbereiten"
+            "Passende Stellen automatisch als Entwurf vorbereiten"
         )
         self.min_score = QSpinBox()
         self.min_score.setRange(1, 10)
@@ -162,24 +201,31 @@ class SettingsPage(QWidget):
         ai = QGroupBox("KI (optional)")
         ai_form = QFormLayout(ai)
         self.ai_enabled = QCheckBox("KI für Stichworte und Antworten verwenden")
+        self.ai_provider = QComboBox()
+        for label, value in AI_PROVIDERS:
+            self.ai_provider.addItem(label, value)
+        self.ai_provider.currentIndexChanged.connect(self._ai_provider_changed)
         self.ai_url = QLineEdit()
-        self.ai_url.setPlaceholderText("https://api.openai.com/v1")
+        self.ai_url.setPlaceholderText(OPENAI_BASE)
         self.ai_model = QLineEdit()
-        self.ai_model.setPlaceholderText("gpt-4o-mini")
+        self.ai_model.setPlaceholderText(OPENAI_MODEL)
         self.ai_key = QLineEdit()
         self.ai_key.setEchoMode(QLineEdit.EchoMode.Password)
         self.ai_key.setPlaceholderText("API-Schlüssel")
         for label, field in (
             ("", self.ai_enabled),
+            ("Anbieter", self.ai_provider),
             ("Adresse (OpenAI-kompatibel)", self.ai_url),
             ("Modell", self.ai_model),
             ("Schlüssel", self.ai_key),
         ):
             ai_form.addRow(label, field)
         ai_hint = QLabel(
-            "Ohne KI arbeitet AutoApplication mit den Stichworten des Portals "
-            "und den Stichworten der Vorlagen weiter. Der Schlüssel lässt sich "
-            "auch über die Umgebungsvariable AUTOAPPLICATION_AI_KEY setzen."
+            "Groq ist OpenAI-kompatibel: Anbieter wählen, Schlüssel von Groq "
+            "eintragen, fertig. Ohne KI arbeitet AutoApplication mit den "
+            "Stichworten des Portals und den Stichworten der Vorlagen weiter. "
+            "Der Schlüssel lässt sich auch über die Umgebungsvariable "
+            "AUTOAPPLICATION_AI_KEY oder GROQ_API_KEY setzen."
         )
         ai_hint.setWordWrap(True)
         ai_hint.setObjectName("Hint")
@@ -187,9 +233,24 @@ class SettingsPage(QWidget):
         inner.addWidget(ai)
 
         # ------------------------------------------------------------------
+        mail = QGroupBox("E-Mail-Anbindung")
+        mail_form = QFormLayout(mail)
+        self.mail_provider = QComboBox()
+        for label, value in MAIL_PROVIDERS:
+            self.mail_provider.addItem(label, value)
+        mail_form.addRow("Bewerbungen ablegen mit", self.mail_provider)
+        mail_hint = QLabel(
+            "Der Entwurf landet im Ordner Entwürfe des gewählten Kontos und wird "
+            "von Hand versendet. Ohne Anbindung bleibt der Text nur im Programm."
+        )
+        mail_hint.setWordWrap(True)
+        mail_hint.setObjectName("Hint")
+        mail_form.addRow("", mail_hint)
+        inner.addWidget(mail)
+
+        # ------------------------------------------------------------------
         outlook = QGroupBox("Outlook (Microsoft Graph)")
         outlook_form = QFormLayout(outlook)
-        self.outlook_enabled = QCheckBox("Bewerbungen in Outlook ablegen")
         self.client_id = QLineEdit()
         self.client_id.setPlaceholderText("Client-ID der App-Registrierung")
         self.tenant = QLineEdit()
@@ -209,7 +270,6 @@ class SettingsPage(QWidget):
         connect_layout.addWidget(self.connect_button)
         connect_layout.addWidget(self.disconnect_button)
         connect_layout.addWidget(self.outlook_status, 1)
-        outlook_form.addRow("", self.outlook_enabled)
         outlook_form.addRow("Client-ID", self.client_id)
         outlook_form.addRow("Mandant", self.tenant)
         outlook_form.addRow("Konto", self.account)
@@ -217,13 +277,48 @@ class SettingsPage(QWidget):
         outlook_hint = QLabel(
             "Anmeldung ohne Passwort im Programm. In der App-Registrierung "
             "(Microsoft Entra) muss „Mobile and desktop applications“ gewählt "
-            "sein; Berechtigungen: Mail.ReadWrite, Mail.Send, User.Read. "
-            "Der Entwurf landet im Ordner Entwürfe und wird von Hand versendet."
+            "sein; Berechtigungen: Mail.ReadWrite, Mail.Send, User.Read."
         )
         outlook_hint.setWordWrap(True)
         outlook_hint.setObjectName("Hint")
         outlook_form.addRow("", outlook_hint)
         inner.addWidget(outlook)
+
+        # ------------------------------------------------------------------
+        google = QGroupBox("Google (Gmail)")
+        google_form = QFormLayout(google)
+        self.google_client_id = QLineEdit()
+        self.google_client_id.setPlaceholderText("Client-ID des Google-OAuth-Clients")
+        self.google_client_secret = QLineEdit()
+        self.google_client_secret.setEchoMode(QLineEdit.EchoMode.Password)
+        self.google_client_secret.setPlaceholderText("Client-Geheimnis")
+        self.google_status = QLabel("")
+        self.google_status.setObjectName("Hint")
+        google_row = QWidget()
+        google_layout = QHBoxLayout(google_row)
+        google_layout.setContentsMargins(0, 0, 0, 0)
+        self.google_connect_button = QPushButton("Google-Konto verbinden")
+        self.google_connect_button.setObjectName("Primary")
+        self.google_connect_button.clicked.connect(self.connect_google)
+        self.google_disconnect_button = QPushButton("Trennen")
+        self.google_disconnect_button.clicked.connect(self.disconnect_google)
+        google_layout.addWidget(self.google_connect_button)
+        google_layout.addWidget(self.google_disconnect_button)
+        google_layout.addWidget(self.google_status, 1)
+        google_form.addRow("Client-ID", self.google_client_id)
+        google_form.addRow("Client-Geheimnis", self.google_client_secret)
+        google_form.addRow("", google_row)
+        google_hint = QLabel(
+            "In der Google Cloud Console die Gmail-API aktivieren und einen "
+            "OAuth-Client vom Typ „TVs and Limited Input devices“ anlegen. "
+            "Client-ID und Geheimnis hier eintragen, dann „Google-Konto "
+            "verbinden“ – die Anmeldung läuft über einen Code im Browser. "
+            "Berechtigung: Gmail lesen, Entwürfe anlegen und senden."
+        )
+        google_hint.setWordWrap(True)
+        google_hint.setObjectName("Hint")
+        google_form.addRow("", google_hint)
+        inner.addWidget(google)
 
         # ------------------------------------------------------------------
         documents = QGroupBox("Unterlagen")
@@ -292,6 +387,7 @@ class SettingsPage(QWidget):
         Formular nicht verloren geht.
         """
         self._refresh_outlook_status()
+        self._refresh_google_status()
 
     def load(self) -> None:
         settings = self.window.settings
@@ -304,7 +400,10 @@ class SettingsPage(QWidget):
         self.email.setText(settings.text("profile.email"))
         self.erfahrung.setText(settings.text("profile.erfahrung_jahre"))
         self.verfuegbar.setText(settings.text("profile.verfuegbar"))
+        self.interessen.setPlainText(", ".join(settings.interests()))
+        self.faehigkeiten.setPlainText(", ".join(settings.skills()))
 
+        self.api_enabled.setChecked(settings.flag("search.api_enabled", False))
         self.queries.setPlainText("\n".join(settings.search_terms()))
         self.place.setText(settings.text("search.place"))
         self.place_code.setText(settings.text("search.place_code"))
@@ -328,14 +427,23 @@ class SettingsPage(QWidget):
         self.max_drafts.setValue(int(settings.number("matching.max_drafts_per_run", 5)))
 
         self.ai_enabled.setChecked(settings.flag("ai.enabled"))
+        provider = settings.text("ai.provider", "openai").strip().lower()
+        ai_index = self.ai_provider.findData(provider)
+        self.ai_provider.blockSignals(True)
+        self.ai_provider.setCurrentIndex(ai_index if ai_index >= 0 else 0)
+        self.ai_provider.blockSignals(False)
         self.ai_url.setText(settings.text("ai.base_url"))
         self.ai_model.setText(settings.text("ai.model"))
         self.ai_key.setText(settings.text("ai.api_key"))
 
-        self.outlook_enabled.setChecked(settings.flag("outlook.enabled"))
+        provider = settings.mail_provider()
+        mail_index = self.mail_provider.findData(provider)
+        self.mail_provider.setCurrentIndex(mail_index if mail_index >= 0 else 0)
         self.client_id.setText(settings.text("outlook.client_id"))
         self.tenant.setText(settings.text("outlook.tenant", "common"))
         self.account.setText(settings.text("outlook.account"))
+        self.google_client_id.setText(settings.text("google.client_id"))
+        self.google_client_secret.setText(settings.text("google.client_secret"))
 
         self.documents_folder.setText(settings.text("documents.folder"))
         self.attach.setChecked(settings.flag("documents.attach", True))
@@ -347,6 +455,7 @@ class SettingsPage(QWidget):
         self.follow_up_days.setValue(int(settings.number("automation.follow_up_days", 14)))
         self.notify_desktop.setChecked(settings.flag("automation.notify_desktop", True))
         self._refresh_outlook_status()
+        self._refresh_google_status()
 
     # ------------------------------------------------------------------
     def save(self) -> None:
@@ -366,12 +475,15 @@ class SettingsPage(QWidget):
         settings.set("profile.email", self.email.text().strip())
         settings.set("profile.erfahrung_jahre", self.erfahrung.text().strip())
         settings.set("profile.verfuegbar", self.verfuegbar.text().strip())
+        settings.set("profile.interessen", _split_terms(self.interessen.toPlainText()))
+        settings.set("profile.faehigkeiten", _split_terms(self.faehigkeiten.toPlainText()))
 
         terms = [
             part.strip()
             for part in re.split(r"[\n,;]", self.queries.toPlainText())
             if part.strip()
         ]
+        settings.set("search.api_enabled", self.api_enabled.isChecked())
         settings.set("search.queries", terms or [""])
         settings.set("search.place", self.place.text().strip())
         settings.set("search.place_code", self.place_code.text().strip())
@@ -394,14 +506,19 @@ class SettingsPage(QWidget):
         settings.set("matching.max_drafts_per_run", self.max_drafts.value())
 
         settings.set("ai.enabled", self.ai_enabled.isChecked())
+        settings.set("ai.provider", self.ai_provider.currentData() or "openai")
         settings.set("ai.base_url", self.ai_url.text().strip())
         settings.set("ai.model", self.ai_model.text().strip())
         settings.set("ai.api_key", self.ai_key.text().strip())
 
-        settings.set("outlook.enabled", self.outlook_enabled.isChecked())
+        provider = self.mail_provider.currentData() or "outlook"
+        settings.set("mail.provider", provider)
+        settings.set("outlook.enabled", provider == "outlook")
         settings.set("outlook.client_id", self.client_id.text().strip())
         settings.set("outlook.tenant", self.tenant.text().strip() or "common")
         settings.set("outlook.account", self.account.text().strip())
+        settings.set("google.client_id", self.google_client_id.text().strip())
+        settings.set("google.client_secret", self.google_client_secret.text().strip())
 
         settings.set("documents.folder", self.documents_folder.text().strip())
         settings.set("documents.attach", self.attach.isChecked())
@@ -415,6 +532,7 @@ class SettingsPage(QWidget):
         settings.save()
         self.window.reload_settings()
         self._refresh_outlook_status()
+        self._refresh_google_status()
         self.window.store.log("einstellungen", "Einstellungen gespeichert.")
         self.window.statusBar().showMessage("Einstellungen gespeichert.", 6000)
 
@@ -426,20 +544,40 @@ class SettingsPage(QWidget):
         if folder:
             self.documents_folder.setText(folder)
 
+    def _ai_provider_changed(self) -> None:
+        provider = self.ai_provider.currentData() or "openai"
+        base, model = (
+            (GROQ_BASE, GROQ_MODEL) if provider == "groq" else (OPENAI_BASE, OPENAI_MODEL)
+        )
+        current = self.ai_url.text().strip().rstrip("/")
+        if not current or current in {GROQ_BASE, OPENAI_BASE}:
+            self.ai_url.setText(base)
+        current_model = self.ai_model.text().strip()
+        if not current_model or current_model in {GROQ_MODEL, OPENAI_MODEL}:
+            self.ai_model.setText(model)
+
     def _refresh_outlook_status(self) -> None:
         try:
             connected = self.window.pipeline.auth().connected()
         except Exception:  # noqa: BLE001 - Statusanzeige darf nichts stoppen
             connected = False
-        if connected:
-            self.outlook_status.setText("● verbunden")
-            self.outlook_status.setObjectName("Ok")
-        else:
-            self.outlook_status.setText("○ nicht verbunden")
-            self.outlook_status.setObjectName("Hint")
-        self.outlook_status.style().unpolish(self.outlook_status)
-        self.outlook_status.style().polish(self.outlook_status)
+        self._set_status(self.outlook_status, connected)
         self.disconnect_button.setEnabled(connected)
+
+    def _refresh_google_status(self) -> None:
+        try:
+            connected = self.window.pipeline.google_auth().connected()
+        except Exception:  # noqa: BLE001 - Statusanzeige darf nichts stoppen
+            connected = False
+        self._set_status(self.google_status, connected)
+        self.google_disconnect_button.setEnabled(connected)
+
+    @staticmethod
+    def _set_status(label: QLabel, connected: bool) -> None:
+        label.setText("● verbunden" if connected else "○ nicht verbunden")
+        label.setObjectName("Ok" if connected else "Hint")
+        label.style().unpolish(label)
+        label.style().polish(label)
 
     def connect_outlook(self) -> None:
         if not self.client_id.text().strip():
@@ -450,10 +588,12 @@ class SettingsPage(QWidget):
                 "speichern.",
             )
             return
+        self.mail_provider.setCurrentIndex(
+            max(0, self.mail_provider.findData("outlook"))
+        )
         self.save()
         dialog = DeviceLoginDialog(self.window, self.window.pipeline.auth())
         if dialog.exec():
-            self.outlook_enabled.setChecked(True)
             self.save()
             self.window.store.log("outlook", "Outlook verbunden.")
             QMessageBox.information(
@@ -471,3 +611,48 @@ class SettingsPage(QWidget):
         self.window.pipeline.auth().disconnect()
         self.window.store.log("outlook", "Outlook getrennt.")
         self._refresh_outlook_status()
+
+    def connect_google(self) -> None:
+        if not self.google_client_id.text().strip():
+            QMessageBox.warning(
+                self,
+                "Client-ID fehlt",
+                "Bitte zuerst die Client-ID des Google-OAuth-Clients eintragen.",
+            )
+            return
+        if not self.google_client_secret.text().strip():
+            QMessageBox.warning(
+                self,
+                "Client-Geheimnis fehlt",
+                "Bitte zuerst das Client-Geheimnis des Google-OAuth-Clients "
+                "eintragen.",
+            )
+            return
+        self.mail_provider.setCurrentIndex(
+            max(0, self.mail_provider.findData("google"))
+        )
+        self.save()
+        dialog = DeviceLoginDialog(
+            self.window, self.window.pipeline.google_auth(), provider="google"
+        )
+        if dialog.exec():
+            self.save()
+            self.window.store.log("google", "Google-Konto verbunden.")
+            QMessageBox.information(
+                self,
+                "Google",
+                "Das Google-Konto ist verbunden. Entwürfe werden ab jetzt in "
+                "Gmail abgelegt.",
+            )
+        else:
+            self._refresh_google_status()
+
+    def disconnect_google(self) -> None:
+        answer = QMessageBox.question(
+            self, "Google trennen", "Die gespeicherte Anmeldung wirklich entfernen?"
+        )
+        if answer != QMessageBox.Yes:
+            return
+        self.window.pipeline.google_auth().disconnect()
+        self.window.store.log("google", "Google-Konto getrennt.")
+        self._refresh_google_status()

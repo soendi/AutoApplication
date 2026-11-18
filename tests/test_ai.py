@@ -36,6 +36,42 @@ def _settings(tmp_path, enabled: bool = True) -> Settings:
     return settings
 
 
+def _groq_transport(calls: list) -> object:
+    def send(url, payload, headers, timeout):
+        calls.append((url, payload))
+        return {"choices": [{"message": {"content": '{"stichworte": ["Spedition"]}'}}]}
+
+    return send
+
+
+def test_groq_defaults_and_profile_hints(tmp_path) -> None:
+    settings = Settings(tmp_path / "e.json")
+    settings.set("ai.enabled", True)
+    settings.set("ai.provider", "groq")
+    settings.set("ai.base_url", "")
+    settings.set("ai.model", "")
+    settings.set("ai.api_key", "gsk_test")
+    settings.set("profile.interessen", ["Nachhaltigkeit"])
+    settings.set("profile.faehigkeiten", ["Disposition"])
+    calls: list = []
+    client = AiClient(settings, transport=_groq_transport(calls))
+    assert client.available() is True
+    assert client.keywords(_job(), []) == ["Spedition"]
+    url, payload = calls[0]
+    assert url == "https://api.groq.com/openai/v1/chat/completions"
+    assert payload["model"] == "llama-3.3-70b-versatile"
+    user = payload["messages"][1]["content"]
+    assert "Nachhaltigkeit" in user
+    assert "Disposition" in user
+
+
+def test_openai_keeps_stored_base_url(tmp_path) -> None:
+    settings = _settings(tmp_path)
+    client = AiClient(settings)
+    assert client.base_url() == "https://api.example/v1"
+    assert client.model() == "test-model"
+
+
 def test_classify_rejection() -> None:
     assert (
         classify_local(

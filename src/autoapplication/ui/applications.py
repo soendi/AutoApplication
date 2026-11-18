@@ -76,7 +76,7 @@ class ApplicationsPage(QWidget):
         buttons.setSpacing(8)
         self.letter_button = QPushButton("Anschreiben anzeigen")
         self.letter_button.clicked.connect(self.show_letter)
-        self.draft_button = QPushButton("Entwurf in Outlook öffnen")
+        self.draft_button = QPushButton("Entwurf im Mailkonto öffnen")
         self.draft_button.clicked.connect(self.open_draft)
         self.sent_button = QPushButton("Als gesendet markieren")
         self.sent_button.clicked.connect(self.mark_sent)

@@ -77,8 +77,20 @@ class FakeOutlook:
         return list(self.messages)
 
 
-def _pipeline(tmp_path, *, jobs=None, auto_draft=True, outlook=None, ai=None):
+def _pipeline(
+    tmp_path,
+    *,
+    jobs=None,
+    auto_draft=True,
+    outlook=None,
+    ai=None,
+    provider="outlook",
+    google=None,
+    api_enabled=True,
+):
     settings = Settings(tmp_path / "einstellungen.json")
+    settings.set("search.api_enabled", api_enabled)
+    settings.set("mail.provider", provider)
     settings.set("search.queries", ["Spedition"])
     settings.set("matching.min_score", 2)
     settings.set("matching.auto_draft", auto_draft)
@@ -86,15 +98,38 @@ def _pipeline(tmp_path, *, jobs=None, auto_draft=True, outlook=None, ai=None):
     settings.set("documents.attach", False)
     store = Store(tmp_path / "daten.db")
     outlook = outlook or FakeOutlook()
+    google_client = google
     pipeline = Pipeline(
         settings,
         store,
         ai_client=ai or FakeAI(),
         outlook_client=outlook,
+        google_client=google_client,
         ostjob_client=FakeOstjob(jobs if jobs is not None else [MATCHING, UNRELATED]),
         templates_file=tmp_path / "vorlagen.json",
     )
-    return pipeline, store, outlook, settings
+    return pipeline, store, google_client or outlook, settings
+
+
+def test_search_api_off_by_default(tmp_path) -> None:
+    pipeline, store, outlook, settings = _pipeline(tmp_path, api_enabled=False)
+    summary = pipeline.run_search()
+    assert summary.found == 0
+    assert summary.drafts == 0
+    assert summary.errors and "ausgeschaltet" in summary.errors[0]
+    assert store.list_jobs() == []
+    assert outlook.drafts == []
+    assert settings.flag("search.api_enabled") is False
+
+
+def test_google_provider_uses_gmail_client(tmp_path) -> None:
+    google = FakeOutlook()
+    pipeline, store, _google, _settings = _pipeline(
+        tmp_path, provider="google", google=google
+    )
+    summary = pipeline.run_search()
+    assert summary.drafts == 1
+    assert len(google.drafts) == 1
 
 
 def test_run_search_creates_one_draft(tmp_path) -> None:

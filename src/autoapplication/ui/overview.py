@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -18,13 +18,31 @@ from PySide6.QtWidgets import (
 from ..core.pipeline import next_run_at
 from ..core.text import format_date
 
+# Kennzahl, Beschriftung und Zielansicht
 CARDS = (
-    ("neu", "Neue Stellen"),
-    ("passend", "Passende Stellen"),
-    ("entwurf", "Entwürfe"),
-    ("wartet", "Wartet auf Antwort"),
-    ("antwort", "Antworten"),
+    ("neu", "Neue Stellen", "jobs"),
+    ("passend", "Passende Stellen", "jobs"),
+    ("entwurf", "Entwürfe", "applications"),
+    ("wartet", "Wartet auf Antwort", "applications"),
+    ("antwort", "Antworten", "applications"),
 )
+
+
+class ClickableCard(QFrame):
+    """Kennzahl-Kachel, die per Klick in die passende Ansicht wechselt."""
+
+    clicked = Signal()
+
+    def __init__(self, title: str) -> None:
+        super().__init__()
+        self.setObjectName("Card")
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setToolTip(f"Zur Ansicht „{title}“ wechseln")
+
+    def mouseReleaseEvent(self, event: Any) -> None:  # noqa: N802 - Qt-Namensschema
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+        super().mouseReleaseEvent(event)
 
 
 class OverviewPage(QWidget):
@@ -43,9 +61,9 @@ class OverviewPage(QWidget):
 
         cards = QHBoxLayout()
         cards.setSpacing(10)
-        for key, label in CARDS:
-            frame = QFrame()
-            frame.setObjectName("Card")
+        for key, label, page in CARDS:
+            frame = ClickableCard(label)
+            frame.clicked.connect(lambda target=page: self.window.show_page(target))
             inner = QVBoxLayout(frame)
             inner.setContentsMargins(14, 12, 14, 12)
             inner.setSpacing(2)
@@ -110,6 +128,8 @@ class OverviewPage(QWidget):
         upcoming = next_run_at(daily)
         last = self.window.store.meta_get("letzter_lauf", "")
         parts = []
+        if not self.window.settings.flag("search.api_enabled", False):
+            parts.append("Stellen-API ausgeschaltet (Einstellungen > Suche)")
         if upcoming:
             parts.append(
                 f"Nächster automatischer Lauf: {upcoming.strftime('%d.%m.%Y %H:%M')}"

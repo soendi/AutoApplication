@@ -210,6 +210,8 @@ def context_for(
         "email": profile.get("email", ""),
         "erfahrung": profile.get("erfahrung_jahre", ""),
         "verfuegbar": profile.get("verfuegbar", ""),
+        "interessen": profile.get("interessen", ""),
+        "faehigkeiten": profile.get("faehigkeiten", ""),
         "datum": day.strftime("%d.%m.%Y"),
         "firma": "",
         "titel": "",

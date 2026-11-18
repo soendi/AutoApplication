@@ -1,7 +1,8 @@
-# AutoApplication 1.0.0
+# AutoApplication 1.0.1
 
-Stellen von ostjob.ch suchen, Bewerbungen als Outlook-Entwurf vorbereiten und
-Antworten bis zur Zusage verfolgen – als Windows-Programm mit stillen Updates.
+Stellen von ostjob.ch suchen, Bewerbungen als Entwurf in Outlook oder Gmail
+vorbereiten und Antworten bis zur Zusage verfolgen – als Windows-Programm mit
+stillen Updates.
 
 ## Was AutoApplication macht
 
@@ -9,10 +10,12 @@ Antworten bis zur Zusage verfolgen – als Windows-Programm mit stillen Updates.
    neuesten Anzeigen von ostjob.ch und filtert sie nach Suchbegriffen, Ort und
    Umkreis, Pensum, Arbeitsweg, Kanton, Alter der Anzeige und
    Ausschluss-Stichworten. Bereits bekannte Stellen bleiben einmalig in der
-   Ablage und werden nicht doppelt bearbeitet.
+   Ablage und werden nicht doppelt bearbeitet. Die Abfrage der Stellen-API ist
+   standardmässig **aus** und wird unter **Einstellungen → Suche** eingeschaltet.
 2. **Stichworte bestimmen.** Die Beschreibung wird in Stichworte zerlegt – per
-   KI über eine OpenAI-kompatible Schnittstelle oder, ohne Schlüssel, lokal aus
-   den Portalangaben und dem Stichwortverzeichnis der Vorlagen.
+   KI (OpenAI-kompatibel oder Groq) oder, ohne Schlüssel, lokal aus den
+   Portalangaben und dem Stichwortverzeichnis der Vorlagen. Interessen und
+   Fähigkeiten aus dem Profil fliessen in die Auswertung ein.
 3. **Vorlage wählen.** Passt eine Stelle auf mindestens zwei Stichworte einer
    Vorlage, wird daraus das Anschreiben. Beispiel: „Spedition“ und
    „Disposition“ ergeben die Speditionsvorlage; „Sachbearbeitung“ und
@@ -20,7 +23,8 @@ Antworten bis zur Zusage verfolgen – als Windows-Programm mit stillen Updates.
    die Stelle ohne Bewerbung.
 4. **Entwurf statt Versand.** Die Bewerbung wird mit Betreff, Anschreiben und
    den Unterlagen aus dem Unterlagenordner (Lebenslauf, Zeugnisse, Diplome) als
-   **Entwurf in Outlook** abgelegt. Geprüft und gesendet wird von Hand.
+   **Entwurf in Outlook oder Gmail** abgelegt. Geprüft und gesendet wird von
+   Hand.
 5. **Versand erkennen.** Taucht die Mail in „Gesendete Elemente“ auf, steht das
    Versanddatum in der Bewerbungstabelle.
 6. **Antworten auswerten.** Das Postfach wird auf Antworten der Firma geprüft –
@@ -32,7 +36,7 @@ Antworten bis zur Zusage verfolgen – als Windows-Programm mit stillen Updates.
 
 ## Installation
 
-`AutoApplication-1.0.0-Setup.exe` von der
+`AutoApplication-1.0.1-Setup.exe` von der
 [Release-Seite](https://github.com/soendi/AutoApplication/releases/latest)
 herunterladen und ausführen. Windows 10 und 11, kein Administrator- und kein
 Python-Zubehör nötig.
@@ -51,6 +55,7 @@ Unter **Einstellungen → Suche** eintragen:
 
 | Feld | Bedeutung |
 | --- | --- |
+| Stellen über die API abrufen | Häkchen setzen, sonst wird ostjob.ch nicht abgefragt (Standard: aus) |
 | Suchbegriffe | Ein Begriff pro Zeile, z. B. `Spedition`, `Logistik` |
 | Ort / placeCode / placeValue | Ortsangabe aus ostjob.ch, z. B. `Balgach 9436 (SG)` / `balgach-sg-9436` |
 | Breiten-/Längengrad | Für Umkreis und Arbeitsweg, z. B. `47.4055` / `9.6087` |
@@ -59,6 +64,21 @@ Unter **Einstellungen → Suche** eintragen:
 | Pensum von/bis | 60–100 lässt 80-%-Stellen zu, 100-%-Stellen fallen bei „bis 90“ heraus |
 | Kantone | Leer = alle; sonst z. B. `St. Gallen, Thurgau` |
 | Nicht anzeigen | Ausschluss-Stichworte, mit Komma getrennt |
+
+### Profil, Interessen und Fähigkeiten
+
+Unter **Einstellungen → Person** stehen neben den Kontaktdaten zwei Felder für
+Stichworte: **Interessen** (wofür Sie sich eher interessieren) und
+**Fähigkeiten** (was Sie können). Beide Listen sind unabhängig voneinander –
+sie müssen sich nicht decken. Die KI bekommt beides als Zusatz zur
+Stellenbeschreibung; in Vorlagen stehen sie als `{interessen}` und
+`{faehigkeiten}` bereit.
+
+### E-Mail-Anbindung
+
+Unter **Einstellungen → E-Mail-Anbindung** wird gewählt, wohin der Entwurf
+geht: Outlook, Google (Gmail) oder „Keine – nur im Programm“. Ohne Anbindung
+bleibt der Text in der Bewerbungstabelle und lässt sich von dort kopieren.
 
 ### Outlook (Microsoft Graph)
 
@@ -79,12 +99,35 @@ AutoApplication meldet sich ohne Passwort im Programm an (Gerätecode):
 Die Anmeldung wird in `outlook_token.json` im Benutzerordner gespeichert (nur
 für den eigenen Benutzer lesbar) und automatisch erneuert. „Trennen“ löscht sie.
 
-### KI (optional)
+### Google (Gmail)
 
-Unter **Einstellungen → KI** Adresse einer OpenAI-kompatiblen Schnittstelle
-(z. B. `https://api.openai.com/v1`), Modell und Schlüssel eintragen. Der
-Schlüssel lässt sich auch über die Umgebungsvariable
-`AUTOAPPLICATION_AI_KEY` (oder `OPENAI_API_KEY`) bereitstellen.
+1. In der [Google Cloud Console](https://console.cloud.google.com) ein Projekt
+   wählen und die **Gmail API** aktivieren.
+2. Unter **OAuth consent screen** die App einrichten (extern, Testbenutzer oder
+   veröffentlicht) und die Berechtigung für Gmail hinzufügen.
+3. Unter **Credentials** einen OAuth-Client vom Typ **„TVs and Limited Input
+   devices“** anlegen.
+4. **Client-ID** und **Client-Geheimnis** unter **Einstellungen → Google**
+   eintragen, „Google-Konto verbinden“ wählen und den Code auf
+   `google.com/device` bestätigen.
+
+Die Anmeldung liegt in `google_token.json` (nur für den eigenen Benutzer
+lesbar) und wird automatisch erneuert. Für Entwürfe und Posteingang wird die
+Berechtigung `gmail.modify` verwendet.
+
+### KI (optional) – OpenAI-kompatibel oder Groq
+
+Unter **Einstellungen → KI** den Anbieter wählen:
+
+| Anbieter | Adresse | Modell (Vorschlag) |
+| --- | --- | --- |
+| OpenAI oder kompatibel | `https://api.openai.com/v1` | `gpt-4o-mini` |
+| Groq | `https://api.groq.com/openai/v1` | `llama-3.3-70b-versatile` |
+
+Adresse und Modell füllt die Auswahl automatisch, beides bleibt änderbar.
+Schlüssel von Groq unter [console.groq.com](https://console.groq.com/keys)
+erstellen. Der Schlüssel lässt sich auch über die Umgebungsvariablen
+`AUTOAPPLICATION_AI_KEY`, `OPENAI_API_KEY` oder `GROQ_API_KEY` bereitstellen.
 
 Ohne KI bleibt alles nutzbar: die Stichworte kommen dann aus den
 Portalangaben und dem Stichwortverzeichnis der Vorlagen, die Antwortauswertung
@@ -117,6 +160,7 @@ Platzhalter in Betreff und Text:
 | `{vorname}`, `{nachname}`, `{strasse}`, `{plz}`, `{wohnort}`, `{telefon}`, `{email}` | Angaben aus dem Profil |
 | `{erfahrung}` | „Jahre Erfahrung“ aus dem Profil (z. B. `acht`) |
 | `{verfuegbar}` | Verfügbarkeit aus dem Profil |
+| `{interessen}`, `{faehigkeiten}` | Stichworte aus dem Profil |
 | `{bewerbungsdatum}`, `{tage}` | nur in der Nachfrage-Vorlage |
 
 ## Automatik
@@ -140,10 +184,11 @@ Alles im Benutzerordner `%USERPROFILE%\AutoApplication` (Linux/macOS:
 
 | Datei | Inhalt |
 | --- | --- |
-| `einstellungen.json` | Profil, Suche, KI, Outlook, Automatik |
+| `einstellungen.json` | Profil, Suche, KI, E-Mail, Automatik |
 | `daten.db` | Stellen, Bewerbungen, Antworten, Protokoll (SQLite) |
 | `vorlagen.json` | Vorlagen |
 | `outlook_token.json` | Anmeldung bei Microsoft (nur eigener Benutzer) |
+| `google_token.json` | Anmeldung bei Google (nur eigener Benutzer) |
 | `autoapplication.log` | Protokoll für die Fehlersuche |
 
 Für Tests lässt sich der Ordner über `AUTOAPPLICATION_HOME` umlenken.
@@ -163,7 +208,7 @@ Aufbau:
 ```
 src/autoapplication/
   app.py              Start, Selbsttest, Tageslauf ohne Fenster
-  core/               Konfiguration, Ablage, ostjob.ch, KI, Vorlagen, Outlook, Ablauf, Updater
+  core/               Konfiguration, Ablage, ostjob.ch, KI, Vorlagen, Outlook, Gmail, Ablauf, Updater
   data/templates.json Standardvorlagen
   ui/                 Oberfläche (PySide6)
 packaging/            PyInstaller-Spec, Inno-Setup, Build-Skript, Symbol
@@ -197,7 +242,8 @@ Das Skript braucht Python und Inno Setup 6 (`ISCC.exe`).
 
 - Die Stellensuche nutzt die JSON-Schnittstelle von ostjob.ch. Ändert das
   Portal Adresse oder Format, steht das im Protokoll – es wird nicht still
-  nichts getan.
+  nichts getan. Solange die API ausgeschaltet ist, wird sie gar nicht erst
+  abgefragt.
 - Nicht jede Anzeige nennt eine E-Mail-Adresse. Dann bleibt der Entwurf ohne
   Empfänger stehen und die Adresse wird von Hand ergänzt (oder die
   Online-Bewerbung im Feld „Stelle öffnen“ benutzt).

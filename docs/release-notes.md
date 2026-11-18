@@ -1,3 +1,27 @@
+## AutoApplication 1.0.1
+
+Mehr Kontrolle über Abruf und Anbindungen.
+
+### Neu
+
+- **Stellen-API ein- und ausschaltbar.** Unter **Einstellungen → Suche** lässt
+  sich der Abruf bei ostjob.ch abschalten – standardmässig ist er **aus**. Ohne
+  Häkchen fragt AutoApplication die API weder beim Start noch im Tageslauf noch
+  über „Jetzt Stellen suchen“ ab; ein Hinweis führt direkt zu den Einstellungen.
+- **Google-Konto verbinden.** Unter **Einstellungen → Google** lässt sich ein
+  Google-Konto per Gerätecode anmelden. Bewerbungen landen dann als Entwurf in
+  Gmail, Versand und Antworten werden wie bei Outlook verfolgt. Die
+  E-Mail-Anbindung (Outlook, Google oder keine) wird daneben gewählt.
+- **Groq als KI.** Unter **Einstellungen → KI** ist Groq als Anbieter wählbar;
+  Adresse und Modell werden vorgeschlagen, der Schlüssel kommt aus dem Feld oder
+  aus `GROQ_API_KEY`.
+- **Interessen und Fähigkeiten.** Zwei getrennte Stichwortfelder im Profil. Sie
+  müssen sich nicht decken und stehen der KI-Auswertung sowie den Vorlagen als
+  `{interessen}` und `{faehigkeiten}` zur Verfügung.
+- **Klickbare Übersicht.** Die Kennzahl-Kacheln führen direkt in die passende
+  Ansicht: neue und passende Stellen zu den Stellen, Entwürfe, offene Antworten
+  und eingegangene Antworten zu den Bewerbungen.
+
 ## AutoApplication 1.0.0
 
 Stellen von ostjob.ch suchen, Bewerbungen als Outlook-Entwurf vorbereiten und

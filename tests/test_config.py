@@ -10,7 +10,29 @@ def test_defaults_are_complete() -> None:
     assert DEFAULTS["matching"]["min_score"] == 2
     assert DEFAULTS["automation"]["follow_up_days"] == 14
     assert DEFAULTS["search"]["queries"]
+    # Die Stellen-API ist standardmaessig aus.
+    assert DEFAULTS["search"]["api_enabled"] is False
+    assert DEFAULTS["mail"]["provider"] == "outlook"
 
+
+def test_interests_and_skills_are_separate(tmp_path) -> None:
+    settings = Settings(tmp_path / "e.json")
+    settings.set("profile.interessen", ["Logistik", "Nachhaltigkeit"])
+    settings.set("profile.faehigkeiten", "Disposition; SAP, Staplerschein")
+    assert settings.interests() == ["Logistik", "Nachhaltigkeit"]
+    assert settings.skills() == ["Disposition", "SAP", "Staplerschein"]
+    profile = settings.profile()
+    assert profile["interessen"] == "Logistik, Nachhaltigkeit"
+    assert profile["faehigkeiten"] == "Disposition, SAP, Staplerschein"
+
+
+def test_mail_provider_falls_back(tmp_path) -> None:
+    settings = Settings(tmp_path / "e.json")
+    assert settings.mail_provider() == "outlook"
+    settings.set("mail.provider", "google")
+    assert settings.mail_provider() == "google"
+    settings.set("mail.provider", "unbekannt")
+    assert settings.mail_provider() == "outlook"
 
 def test_dotted_access_and_roundtrip(tmp_path) -> None:
     path = tmp_path / "einstellungen.json"
@@ -50,6 +72,14 @@ def test_ai_key_from_environment(tmp_path, monkeypatch) -> None:
     assert settings.ai_key() == "abc123"
     settings.set("ai.api_key", "eigener")
     assert settings.ai_key() == "eigener"
+
+
+def test_groq_key_from_environment(tmp_path, monkeypatch) -> None:
+    monkeypatch.delenv("AUTOAPPLICATION_AI_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("GROQ_API_KEY", "gsk_test")
+    settings = Settings(tmp_path / "einstellungen.json")
+    assert settings.ai_key() == "gsk_test"
 
 
 def test_home_override(tmp_path, monkeypatch) -> None:

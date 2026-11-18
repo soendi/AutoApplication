@@ -19,6 +19,11 @@ from .text import has_term, normalize, strip_html, words
 
 log = logging.getLogger(__name__)
 
+OPENAI_BASE = "https://api.openai.com/v1"
+OPENAI_MODEL = "gpt-4o-mini"
+GROQ_BASE = "https://api.groq.com/openai/v1"
+GROQ_MODEL = "llama-3.3-70b-versatile"
+
 ABSAGE = "absage"
 ZUSAGE = "zusage"
 EINLADUNG = "einladung"
@@ -216,19 +221,35 @@ class AiClient:
         self.transport = transport or _post_json
 
     # ------------------------------------------------------------------
+    def provider(self) -> str:
+        """Anbieter der KI: openai (auch kompatibel) oder groq."""
+        provider = self.settings.text("ai.provider", "openai").strip().lower()
+        return provider if provider in {"openai", "groq"} else "openai"
+
+    def base_url(self) -> str:
+        stored = self.settings.text("ai.base_url").strip().rstrip("/")
+        if stored:
+            return stored
+        return GROQ_BASE if self.provider() == "groq" else OPENAI_BASE
+
+    def model(self) -> str:
+        stored = self.settings.text("ai.model").strip()
+        if stored:
+            return stored
+        return GROQ_MODEL if self.provider() == "groq" else OPENAI_MODEL
+
     def available(self) -> bool:
         return bool(
             self.settings.flag("ai.enabled")
-            and self.settings.text("ai.base_url").strip()
-            and self.settings.text("ai.model").strip()
+            and self.base_url()
+            and self.model()
             and self.settings.ai_key()
         )
 
     def _chat(self, system: str, user: str, temperature: float = 0.1) -> str:
-        base = self.settings.text("ai.base_url").strip().rstrip("/")
-        url = f"{base}/chat/completions"
+        url = f"{self.base_url()}/chat/completions"
         payload = {
-            "model": self.settings.text("ai.model").strip(),
+            "model": self.model(),
             "temperature": temperature,
             "messages": [
                 {"role": "system", "content": system},
@@ -262,7 +283,10 @@ class AiClient:
             '{"stichworte": ["..."], "berufsfeld": "...", "begruendung": "..."}. '
             "Die Stichworte sind kurze deutsche Begriffe aus der Anzeige "
             "(z. B. Spedition, Disposition, Lager, Sachbearbeitung, Kundendienst). "
-            "Nenne 3 bis 8 Stichworte, keine ganzen Saetze."
+            "Nenne 3 bis 8 Stichworte, keine ganzen Saetze. Interessen und "
+            "Faehigkeiten des Bewerbers muessen nicht uebereinstimmen: Die "
+            "Faehigkeiten zeigen, was er kann, die Interessen, wofuer er sich "
+            "eher interessiert."
         )
         excerpt = (
             f"Titel: {job.title}\n"
@@ -270,6 +294,8 @@ class AiClient:
             f"Ort: {job.city}\n"
             f"Pensum: {job.workload}\n"
             f"Stichworte des Portals: {job.keyword_text()}\n"
+            f"Interessen des Bewerbers: {', '.join(self.settings.interests()) or '-'}\n"
+            f"Faehigkeiten des Bewerbers: {', '.join(self.settings.skills()) or '-'}\n"
             f"Beschreibung: {strip_html(job.description)[:4000]}"
         )
         try:

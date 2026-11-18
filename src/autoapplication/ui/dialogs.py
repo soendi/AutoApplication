@@ -1,4 +1,4 @@
-"""Dialog fuer die Outlook-Anmeldung (Geraetecode)."""
+"""Dialog fuer die Anmeldung per Geraetecode (Outlook oder Google)."""
 
 from __future__ import annotations
 
@@ -14,33 +14,37 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from ..core.outlook import DeviceLogin, GraphAuth, OutlookError
+from ..core.outlook import DeviceLogin
 from .workers import Task
 
 
 class DeviceLoginDialog(QDialog):
     """Zeigt den Code an und fragt im Hintergrund nach der Freigabe."""
 
-    def __init__(self, parent: Any, auth: GraphAuth) -> None:
+    def __init__(self, parent: Any, auth: Any, provider: str = "outlook") -> None:
         super().__init__(parent)
         self.auth = auth
         self.login: DeviceLogin | None = None
         self._tasks: list[Task] = []
         self._polling = False
-
-        self.setWindowTitle("Mit Outlook verbinden")
+        google = provider == "google"
+        service = "Google" if google else "Microsoft"
+        self.service = "Google" if google else "Outlook"
+        self.setWindowTitle(
+            "Mit Google verbinden" if google else "Mit Outlook verbinden"
+        )
         self.resize(520, 300)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(18, 16, 18, 16)
         layout.setSpacing(10)
 
-        heading = QLabel("Anmeldung bei Microsoft")
+        heading = QLabel(f"Anmeldung bei {service}")
         heading.setObjectName("CardTitle")
         layout.addWidget(heading)
 
         self.info = QLabel(
-            "AutoApplication öffnet gleich die Anmeldeseite von Microsoft. "
+            f"AutoApplication öffnet gleich die Anmeldeseite von {service}. "
             "Dort den angezeigten Code eingeben und die Freigabe erteilen."
         )
         self.info.setWordWrap(True)
@@ -123,7 +127,7 @@ class DeviceLoginDialog(QDialog):
         self._polling = False
         if finished:
             self._timer.stop()
-            self.status.setText("Verbunden. Outlook ist bereit.")
+            self.status.setText(f"Verbunden. {self.service} ist bereit.")
             self.status.setObjectName("Ok")
             self.accept()
 
