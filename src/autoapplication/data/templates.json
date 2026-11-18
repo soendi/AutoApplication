@@ -1,0 +1,96 @@
+{
+  "version": 1,
+  "templates": [
+    {
+      "id": "spedition",
+      "name": "Spedition und Logistik",
+      "description": "Bewerbung mit Bezug auf die bisherige Arbeit in der Spedition.",
+      "keywords": [
+        "Spedition",
+        "Speditionslogistik",
+        "Speditionskaufmann",
+        "Speditionskauffrau",
+        "Logistik",
+        "Transport",
+        "Disposition",
+        "Fracht",
+        "Zoll",
+        "Lager",
+        "Lagerlogistik",
+        "Güterumschlag",
+        "Supply Chain",
+        "Import",
+        "Export",
+        "Kurier",
+        "Express",
+        "Verkehr"
+      ],
+      "subject": "Bewerbung als {titel} – {vorname} {nachname}",
+      "body": "Sehr geehrte Damen und Herren\n\nmit grossem Interesse habe ich Ihre Stellenanzeige als {titel} bei {firma} in {ort} gelesen. Seit {erfahrung} Jahren arbeite ich in der Spedition und fühle mich dort zu Hause: Disposition, Kundenkontakt sowie die Verantwortung für Termine und Frachtpapiere sind mir vertraut.\n\nIn meiner bisherigen Tätigkeit habe ich Sendungen koordiniert, Termine überwacht und an der Schnittstelle zu Kunden, Fahrern und Partnern gearbeitet. Mehrere Aufgaben gleichzeitig im Blick zu behalten und auch unter Zeitdruck sauber zu arbeiten, ist für mich Alltag – genau das schätze ich an dieser Branche.\n\nGerne bringe ich meine Erfahrung in Ihr Team ein und stelle mich Ihnen in einem persönlichen Gespräch vor. Ich bin {verfuegbar} verfügbar.\n\nFreundliche Grüsse\n{vorname} {nachname}\n{strasse}, {plz} {wohnort}\n{telefon} · {email}",
+      "follow_up": false
+    },
+    {
+      "id": "tapetenwechsel",
+      "name": "Tapetenwechsel",
+      "description": "Bewerbung mit Wechselwunsch ausserhalb der Spedition.",
+      "keywords": [
+        "Sachbearbeitung",
+        "Sachbearbeiter",
+        "Sachbearbeiterin",
+        "Administration",
+        "Verwaltung",
+        "Büro",
+        "Büroassistenz",
+        "Kundendienst",
+        "Kundenberatung",
+        "Kundenbetreuung",
+        "Verkauf",
+        "Empfang",
+        "Backoffice",
+        "Assistenz",
+        "Sekretariat",
+        "Rezeption",
+        "Callcenter",
+        "Datenpflege",
+        "Personal",
+        "Buchhaltung"
+      ],
+      "subject": "Bewerbung als {titel} – {vorname} {nachname}",
+      "body": "Sehr geehrte Damen und Herren\n\nauf der Suche nach einer neuen beruflichen Aufgabe bin ich auf Ihre Stellenanzeige als {titel} bei {firma} in {ort} gestossen. Seit {erfahrung} Jahren arbeite ich in der Spedition. Die Arbeit gefällt mir, und genau deshalb suche ich bewusst einen Tapetenwechsel: Ich möchte meine Erfahrung aus Disposition, Kundenkontakt und Administration in einem neuen Umfeld einsetzen und mich fachlich weiterentwickeln.\n\nZuverlässigkeit, ein sorgfältiger Umgang mit Unterlagen und Freude am Kontakt mit Menschen bringe ich aus meiner bisherigen Tätigkeit mit. Neue Abläufe und Systeme eigne ich mir zügig an.\n\nGerne überzeuge ich Sie in einem persönlichen Gespräch von meiner Motivation. Ich bin {verfuegbar} verfügbar.\n\nFreundliche Grüsse\n{vorname} {nachname}\n{strasse}, {plz} {wohnort}\n{telefon} · {email}",
+      "follow_up": false
+    },
+    {
+      "id": "lager",
+      "name": "Lager und Produktion",
+      "description": "Bewerbung fuer Lager, Kommissionierung und Produktion.",
+      "keywords": [
+        "Kommissionierung",
+        "Kommissionierer",
+        "Stapler",
+        "Staplerschein",
+        "Magazin",
+        "Warenannahme",
+        "Warenausgang",
+        "Produktion",
+        "Montage",
+        "Maschinenbedienung",
+        "Logistiker",
+        "Fachkraft Lager",
+        "Lagerbewirtschaftung",
+        "Inventur"
+      ],
+      "subject": "Bewerbung als {titel} – {vorname} {nachname}",
+      "body": "Sehr geehrte Damen und Herren\n\nIhre Stellenanzeige als {titel} bei {firma} in {ort} hat mein Interesse geweckt. Seit {erfahrung} Jahren bin ich in der Spedition tätig und kenne den Weg der Ware vom Eingang bis zur Auslieferung aus der Praxis: Warenannahme, Kommissionierung, Kontrolle und termingerechte Bereitstellung.\n\nIch arbeite zuverlässig, sorgfältig und packe an, wenn es darauf ankommt. Mit den Abläufen in Lager und Umschlag bin ich vertraut und bereit, mich in Ihre Systeme und Prozesse einzuarbeiten.\n\nGerne stelle ich mich Ihnen persönlich vor. Ich bin {verfuegbar} verfügbar.\n\nFreundliche Grüsse\n{vorname} {nachname}\n{strasse}, {plz} {wohnort}\n{telefon} · {email}",
+      "follow_up": false
+    },
+    {
+      "id": "nachfassen",
+      "name": "Nachfrage nach zwei Wochen",
+      "description": "Freundliche Nachfrage, wenn keine Antwort eingegangen ist.",
+      "keywords": [],
+      "subject": "Nachfrage zu meiner Bewerbung als {titel} – {vorname} {nachname}",
+      "body": "Sehr geehrte Damen und Herren\n\nam {bewerbungsdatum} habe ich mich bei {firma} auf die Stelle als {titel} beworben. Da ich bis heute keine Rückmeldung erhalten habe, erlaube ich mir, mich nach dem Stand meiner Bewerbung zu erkundigen.\n\nDie Stelle interessiert mich weiterhin sehr, und ich stehe Ihnen für Fragen gerne zur Verfügung. Über eine kurze Rückmeldung – auch per E-Mail an {email} – freue ich mich.\n\nFreundliche Grüsse\n{vorname} {nachname}\n{strasse}, {plz} {wohnort}\n{telefon} · {email}",
+      "follow_up": true
+    }
+  ]
+}

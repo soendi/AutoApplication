@@ -1,0 +1,450 @@
+"""SQLite-Ablage: Stellen, Bewerbungen, Antworten, Protokoll.
+
+Jede Operation oeffnet eine eigene Verbindung - damit laesst sich die Ablage
+aus dem Oberflaechen-Thread und aus Hintergrundlaeufen zugleich benutzen.
+"""
+
+from __future__ import annotations
+
+import sqlite3
+from contextlib import contextmanager
+from datetime import date, timedelta
+from pathlib import Path
+from typing import Any, Iterator
+
+from .models import Job
+from .text import parse_date
+
+JOB_FIELDS = {
+    "title",
+    "company",
+    "city",
+    "zip",
+    "canton",
+    "workload",
+    "url",
+    "published",
+    "description",
+    "keywords",
+    "distance_km",
+    "score",
+    "status",
+    "template_id",
+    "contact_email",
+    "last_seen",
+}
+
+APPLICATION_FIELDS = {
+    "status",
+    "sent_at",
+    "last_reply_at",
+    "reply_kind",
+    "reply_note",
+    "follow_up_at",
+    "archived_at",
+    "draft_id",
+    "conversation_id",
+    "web_link",
+    "internet_message_id",
+    "subject",
+    "body",
+    "template_id",
+    "follow_up_subject",
+    "follow_up_body",
+    "follow_up_draft_id",
+    "follow_up_conversation_id",
+    "follow_up_web_link",
+}
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS jobs (
+    id TEXT PRIMARY KEY,
+    source TEXT NOT NULL,
+    source_id TEXT NOT NULL,
+    title TEXT NOT NULL DEFAULT '',
+    company TEXT NOT NULL DEFAULT '',
+    city TEXT NOT NULL DEFAULT '',
+    zip TEXT NOT NULL DEFAULT '',
+    canton TEXT NOT NULL DEFAULT '',
+    workload TEXT NOT NULL DEFAULT '',
+    url TEXT NOT NULL DEFAULT '',
+    published TEXT NOT NULL DEFAULT '',
+    description TEXT NOT NULL DEFAULT '',
+    keywords TEXT NOT NULL DEFAULT '[]',
+    distance_km REAL,
+    first_seen TEXT NOT NULL DEFAULT '',
+    last_seen TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'neu',
+    score INTEGER NOT NULL DEFAULT 0,
+    template_id TEXT NOT NULL DEFAULT '',
+    contact_email TEXT NOT NULL DEFAULT '',
+    raw TEXT NOT NULL DEFAULT '{}'
+);
+CREATE TABLE IF NOT EXISTS applications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id TEXT NOT NULL,
+    template_id TEXT NOT NULL DEFAULT '',
+    subject TEXT NOT NULL DEFAULT '',
+    body TEXT NOT NULL DEFAULT '',
+    draft_id TEXT NOT NULL DEFAULT '',
+    conversation_id TEXT NOT NULL DEFAULT '',
+    web_link TEXT NOT NULL DEFAULT '',
+    internet_message_id TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'entwurf',
+    created_at TEXT NOT NULL DEFAULT '',
+    sent_at TEXT NOT NULL DEFAULT '',
+    last_reply_at TEXT NOT NULL DEFAULT '',
+    reply_kind TEXT NOT NULL DEFAULT '',
+    reply_note TEXT NOT NULL DEFAULT '',
+    follow_up_at TEXT NOT NULL DEFAULT '',
+    follow_up_subject TEXT NOT NULL DEFAULT '',
+    follow_up_body TEXT NOT NULL DEFAULT '',
+    follow_up_draft_id TEXT NOT NULL DEFAULT '',
+    follow_up_conversation_id TEXT NOT NULL DEFAULT '',
+    follow_up_web_link TEXT NOT NULL DEFAULT '',
+    archived_at TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS replies (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    application_id INTEGER NOT NULL,
+    message_id TEXT NOT NULL UNIQUE,
+    received_at TEXT NOT NULL DEFAULT '',
+    sender TEXT NOT NULL DEFAULT '',
+    subject TEXT NOT NULL DEFAULT '',
+    kind TEXT NOT NULL DEFAULT '',
+    snippet TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    at TEXT NOT NULL,
+    kind TEXT NOT NULL DEFAULT '',
+    message TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS meta (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL DEFAULT ''
+);
+"""
+
+
+class Store:
+    """Ablage unter ``daten.db``."""
+
+    def __init__(self, path: Path | str) -> None:
+        self.path = Path(path)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        with self._db() as db:
+            db.executescript(SCHEMA)
+
+    # ------------------------------------------------------------------
+    @contextmanager
+    def _db(self) -> Iterator[sqlite3.Connection]:
+        connection = sqlite3.connect(self.path, timeout=20)
+        connection.row_factory = sqlite3.Row
+        try:
+            connection.execute("PRAGMA journal_mode=WAL")
+            yield connection
+            connection.commit()
+        finally:
+            connection.close()
+
+    @staticmethod
+    def _rows(cursor: sqlite3.Cursor) -> list[dict[str, Any]]:
+        return [dict(row) for row in cursor.fetchall()]
+
+    # ------------------------------------------------------------------
+    # Stellen
+    # ------------------------------------------------------------------
+    def upsert_job(self, job: Job, now: str = "") -> bool:
+        """Neue Stelle eintragen; True, wenn sie noch nicht bekannt war."""
+        row = job.to_row()
+        stamp = now or ""
+        with self._db() as db:
+            existing = db.execute(
+                "SELECT 1 FROM jobs WHERE id = ?", (row["id"],)
+            ).fetchone()
+            if existing is not None:
+                # Bekannte Stelle: nur der letzte Sichtkontakt wird nachgefuehrt.
+                db.execute(
+                    "UPDATE jobs SET last_seen = ?, published = ?, distance_km = ? "
+                    "WHERE id = ?",
+                    (stamp, row["published"], row["distance_km"], row["id"]),
+                )
+                return False
+            db.execute(
+                """
+                INSERT INTO jobs (
+                    id, source, source_id, title, company, city, zip, canton,
+                    workload, url, published, description, keywords, distance_km,
+                    first_seen, last_seen, contact_email, raw
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    row["id"],
+                    row["source"],
+                    row["source_id"],
+                    row["title"],
+                    row["company"],
+                    row["city"],
+                    row["zip"],
+                    row["canton"],
+                    row["workload"],
+                    row["url"],
+                    row["published"],
+                    row["description"],
+                    row["keywords"],
+                    row["distance_km"],
+                    stamp,
+                    stamp,
+                    row.get("contact_email") or job.contact_address(),
+                    row["raw"],
+                ),
+            )
+            return True
+
+    def update_job(self, job_id: str, **fields: Any) -> None:
+        changes = {key: value for key, value in fields.items() if key in JOB_FIELDS}
+        if not changes:
+            return
+        assignments = ", ".join(f"{key} = ?" for key in changes)
+        with self._db() as db:
+            db.execute(
+                f"UPDATE jobs SET {assignments} WHERE id = ?",
+                (*changes.values(), job_id),
+            )
+
+    def set_job_analysis(
+        self, job_id: str, score: int, template_id: str, keywords: list[str]
+    ) -> None:
+        import json
+
+        self.update_job(
+            job_id,
+            score=int(score),
+            template_id=template_id or "",
+            keywords=json.dumps(keywords, ensure_ascii=False),
+        )
+
+    def get_job(self, job_id: str) -> dict[str, Any] | None:
+        with self._db() as db:
+            row = db.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+        return dict(row) if row else None
+
+    def list_jobs(
+        self,
+        status: str | None = None,
+        search: str = "",
+        limit: int = 500,
+    ) -> list[dict[str, Any]]:
+        query = "SELECT * FROM jobs"
+        conditions: list[str] = []
+        values: list[Any] = []
+        if status:
+            conditions.append("status = ?")
+            values.append(status)
+        if search.strip():
+            conditions.append(
+                "(title LIKE ? OR company LIKE ? OR city LIKE ? OR keywords LIKE ?)"
+            )
+            needle = f"%{search.strip()}%"
+            values.extend([needle] * 4)
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+        query += " ORDER BY score DESC, published DESC, first_seen DESC LIMIT ?"
+        values.append(limit)
+        with self._db() as db:
+            return self._rows(db.execute(query, values))
+
+    def job_counts(self) -> dict[str, int]:
+        with self._db() as db:
+            rows = self._rows(
+                db.execute("SELECT status, COUNT(*) AS anzahl FROM jobs GROUP BY status")
+            )
+        return {row["status"]: int(row["anzahl"]) for row in rows}
+
+    # ------------------------------------------------------------------
+    # Bewerbungen
+    # ------------------------------------------------------------------
+    def add_application(
+        self,
+        job_id: str,
+        template_id: str,
+        subject: str,
+        body: str,
+        draft_id: str = "",
+        conversation_id: str = "",
+        web_link: str = "",
+        status: str = "entwurf",
+        created_at: str = "",
+    ) -> int:
+        with self._db() as db:
+            cursor = db.execute(
+                """
+                INSERT INTO applications (
+                    job_id, template_id, subject, body, draft_id, conversation_id,
+                    web_link, status, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    job_id,
+                    template_id,
+                    subject,
+                    body,
+                    draft_id,
+                    conversation_id,
+                    web_link,
+                    status,
+                    created_at,
+                ),
+            )
+            return int(cursor.lastrowid or 0)
+
+    def update_application(self, app_id: int, **fields: Any) -> None:
+        changes = {
+            key: value for key, value in fields.items() if key in APPLICATION_FIELDS
+        }
+        if not changes:
+            return
+        assignments = ", ".join(f"{key} = ?" for key in changes)
+        with self._db() as db:
+            db.execute(
+                f"UPDATE applications SET {assignments} WHERE id = ?",
+                (*changes.values(), app_id),
+            )
+
+    def get_application(self, app_id: int) -> dict[str, Any] | None:
+        with self._db() as db:
+            row = db.execute(
+                """
+                SELECT a.*, j.title, j.company, j.city, j.url, j.template_id AS job_template
+                FROM applications a LEFT JOIN jobs j ON j.id = a.job_id
+                WHERE a.id = ?
+                """,
+                (app_id,),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def application_by_job(self, job_id: str) -> dict[str, Any] | None:
+        with self._db() as db:
+            row = db.execute(
+                "SELECT * FROM applications WHERE job_id = ? ORDER BY id DESC LIMIT 1",
+                (job_id,),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def list_applications(
+        self, status: str | None = None, limit: int = 500
+    ) -> list[dict[str, Any]]:
+        query = """
+            SELECT a.*, j.title, j.company, j.city, j.url
+            FROM applications a LEFT JOIN jobs j ON j.id = a.job_id
+        """
+        values: list[Any] = []
+        if status:
+            query += " WHERE a.status = ?"
+            values.append(status)
+        query += " ORDER BY a.id DESC LIMIT ?"
+        values.append(limit)
+        with self._db() as db:
+            return self._rows(db.execute(query, values))
+
+    def application_counts(self) -> dict[str, int]:
+        with self._db() as db:
+            rows = self._rows(
+                db.execute(
+                    "SELECT status, COUNT(*) AS anzahl FROM applications GROUP BY status"
+                )
+            )
+        return {row["status"]: int(row["anzahl"]) for row in rows}
+
+    def active_applications(self) -> list[dict[str, Any]]:
+        with self._db() as db:
+            return self._rows(
+                db.execute(
+                    """
+                    SELECT a.*, j.title, j.company, j.city, j.url
+                    FROM applications a LEFT JOIN jobs j ON j.id = a.job_id
+                    WHERE a.status IN ('gesendet', 'nachgefasst', 'einladung', 'info')
+                    ORDER BY a.sent_at DESC
+                    """
+                )
+            )
+
+    def due_follow_ups(self, days: int = 14, reference: date | None = None) -> list[dict[str, Any]]:
+        """Bewerbungen ohne Antwort, deren Nachfrist abgelaufen ist."""
+        reference = reference or date.today()
+        limit = reference - timedelta(days=max(1, int(days)))
+        result = []
+        for application in self.list_applications():
+            if application.get("status") != "gesendet":
+                continue
+            if application.get("last_reply_at") or application.get("follow_up_at"):
+                continue
+            sent = parse_date(application.get("sent_at"))
+            if sent is not None and sent <= limit:
+                result.append(application)
+        return result
+
+    # ------------------------------------------------------------------
+    # Antworten
+    # ------------------------------------------------------------------
+    def add_reply(
+        self,
+        application_id: int,
+        message_id: str,
+        received_at: str,
+        sender: str,
+        subject: str,
+        kind: str,
+        snippet: str,
+    ) -> bool:
+        with self._db() as db:
+            cursor = db.execute(
+                """
+                INSERT OR IGNORE INTO replies (
+                    application_id, message_id, received_at, sender, subject, kind, snippet
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (application_id, message_id, received_at, sender, subject, kind, snippet),
+            )
+            return cursor.rowcount > 0
+
+    def replies_for(self, application_id: int) -> list[dict[str, Any]]:
+        with self._db() as db:
+            return self._rows(
+                db.execute(
+                    "SELECT * FROM replies WHERE application_id = ? ORDER BY id",
+                    (application_id,),
+                )
+            )
+
+    # ------------------------------------------------------------------
+    # Protokoll und Zustand
+    # ------------------------------------------------------------------
+    def log(self, kind: str, message: str, at: str = "") -> None:
+        with self._db() as db:
+            db.execute(
+                "INSERT INTO events (at, kind, message) VALUES (?, ?, ?)",
+                (at, kind, message),
+            )
+
+    def events(self, limit: int = 200) -> list[dict[str, Any]]:
+        with self._db() as db:
+            return self._rows(
+                db.execute("SELECT * FROM events ORDER BY id DESC LIMIT ?", (limit,))
+            )
+
+    def meta_get(self, key: str, default: str = "") -> str:
+        with self._db() as db:
+            row = db.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
+        return str(row["value"]) if row else default
+
+    def meta_set(self, key: str, value: str) -> None:
+        with self._db() as db:
+            db.execute(
+                """
+                INSERT INTO meta (key, value) VALUES (?, ?)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value
+                """,
+                (key, value),
+            )
