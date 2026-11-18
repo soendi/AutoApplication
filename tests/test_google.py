@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import base64
 import time
+import urllib.parse
+import urllib.request
 
 import pytest
 
@@ -29,64 +31,92 @@ class FakeRequest:
 
 
 def _client(responses: list[tuple[int, dict]]) -> tuple[GmailClient, FakeRequest]:
-    auth = GoogleAuth("client-id", "secret", token_file=None)
+    auth = GoogleAuth("client-id", token_file=None)
     auth.tokens = GoogleTokens(access_token="token", expires_at=time.time() + 3600)
     request = FakeRequest(responses)
     return GmailClient(auth, request=request), request
 
 
-def test_device_flow_needs_client_data(tmp_path) -> None:
+def test_login_needs_client_id(tmp_path) -> None:
     auth = GoogleAuth("", token_file=tmp_path / "google_token.json")
     with pytest.raises(GoogleError):
-        auth.start_device_flow()
-    auth = GoogleAuth("client-id", "", token_file=tmp_path / "google_token.json")
-    with pytest.raises(GoogleError):
-        auth.start_device_flow()
+        auth.start_login()
 
 
-def test_device_flow_polls_until_token(tmp_path) -> None:
+def test_login_builds_google_url_with_pkce() -> None:
+    auth = GoogleAuth("client-id", token_file=None)
+    login = auth.start_login()
+    try:
+        query = urllib.parse.parse_qs(urllib.parse.urlparse(login.verification_uri).query)
+        assert login.verification_uri.startswith("https://accounts.google.com/")
+        assert query["client_id"] == ["client-id"]
+        assert query["response_type"] == ["code"]
+        assert query["code_challenge_method"] == ["S256"]
+        assert query["access_type"] == ["offline"]
+        assert query["state"] == [login.state]
+        assert query["redirect_uri"] == [login.redirect_uri]
+        assert login.redirect_uri.startswith("http://127.0.0.1:")
+        assert "gmail.modify" in query["scope"][0]
+    finally:
+        auth.cancel_login(login)
+
+
+def test_login_completes_without_client_secret(tmp_path) -> None:
     request = FakeRequest(
-        [
-            (
-                200,
-                {
-                    "device_code": "dev",
-                    "user_code": "ABCD-EFGH",
-                    "verification_url": "https://www.google.com/device",
-                    "interval": 5,
-                    "expires_in": 900,
-                },
-            ),
-            (400, {"error": "authorization_pending"}),
-            (200, {"access_token": "a1", "refresh_token": "r1", "expires_in": 3600}),
-        ]
+        [(200, {"access_token": "a1", "refresh_token": "r1", "expires_in": 3600})]
     )
     token_file = tmp_path / "google_token.json"
-    auth = GoogleAuth("client-id", "secret", token_file=token_file, request=request)
+    auth = GoogleAuth("client-id", token_file=token_file, request=request)
     assert auth.connected() is False
 
-    login = auth.start_device_flow()
-    assert login.user_code == "ABCD-EFGH"
-    assert login.verification_uri == "https://www.google.com/device"
-    assert auth.poll_device_flow(login) is False
-    assert auth.poll_device_flow(login) is True
+    login = auth.start_login()
+    callback = f"{login.redirect_uri}/?code=abc&state={login.state}"
+    with urllib.request.urlopen(callback, timeout=5) as response:
+        assert response.status == 200
+
+    deadline = time.time() + 5
+    while not auth.poll_device_flow(login):
+        assert time.time() < deadline
     assert auth.connected() is True
     assert token_file.exists()
+
+    body = request.calls[0]["data"].decode()
+    assert "grant_type=authorization_code" in body
+    assert "code_verifier=" in body
+    assert "client_secret" not in body
 
     auth.disconnect()
     assert auth.connected() is False
 
 
-def test_refresh_token_is_used(tmp_path) -> None:
+def test_login_rejects_wrong_state() -> None:
+    auth = GoogleAuth("client-id", token_file=None)
+    login = auth.start_login()
+    callback = f"{login.redirect_uri}/?code=abc&state=falsch"
+    urllib.request.urlopen(callback, timeout=5).read()
+    with pytest.raises(GoogleError):
+        auth.poll_device_flow(login)
+
+
+def test_login_handles_denied_access() -> None:
+    auth = GoogleAuth("client-id", token_file=None)
+    login = auth.start_login()
+    callback = f"{login.redirect_uri}/?error=access_denied&state={login.state}"
+    urllib.request.urlopen(callback, timeout=5).read()
+    with pytest.raises(GoogleError):
+        auth.poll_device_flow(login)
+
+
+def test_refresh_token_needs_no_secret(tmp_path) -> None:
     request = FakeRequest(
         [(200, {"access_token": "neu", "expires_in": 3600})]
     )
-    auth = GoogleAuth("client-id", "secret", token_file=None, request=request)
+    auth = GoogleAuth("client-id", token_file=None, request=request)
     auth.tokens = GoogleTokens(refresh_token="r1", expires_at=0)
     assert auth.token() == "neu"
     body = request.calls[0]["data"].decode()
     assert "grant_type=refresh_token" in body
-    assert "client_secret=secret" in body
+    assert "client_secret" not in body
 
 
 def test_message_contains_attachment(tmp_path) -> None:

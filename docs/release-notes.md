@@ -1,3 +1,17 @@
+## AutoApplication 1.0.2
+
+Google-Anmeldung ohne Client-Geheimnis.
+
+### Neu
+
+- **Google-Login im Browser.** „Google-Konto verbinden“ öffnet die normale
+  Google-Anmeldung; nach der Freigabe kommt die Antwort über einen lokalen
+  Rückkanal zurück (OAuth 2.0 mit PKCE und `http://127.0.0.1`). Ein
+  Client-Geheimnis wird weder eingetragen noch gespeichert – der OAuth-Client
+  ist vom Typ „Desktop app“.
+- Das Feld „Client-Geheimnis“ ist aus den Einstellungen entfernt; es genügt die
+  Client-ID des Desktop-Clients.
+
 ## AutoApplication 1.0.1
 
 Mehr Kontrolle über Abruf und Anbindungen.

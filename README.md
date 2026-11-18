@@ -1,4 +1,4 @@
-# AutoApplication 1.0.1
+# AutoApplication 1.0.2
 
 Stellen von ostjob.ch suchen, Bewerbungen als Entwurf in Outlook oder Gmail
 vorbereiten und Antworten bis zur Zusage verfolgen – als Windows-Programm mit
@@ -36,7 +36,7 @@ stillen Updates.
 
 ## Installation
 
-`AutoApplication-1.0.1-Setup.exe` von der
+`AutoApplication-1.0.2-Setup.exe` von der
 [Release-Seite](https://github.com/soendi/AutoApplication/releases/latest)
 herunterladen und ausführen. Windows 10 und 11, kein Administrator- und kein
 Python-Zubehör nötig.
@@ -101,15 +101,19 @@ für den eigenen Benutzer lesbar) und automatisch erneuert. „Trennen“ lösch
 
 ### Google (Gmail)
 
+Die Anmeldung läuft über den normalen Google-Login im Browser – ein
+Client-Geheimnis wird nicht gebraucht (öffentlicher OAuth-Client mit PKCE).
+
 1. In der [Google Cloud Console](https://console.cloud.google.com) ein Projekt
    wählen und die **Gmail API** aktivieren.
 2. Unter **OAuth consent screen** die App einrichten (extern, Testbenutzer oder
    veröffentlicht) und die Berechtigung für Gmail hinzufügen.
-3. Unter **Credentials** einen OAuth-Client vom Typ **„TVs and Limited Input
-   devices“** anlegen.
-4. **Client-ID** und **Client-Geheimnis** unter **Einstellungen → Google**
-   eintragen, „Google-Konto verbinden“ wählen und den Code auf
-   `google.com/device` bestätigen.
+3. Unter **Credentials** einen OAuth-Client vom Typ **„Desktop app“** anlegen.
+   Ein Geheimnis ist nicht nötig; als Weiterleitung `http://127.0.0.1`
+   eintragen (der Port wird beim Anmelden automatisch gewählt).
+4. Die **Client-ID** unter **Einstellungen → Google** eintragen und
+   „Google-Konto verbinden“ wählen. AutoApplication öffnet die Google-Anmeldung
+   im Browser; nach der Freigabe kehrt die Anmeldung automatisch zurück.
 
 Die Anmeldung liegt in `google_token.json` (nur für den eigenen Benutzer
 lesbar) und wird automatisch erneuert. Für Entwürfe und Posteingang wird die

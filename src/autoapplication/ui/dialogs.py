@@ -14,7 +14,6 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from ..core.outlook import DeviceLogin
 from .workers import Task
 
 
@@ -24,7 +23,7 @@ class DeviceLoginDialog(QDialog):
     def __init__(self, parent: Any, auth: Any, provider: str = "outlook") -> None:
         super().__init__(parent)
         self.auth = auth
-        self.login: DeviceLogin | None = None
+        self.login: Any = None
         self._tasks: list[Task] = []
         self._polling = False
         google = provider == "google"
@@ -44,7 +43,11 @@ class DeviceLoginDialog(QDialog):
         layout.addWidget(heading)
 
         self.info = QLabel(
-            f"AutoApplication öffnet gleich die Anmeldeseite von {service}. "
+            "AutoApplication öffnet gleich die Google-Anmeldung im Browser. "
+            "Dort mit dem Google-Konto anmelden und die Freigabe erteilen – "
+            "danach kehrt die Anmeldung automatisch zurück."
+            if google
+            else f"AutoApplication öffnet gleich die Anmeldeseite von {service}. "
             "Dort den angezeigten Code eingeben und die Freigabe erteilen."
         )
         self.info.setWordWrap(True)
@@ -52,6 +55,7 @@ class DeviceLoginDialog(QDialog):
         layout.addWidget(self.info)
 
         self.code = QLabel("…")
+        self.code.setVisible(not google)
         self.code.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.code.setAlignment(Qt.AlignmentFlag.AlignCenter)
         font = QFont()
@@ -98,16 +102,23 @@ class DeviceLoginDialog(QDialog):
     def _start(self) -> None:
         self._run(self.auth.start_device_flow, self._ready, self._failed)
 
-    def _ready(self, login: DeviceLogin) -> None:
+    def _ready(self, login: Any) -> None:
         self.login = login
-        self.code.setText(login.user_code)
-        self.status.setText(
-            "Code eingeben, anmelden und die Freigabe erteilen. "
-            "Dieses Fenster schliesst sich, sobald die Anmeldung abgeschlossen ist."
-        )
+        self.code.setText(login.user_code or "")
+        if login.user_code:
+            self.status.setText(
+                "Code eingeben, anmelden und die Freigabe erteilen. "
+                "Dieses Fenster schliesst sich, sobald die Anmeldung abgeschlossen ist."
+            )
+        else:
+            self.status.setText(
+                "Im Browser mit dem Google-Konto anmelden und die Freigabe "
+                "erteilen. Dieses Fenster schliesst sich, sobald die Anmeldung "
+                "abgeschlossen ist."
+            )
         self.open_button.setEnabled(True)
         self._open_page()
-        self._timer.start(max(5, int(login.interval or 5)) * 1000)
+        self._timer.start(max(2, int(login.interval or 2)) * 1000)
 
     def _open_page(self) -> None:
         if self.login is not None:
@@ -134,9 +145,21 @@ class DeviceLoginDialog(QDialog):
     def _failed(self, message: str) -> None:
         self._polling = False
         self._timer.stop()
+        self._cancel_login()
         self.status.setText(message)
         self.status.setObjectName("Danger")
 
+    def _cancel_login(self) -> None:
+        cancel = getattr(self.auth, "cancel_login", None)
+        if callable(cancel):
+            cancel(self.login)
+
+    def reject(self) -> None:  # noqa: D102 - Qt-Namensschema
+        self._timer.stop()
+        self._cancel_login()
+        super().reject()
+
     def closeEvent(self, event: Any) -> None:  # noqa: N802 - Qt-Namensschema
         self._timer.stop()
+        self._cancel_login()
         super().closeEvent(event)

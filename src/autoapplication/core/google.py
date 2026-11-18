@@ -1,40 +1,47 @@
 """Google-Anbindung ueber Gmail.
 
-Anmeldung ohne Passwort im Programm: Geraetecode-Verfahren (OAuth 2.0 fuer
-Geraete mit begrenzter Eingabe). Danach legt AutoApplication Bewerbungen als
-Entwurf in Gmail ab, erkennt gesendete Mails und liest Antworten im Posteingang.
+Anmeldung wie im Browser gewohnt: AutoApplication oeffnet die Google-Seite, der
+Benutzer meldet sich mit seinem Google-Konto an und die Freigabe kommt ueber
+einen lokalen Rueckkanal zurueck (OAuth 2.0 Authorization Code mit PKCE). Ein
+Client-Geheimnis wird dabei nicht gebraucht - der OAuth-Client ist oeffentlich
+(Typ "Desktop app" in der Google Cloud Console).
 
-In der Google Cloud Console braucht es dafuer einen OAuth-Client vom Typ
-"TVs and Limited Input devices" sowie die aktivierte Gmail-API.
+Danach legt AutoApplication Bewerbungen als Entwurf in Gmail ab, erkennt
+gesendete Mails und liest Antworten im Posteingang.
 """
 
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import logging
 import mimetypes
+import secrets
+import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from email.message import EmailMessage
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable
 
-from .outlook import DeviceLogin, OutlookError
+from .outlook import OutlookError
 from .text import strip_html
 
 log = logging.getLogger(__name__)
 
-DEVICE_CODE_URL = "https://oauth2.googleapis.com/device/code"
+AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 GMAIL_API = "https://gmail.googleapis.com/gmail/v1/users/me"
 DRAFT_LINK = "https://mail.google.com/mail/u/0/#drafts"
 SCOPES = "openid email https://www.googleapis.com/auth/gmail.modify"
 MAX_ATTACHMENT = 20 * 1024 * 1024  # Gmail nimmt insgesamt rund 25 MB
+LOGIN_TIMEOUT = 300
 JSON_HEADERS = {"Content-Type": "application/json", "Accept": "application/json"}
 
 
@@ -78,6 +85,10 @@ def _error_text(payload: dict[str, Any]) -> str:
     return str(payload.get("message") or "")
 
 
+def _b64url(raw: bytes) -> str:
+    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+
 @dataclass
 class GoogleTokens:
     access_token: str = ""
@@ -106,18 +117,73 @@ class GoogleTokens:
         )
 
 
+class _CallbackHandler(BaseHTTPRequestHandler):
+    """Nimmt die Weiterleitung von Google auf 127.0.0.1 entgegen."""
+
+    def do_GET(self) -> None:  # noqa: N802 - Namensschema von http.server
+        parsed = urllib.parse.urlparse(self.path)
+        params = {
+            key: values[0]
+            for key, values in urllib.parse.parse_qs(parsed.query).items()
+            if values
+        }
+        if "code" in params or "error" in params:
+            self.server.result = params  # type: ignore[attr-defined]
+            message = (
+                "Anmeldung abgeschlossen. Dieses Fenster kann geschlossen werden."
+                if "code" in params
+                else "Die Anmeldung wurde nicht abgeschlossen."
+            )
+            self._answer(200, message)
+        else:
+            self._answer(404, "Warte auf die Anmeldung bei Google.")
+
+    def _answer(self, status: int, message: str) -> None:
+        body = (
+            "<!doctype html><html lang='de'><meta charset='utf-8'>"
+            "<title>AutoApplication</title>"
+            "<body style='font-family:sans-serif;padding:40px'>"
+            f"<h2>{message}</h2>"
+            "<p>Sie koennen dieses Fenster schliessen und zu AutoApplication "
+            "zurueckkehren.</p></body></html>"
+        ).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *_args: Any) -> None:  # noqa: D102 - keine Logzeilen
+        return
+
+
+@dataclass
+class GoogleLogin:
+    """Eine laufende Anmeldung: Adresse, PKCE-Werte und lokaler Rueckkanal."""
+
+    verification_uri: str
+    state: str
+    redirect_uri: str
+    code_verifier: str
+    interval: int = 2
+    expires_in: int = LOGIN_TIMEOUT
+    user_code: str = ""
+    message: str = ""
+    expires_at: float = 0.0
+    server: ThreadingHTTPServer | None = field(default=None, repr=False)
+    result: dict[str, str] | None = field(default=None, repr=False)
+
+
 class GoogleAuth:
-    """Geraetecode-Anmeldung und Token-Verwaltung fuer Google."""
+    """Anmeldung ueber den Google-Login im Browser (Authorization Code + PKCE)."""
 
     def __init__(
         self,
         client_id: str,
-        client_secret: str = "",
         token_file: Path | None = None,
         request: Callable[..., tuple[int, dict[str, Any]]] | None = None,
     ) -> None:
         self.client_id = client_id.strip()
-        self.client_secret = client_secret.strip()
         self.token_file = token_file
         self.request = request or _request
         self.tokens = GoogleTokens()
@@ -157,69 +223,103 @@ class GoogleAuth:
                 pass
 
     # ------------------------------------------------------------------
-    def _check_client(self) -> None:
+    def start_device_flow(self) -> GoogleLogin:
+        """Anmeldung starten - Name bleibt fuer die Oberflaeche gleich."""
+        return self.start_login()
+
+    def start_login(self, port: int = 0) -> GoogleLogin:
+        """Lokalen Rueckkanal oeffnen und die Google-Anmeldeseite bauen."""
         if not self.client_id:
             raise GoogleError(
                 "Es fehlt die Client-ID des Google-OAuth-Clients. Sie steht unter "
                 "Einstellungen > Google."
             )
-        if not self.client_secret:
-            raise GoogleError(
-                "Es fehlt das Client-Geheimnis des Google-OAuth-Clients. Es steht "
-                "unter Einstellungen > Google."
-            )
-
-    def start_device_flow(self) -> DeviceLogin:
-        self._check_client()
-        status, payload = self.request(
-            "POST",
-            DEVICE_CODE_URL,
-            data=urllib.parse.urlencode(
-                {"client_id": self.client_id, "scope": SCOPES}
-            ).encode(),
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        verifier = _b64url(secrets.token_bytes(48))
+        state = secrets.token_urlsafe(24)
+        server = ThreadingHTTPServer(("127.0.0.1", port), _CallbackHandler)
+        server.daemon_threads = True
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        redirect_uri = f"http://127.0.0.1:{server.server_port}"
+        params = {
+            "client_id": self.client_id,
+            "redirect_uri": redirect_uri,
+            "response_type": "code",
+            "scope": SCOPES,
+            "code_challenge": _b64url(hashlib.sha256(verifier.encode()).digest()),
+            "code_challenge_method": "S256",
+            "access_type": "offline",
+            "prompt": "consent",
+            "include_granted_scopes": "true",
+            "state": state,
+        }
+        return GoogleLogin(
+            verification_uri=f"{AUTH_URL}?{urllib.parse.urlencode(params)}",
+            state=state,
+            redirect_uri=redirect_uri,
+            code_verifier=verifier,
+            interval=2,
+            expires_in=LOGIN_TIMEOUT,
+            expires_at=time.time() + LOGIN_TIMEOUT,
+            message="Im Browser mit dem Google-Konto anmelden und die Freigabe erteilen.",
+            server=server,
         )
-        if status >= 400:
-            raise GoogleError(_error_text(payload) or "Anmeldung nicht moeglich.")
-        return DeviceLogin(
-            device_code=str(payload.get("device_code") or ""),
-            user_code=str(payload.get("user_code") or ""),
-            verification_uri=str(
-                payload.get("verification_url")
-                or payload.get("verification_uri")
-                or "https://www.google.com/device"
-            ),
-            interval=int(payload.get("interval") or 5),
-            expires_in=int(payload.get("expires_in") or 900),
-            message=str(payload.get("message") or ""),
-        )
 
-    def poll_device_flow(self, login: DeviceLogin) -> bool:
-        """Einmal nachfragen; True, sobald die Anmeldung abgeschlossen ist."""
+    def poll_device_flow(self, login: GoogleLogin) -> bool:
+        """Nachsehen, ob die Anmeldung im Browser abgeschlossen wurde."""
+        if login.server is None:
+            raise GoogleError("Die Anmeldung wurde bereits beendet.")
+        if login.result is None:
+            login.result = getattr(login.server, "result", None)
+        if login.result is None:
+            if login.expires_at and time.time() > login.expires_at:
+                self.cancel_login(login)
+                raise GoogleError("Die Anmeldung hat zu lange gedauert. Bitte neu starten.")
+            return False
+
+        params = login.result
+        self.cancel_login(login)
+        error = params.get("error")
+        if error:
+            if error == "access_denied":
+                raise GoogleError("Die Anmeldung wurde abgebrochen.")
+            raise GoogleError(params.get("error_description") or error)
+        if params.get("state") != login.state:
+            raise GoogleError("Die Antwort von Google passte nicht zur Anmeldung.")
+        code = params.get("code")
+        if not code:
+            raise GoogleError("Google lieferte keinen Anmeldecode.")
+
         status, payload = self.request(
             "POST",
             TOKEN_URL,
             data=urllib.parse.urlencode(
                 {
-                    "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+                    "grant_type": "authorization_code",
                     "client_id": self.client_id,
-                    "client_secret": self.client_secret,
-                    "device_code": login.device_code,
+                    "code": code,
+                    "code_verifier": login.code_verifier,
+                    "redirect_uri": login.redirect_uri,
                 }
             ).encode(),
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         )
-        if status < 400:
-            self._store(payload)
-            return True
-        error = str(payload.get("error") or "")
-        if error in {"authorization_pending", "slow_down"}:
-            return False
-        if error == "expired_token":
-            raise GoogleError("Der Code ist abgelaufen. Bitte neu verbinden.")
-        if error == "access_denied":
-            raise GoogleError("Die Anmeldung wurde abgebrochen.")
-        raise GoogleError(_error_text(payload) or "Anmeldung fehlgeschlagen.")
+        if status >= 400:
+            raise GoogleError(_error_text(payload) or "Anmeldung fehlgeschlagen.")
+        self._store(payload)
+        return True
+
+    def cancel_login(self, login: GoogleLogin | None) -> None:
+        """Rueckkanal schliessen (z. B. bei Abbruch oder nach der Anmeldung)."""
+        if login is None or login.server is None:
+            return
+        try:
+            login.server.shutdown()
+            login.server.server_close()
+        except OSError:
+            pass
+        finally:
+            login.server = None
 
     def _store(self, payload: dict[str, Any]) -> None:
         self.tokens = GoogleTokens(
@@ -245,7 +345,6 @@ class GoogleAuth:
                 {
                     "grant_type": "refresh_token",
                     "client_id": self.client_id,
-                    "client_secret": self.client_secret,
                     "refresh_token": self.tokens.refresh_token,
                 }
             ).encode(),

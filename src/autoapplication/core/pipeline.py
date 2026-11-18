@@ -122,7 +122,6 @@ class Pipeline:
     def google_auth(self) -> GoogleAuth:
         return GoogleAuth(
             self.settings.text("google.client_id"),
-            client_secret=self.settings.text("google.client_secret"),
             token_file=google_token_path(),
         )
 
@@ -148,8 +147,6 @@ class Pipeline:
                 return False
         if provider == "google":
             if not self.settings.text("google.client_id").strip():
-                return False
-            if not self.settings.text("google.client_secret").strip():
                 return False
             try:
                 return self.google_auth().connected()
