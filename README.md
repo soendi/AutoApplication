@@ -1,4 +1,4 @@
-# AutoApplication 1.0.7
+# AutoApplication 1.0.8
 
 Stellen von ostjob.ch suchen, Bewerbungen als Entwurf in Outlook oder Gmail
 vorbereiten und Antworten bis zur Zusage verfolgen – als Windows-Programm mit
@@ -21,14 +21,17 @@ stillen Updates.
    fliessen in die Auswertung ein.
 3. **Vorlage wählen.** Eine Stelle gilt als passend, wenn ein Stichwort der
    Vorlage im Titel steht oder deutlich mehr Stichworte in der Anzeige
-   vorkommen. Beispiel: „Spedition“ und „Disposition“ ergeben die
+   vorkommen.    Beispiel: „Spedition“ und „Disposition“ ergeben die
    Speditionsvorlage; „Sachbearbeitung“ und „Kundendienst“ die Vorlage
-   „Tapetenwechsel“. Reicht die Passung nicht, bleibt die Stelle ohne Bewerbung.
-   Passende Stellen werden nur vorgemerkt.
+   „Administration und Sachbearbeitung“. Reicht die Passung nicht, bleibt die
+   Stelle ohne Bewerbung. Passende Stellen werden nur vorgemerkt.
 4. **Entwurf auf Klick.** Erst wenn du eine Stelle in der Liste auswählst und
    **„E-Mail vorbereiten“** wählst, schreibt die KI Betreff und Mailtext sowie
-   ein Anschreiben, das als PDF angehängt wird. Dazu kommen die Unterlagen aus
-   dem Unterlagenordner (Lebenslauf, Zeugnisse, Diplome). Die Anrede lautet
+   ein Anschreiben, das als PDF angehängt wird. Das PDF folgt dem Aufbau eines
+   Geschäftsbriefs: Briefkopf mit Name und Kontaktdaten, Ort und Datum rechts,
+   Empfängerblock, fetter Betreff, Grussformel mit Namen und Fusszeile mit
+   Seitenzahl. Dazu kommen die Unterlagen aus dem Unterlagenordner (Lebenslauf,
+   Zeugnisse, Diplome). Die Anrede lautet
    „Sehr geehrter Herr …“ oder „Sehr geehrte Frau …“, wenn die Anzeige eine
    Ansprechperson mit Herr/Frau nennt; sonst „Sehr geehrte Damen und Herren“.
    Der Entwurf landet in Outlook oder Gmail und wird von Hand gesendet.
@@ -44,7 +47,7 @@ stillen Updates.
 
 ## Installation
 
-`AutoApplication-1.0.7-Setup.exe` von der
+`AutoApplication-1.0.8-Setup.exe` von der
 [Release-Seite](https://github.com/soendi/AutoApplication/releases/latest)
 herunterladen und ausführen. Windows 10 und 11, kein Administrator- und kein
 Python-Zubehör nötig.
@@ -173,6 +176,24 @@ Microsoft Graph nicht als einfachen Anhang zu und werden ausgelassen.
 Unter **Vorlagen** lassen sich Name, Stichworte, Betreff und Text bearbeiten,
 neue Vorlagen anlegen und die Standardvorlagen wiederherstellen. Eine Vorlage
 gilt für Nachfragen, wenn das Häkchen gesetzt ist.
+
+Mitgeliefert sind sieben Bewerbungsvorlagen und eine Nachfrage-Vorlage:
+
+| Vorlage | Stichworte (Auszug) |
+| --- | --- |
+| Spedition und Logistik | Spedition, Disposition, Transport, Fracht, Luftfracht, Export, Zoll, ERP |
+| Export, Zoll und Aussenhandel | Exportabwicklung, Zolldeklaration, Exportkontrolle, Aussenhandel, Transit, Akkreditiv |
+| Lager und Kommissionierung | Kommissionierung, Warenannahme, Warenausgang, Stapler, Inventur, Verpackung |
+| Technischer Kundendienst und Kassensysteme | Kassensystem, POS, Zahlungsterminal, Servicetechniker, Inbetriebnahme, Fernwartung |
+| IT-Support und Anwenderbetreuung | Helpdesk, First Level, Ticketsystem, Anwenderbetreuung, Microsoft 365, Netzwerk |
+| Kundenberatung und Verkaufsinnendienst | Kundenberatung, Verkaufsinnendienst, Auftragsbearbeitung, Offerte, CRM |
+| Administration und Sachbearbeitung | Sachbearbeitung, Administration, Verwaltung, Büro, Backoffice, Kundendienst |
+
+Die Texte sind auf den bisherigen Werdegang zugeschnitten (Spedition und
+Export, Kassensysteme und Technik, Kundenkontakt, Administration) und nennen
+konkrete Aufgaben statt allgemeiner Sätze. Beim ersten Start nach einem Update
+werden mitgelieferte Vorlagen nachgezogen und neue ergänzt; eigene Vorlagen und
+selbst bearbeitete Standardvorlagen bleiben unverändert.
 
 Platzhalter in Betreff und Text:
 

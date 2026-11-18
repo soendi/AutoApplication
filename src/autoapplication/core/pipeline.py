@@ -268,6 +268,7 @@ class Pipeline:
                 job.title,
                 job.company,
                 text,
+                city=job.city,
                 day=day,
             )
         except OSError as exc:

@@ -32,7 +32,17 @@ def _job(title: str = "Speditionskaufmann", description: str = "Disposition und 
 def test_defaults_contain_spedition_and_follow_up() -> None:
     templates = load_defaults()
     ids = {template.id for template in templates}
-    assert {"spedition", "tapetenwechsel", "lager", "nachfassen"} <= ids
+    assert {
+        "spedition",
+        "export_zoll",
+        "lager",
+        "technik_service",
+        "it_support",
+        "kundenbetreuung",
+        "tapetenwechsel",
+        "nachfassen",
+    } <= ids
+    assert all(template.revision > 0 for template in templates)
     assert follow_up_template(templates) is not None
     assert "Spedition" in vocabulary(templates)
     assert all(template.body for template in templates)
@@ -118,7 +128,7 @@ def test_first_load_seeds_file(tmp_path) -> None:
     assert path.exists()
     assert loaded
     payload = json.loads(path.read_text(encoding="utf-8"))
-    assert payload["version"] == 1
+    assert payload["version"] == 2
 
 
 def test_broken_file_uses_defaults(tmp_path) -> None:
@@ -192,3 +202,18 @@ def test_old_templates_are_upgraded(tmp_path) -> None:
     assert "Produktion" not in loaded[0].keywords
     saved = json.loads(path.read_text(encoding="utf-8"))
     assert "{anrede}" in saved["templates"][0]["body"]
+    # Die neuen Standardvorlagen kommen beim Nachziehen dazu.
+    assert {"spedition", "export_zoll", "it_support"} <= {
+        item["id"] for item in saved["templates"]
+    }
+
+
+def test_edited_default_template_is_kept(tmp_path) -> None:
+    path = tmp_path / "vorlagen.json"
+    templates = load_defaults()
+    template = next(item for item in templates if item.id == "spedition")
+    template.body = "{anrede}\n\nEigener Text"
+    save_templates(path, templates)
+    loaded = load_templates(path)
+    kept = next(item for item in loaded if item.id == "spedition")
+    assert kept.body == "{anrede}\n\nEigener Text"

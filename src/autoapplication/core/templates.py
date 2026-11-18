@@ -17,6 +17,9 @@ from .text import format_date, has_term, normalize, salutation, split_terms
 log = logging.getLogger(__name__)
 
 FOLLOW_UP_ID = "nachfassen"
+# Fassung der Standardvorlagen. Steht in der Datei eine aeltere Fassung,
+# werden die mitgelieferten Vorlagen nachgezogen (Revision je Vorlage).
+TEMPLATES_VERSION = 2
 
 
 @dataclass
@@ -28,6 +31,7 @@ class Template:
     subject: str = ""
     body: str = ""
     follow_up: bool = False
+    revision: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -38,6 +42,7 @@ class Template:
             "subject": self.subject,
             "body": self.body,
             "follow_up": self.follow_up,
+            "revision": self.revision,
         }
 
 
@@ -85,14 +90,31 @@ def _parse(payload: Any) -> list[Template]:
                 subject=str(entry.get("subject") or ""),
                 body=str(entry.get("body") or ""),
                 follow_up=bool(entry.get("follow_up")),
+                revision=_revision(entry.get("revision")),
             )
         )
     return templates
 
 
+def _revision(value: Any) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _version(payload: Any) -> int:
+    if isinstance(payload, dict):
+        return _revision(payload.get("version") or 1) or 1
+    return 1
+
+
 def save_templates(path: Path, templates: list[Template]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    payload = {"version": 1, "templates": [item.to_dict() for item in templates]}
+    payload = {
+        "version": TEMPLATES_VERSION,
+        "templates": [item.to_dict() for item in templates],
+    }
     temporary = path.with_suffix(".tmp")
     temporary.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -111,19 +133,46 @@ def load_templates(path: Path) -> list[Template]:
             templates = load_defaults()
             save_templates(path, templates)
             return templates
+    version = TEMPLATES_VERSION
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
         templates = _parse(payload)
+        version = _version(payload)
     except (OSError, ValueError) as exc:
         log.warning("Vorlagen nicht lesbar (%s) - Standardvorlagen", exc)
         templates = load_defaults()
     templates = templates or load_defaults()
-    if _upgrade(templates):
+    changed = _upgrade(templates)
+    if version < TEMPLATES_VERSION:
+        changed = _refresh_defaults(templates) or changed
+    if changed:
         try:
             save_templates(path, templates)
         except OSError as exc:
             log.warning("Vorlagen nicht speicherbar: %s", exc)
     return templates
+
+
+def _refresh_defaults(templates: list[Template]) -> bool:
+    """Veraltete Standardvorlagen ersetzen und neue dazunehmen.
+
+    Eigene Vorlagen bleiben unangetastet; bearbeitete Standardvorlagen tragen
+    die Revision mit und werden deshalb nicht ueberschrieben.
+    """
+    defaults = load_defaults()
+    by_id = {template.id: template for template in defaults}
+    changed = False
+    for index, template in enumerate(templates):
+        shipped = by_id.get(template.id)
+        if shipped is not None and template.revision < shipped.revision:
+            templates[index] = shipped
+            changed = True
+    known = {template.id for template in templates}
+    for shipped in defaults:
+        if shipped.id not in known:
+            templates.append(shipped)
+            changed = True
+    return changed
 
 
 def _upgrade(templates: list[Template]) -> bool:

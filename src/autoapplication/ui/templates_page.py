@@ -156,7 +156,7 @@ class TemplatesPage(QWidget):
         self.follow_up.setChecked(template.follow_up)
 
     # ------------------------------------------------------------------
-    def _from_fields(self, identifier: str) -> Template:
+    def _from_fields(self, identifier: str, revision: int = 0) -> Template:
         terms = [
             part.strip()
             for part in re.split(r"[\n,;]", self.keywords.toPlainText())
@@ -170,6 +170,7 @@ class TemplatesPage(QWidget):
             subject=self.subject.text().strip(),
             body=self.body.toPlainText().strip(),
             follow_up=self.follow_up.isChecked(),
+            revision=revision,
         )
 
     def save_current(self) -> None:
@@ -177,7 +178,7 @@ class TemplatesPage(QWidget):
         if template is None:
             self.new_template()
             return
-        updated = self._from_fields(template.id)
+        updated = self._from_fields(template.id, template.revision)
         for index, existing in enumerate(self.templates):
             if existing.id == template.id:
                 self.templates[index] = updated

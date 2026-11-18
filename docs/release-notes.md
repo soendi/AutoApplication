@@ -1,3 +1,30 @@
+## AutoApplication 1.0.8
+
+Mehr Vorlagen aus dem Lebenslauf und ein einheitliches Anschreiben im
+Geschäftsbrief-Layout.
+
+### Neu
+
+- **Sieben Vorlagen statt drei.** Neu sind „Export, Zoll und Aussenhandel“,
+  „Technischer Kundendienst und Kassensysteme“, „IT-Support und
+  Anwenderbetreuung“ sowie „Kundenberatung und Verkaufsinnendienst“;
+  „Spedition und Logistik“, „Lager und Kommissionierung“ und „Administration und
+  Sachbearbeitung“ (früher „Tapetenwechsel“) sind überarbeitet. Die Stichworte
+  decken die bisherigen Tätigkeiten ab: Disposition, Exportkontrolle,
+  Zolldokumente, ERP (Infor Cloud Suite), Kommissionierung, Kassensysteme/POS,
+  Helpdesk, Kundenberatung und Büroorganisation.
+- **Texte mit Substanz.** Die Vorlagen nennen, was tatsächlich gemacht wurde –
+  Shipping Officer bei Escatec, Export- und Zolldokumente, Installation und
+  Fernwartung von Kassensystemen, Schulungen, Sprachkenntnisse – statt
+  allgemeiner Sätze. Die strenge Passungsregel bleibt.
+- **Anschreiben im Geschäftsbrief-Layout.** Briefkopf mit Name und Kontaktdaten,
+  Trennlinie, Ort und Datum rechts, Empfängerblock, fetter Betreff, saubere
+  Absätze, Grussformel mit Namen sowie Fusszeile mit Seitenzahl. Die
+  Schlussformel aus Vorlage oder KI wird nicht doppelt gesetzt.
+- **Bestehende `vorlagen.json`** wird beim Start auf die neue Fassung gehoben:
+  mitgelieferte Vorlagen werden ersetzt, neue ergänzt; eigene Vorlagen und
+  bearbeitete Standardvorlagen bleiben unangetastet.
+
 ## AutoApplication 1.0.7
 
 Anreden mit Namen, Entwürfe nur auf Klick und strengere Stellenpassung.
