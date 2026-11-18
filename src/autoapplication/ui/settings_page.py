@@ -330,15 +330,21 @@ class SettingsPage(QWidget):
         folder_layout.addWidget(self.documents_folder, 1)
         folder_layout.addWidget(choose)
         self.attach = QCheckBox("Unterlagen an jede Bewerbung anhängen")
+        self.cover_letter = QCheckBox(
+            "Anschreiben als PDF anhängen (von der KI geschrieben)"
+        )
         self.max_mb = QSpinBox()
         self.max_mb.setRange(1, 40)
         self.max_mb.setSuffix(" MB")
         documents_form.addRow("Ordner", folder_row)
         documents_form.addRow("", self.attach)
+        documents_form.addRow("", self.cover_letter)
         documents_form.addRow("Anhänge höchstens", self.max_mb)
         documents_hint = QLabel(
             "Alle PDF-, Word- und Bilddateien im Ordner werden angehängt – "
-            "Lebenslauf und Zeugnisse zuerst, wenn sie so heissen."
+            "Lebenslauf und Zeugnisse zuerst, wenn sie so heissen. Das "
+            "Anschreiben entsteht aus der KI und wird als PDF vorangestellt; "
+            "ohne KI wird der Vorlagentext verwendet."
         )
         documents_hint.setWordWrap(True)
         documents_hint.setObjectName("Hint")
@@ -444,6 +450,7 @@ class SettingsPage(QWidget):
 
         self.documents_folder.setText(settings.text("documents.folder"))
         self.attach.setChecked(settings.flag("documents.attach", True))
+        self.cover_letter.setChecked(settings.flag("documents.cover_letter", True))
         self.max_mb.setValue(int(settings.number("documents.max_mb", 20)))
 
         self.daily_time.setText(settings.text("automation.daily_time", "07:30"))
@@ -518,6 +525,7 @@ class SettingsPage(QWidget):
 
         settings.set("documents.folder", self.documents_folder.text().strip())
         settings.set("documents.attach", self.attach.isChecked())
+        settings.set("documents.cover_letter", self.cover_letter.isChecked())
         settings.set("documents.max_mb", self.max_mb.value())
 
         settings.set("automation.daily_time", time_text or "07:30")

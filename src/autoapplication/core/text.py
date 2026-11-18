@@ -187,3 +187,114 @@ def plus_days(value: datetime | date | None, days: int) -> str:
     if isinstance(base, datetime):
         base = base.date()
     return (base + timedelta(days=days)).isoformat()
+
+
+# ----------------------------------------------------------------------
+# Stellenanzeigen aufraeumen: Gendermarken, IDs und weibliche Formen
+# ----------------------------------------------------------------------
+_GENDER_MARKER = re.compile(
+    r"[\s,\-–/]*[\(\[]\s*"
+    r"(?:m\s*[/|]\s*w(?:\s*[/|]\s*[dxf])?"
+    r"|w\s*[/|]\s*m(?:\s*[/|]\s*[dxf])?"
+    r"|m\s*[/|]\s*f\s*[/|]\s*[dx]"
+    r"|gn\*?|all\s+genders?|any\s+gender|divers|mixed)"
+    r"\s*[\)\]]",
+    re.IGNORECASE,
+)
+_GENDER_BARE = re.compile(
+    r"\b(?:m\s*/\s*w\s*/\s*d|w\s*/\s*m\s*/\s*d|m\s*/\s*f\s*/\s*d"
+    r"|m\s*/\s*w\s*/\s*x|gn\*?)\b",
+    re.IGNORECASE,
+)
+_GENDER_SUFFIX = re.compile(r"(?<=[A-Za-zÄÖÜäöüß])(?:\*|:|_|·)\s*in\b", re.IGNORECASE)
+_ID_REFERENCE = re.compile(
+    r"(?i)\b(?:job-?id|stellen?-?(?:id|nummer)|inserat(?:s)?-?(?:id|nummer)"
+    r"|referenz(?:-?nummer)?|ref(?:erenz)?\.?\s*(?:nr\.?|nummer)?)"
+    r"\s*[:#]?\s*[A-Za-z0-9][A-Za-z0-9\-_/]{2,}"
+)
+_PAREN_NUMBER = re.compile(r"\(\s*(?:id\s*[:#]?\s*)?\d{4,}\s*\)", re.IGNORECASE)
+_PAREN_CODE = re.compile(r"\(\s*\d{2,4}\s*[-/]\s*\d{3,}\s*\)")
+_HASH_NUMBER = re.compile(r"(?<!\w)#\d{4,}\b")
+
+_MASCULINE_WORDS = {
+    "Köchin": "Koch",
+    "Ärztin": "Arzt",
+    "Anwältin": "Anwalt",
+    "Krankenschwester": "Krankenpfleger",
+    "Hebamme": "Hebamme",
+    "Kauffrau": "Kaufmann",
+    "Fachfrau": "Fachmann",
+}
+_MASCULINE_ENDINGS = ("er", "ist", "ent", "ant", "or", "eur", "at", "og", "graph")
+
+
+def _masculine_word(word: str) -> str:
+    """Ein Rollenwort in die maennliche Form bringen."""
+    if word in _MASCULINE_WORDS:
+        return _MASCULINE_WORDS[word]
+    if word.endswith("frau") and len(word) > 5:
+        return f"{word[:-4]}mann"
+    if word.endswith("innen") and len(word) > 7:
+        stem = word[:-5]
+        if stem.endswith(_MASCULINE_ENDINGS):
+            return stem
+        return f"{stem}en"
+    if word.endswith("in") and len(word) > 4:
+        stem = word[:-2]
+        if stem.endswith(_MASCULINE_ENDINGS):
+            return stem
+    return word
+
+
+def masculine_form(value: str | None) -> str:
+    """Weibliche Berufsbezeichnungen in die maennliche Form setzen."""
+    if not value:
+        return ""
+    return re.sub(
+        r"[A-Za-zÄÖÜäöüß][A-Za-zÄÖÜäöüß\-]*",
+        lambda match: _masculine_word(match.group(0)),
+        str(value),
+    )
+
+
+def clean_job_title(value: str | None) -> str:
+    """Stellentitel ohne Gendermarken und Anbieter-IDs, in maennlicher Form."""
+    text = str(value or "")
+    if not text.strip():
+        return ""
+    text = _GENDER_MARKER.sub("", text)
+    text = _GENDER_BARE.sub("", text)
+    text = _GENDER_SUFFIX.sub("", text)
+    text = _ID_REFERENCE.sub("", text)
+    text = _PAREN_NUMBER.sub("", text)
+    text = _PAREN_CODE.sub("", text)
+    text = _HASH_NUMBER.sub("", text)
+    text = re.sub(r"[\(\[]\s*[\)\]]", "", text)
+    text = masculine_form(text)
+    text = re.sub(r"\s*[–\-|/]\s*$", "", text)
+    text = re.sub(r"\s{2,}", " ", text).strip(" ,;–-")
+    return text or str(value).strip()
+
+
+def clean_job_text(value: str | None) -> str:
+    """Beschreibung ohne Gendermarken und reine Anbieter-IDs, maennliche Form."""
+    text = str(value or "")
+    if not text.strip():
+        return ""
+    text = _GENDER_MARKER.sub("", text)
+    text = _GENDER_BARE.sub("", text)
+    text = _GENDER_SUFFIX.sub("", text)
+    text = _ID_REFERENCE.sub("", text)
+    text = _PAREN_NUMBER.sub("", text)
+    text = _PAREN_CODE.sub("", text)
+    text = _HASH_NUMBER.sub("", text)
+    text = re.sub(r"[\(\[]\s*[\)\]]", "", text)
+    text = masculine_form(text)
+    lines: list[str] = []
+    for line in text.splitlines():
+        cleaned = re.sub(r"[ \t]{2,}", " ", line).strip(" ,;–-")
+        if cleaned:
+            lines.append(cleaned)
+        elif lines and lines[-1] != "":
+            lines.append("")
+    return "\n".join(lines).strip()

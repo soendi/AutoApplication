@@ -1,3 +1,22 @@
+## AutoApplication 1.0.3
+
+Die KI schreibt die Bewerbung und liest die Anzeige aus.
+
+### Neu
+
+- **Anzeige auslesen.** Titel, Beschreibung und Bewerbungsadresse kommen aus der
+  KI. Zusätze ohne Bezug zur Stelle – `(m/w/d)`, `(gn*)`, `(all genders)`,
+  Inserats-, Referenz- und Job-IDs – werden entfernt; Berufsbezeichnungen stehen
+  immer in der männlichen Form. Ohne KI erledigt das eine lokale Bereinigung.
+- **Mailtext von der KI.** Betreff und Text des Entwurfs werden pro Stelle
+  geschrieben, mit Bezug auf Anforderungen, Fähigkeiten und Interessen. Die
+  Vorlage dient als Stilvorgabe und bleibt der Rückfall.
+- **Anschreiben als PDF.** Die KI schreibt ein Anschreiben; es wird als PDF im
+  Ordner `anschreiben` abgelegt und als erster Anhang mitgeschickt. Abschaltbar
+  unter Einstellungen → Unterlagen.
+- **Empfängeradresse.** Die Bewerbungsadresse wird aus der Anzeige gelesen und
+  für den Entwurf verwendet.
+
 ## AutoApplication 1.0.2
 
 Google-Anmeldung ohne Client-Geheimnis.

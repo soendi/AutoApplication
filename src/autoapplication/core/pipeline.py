@@ -9,14 +9,23 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-from .ai import ABSAGE, EINLADUNG, INFO, ZUSAGE, AiClient, classify_local
+from .ai import (
+    ABSAGE,
+    EINLADUNG,
+    INFO,
+    ZUSAGE,
+    AiClient,
+    JobDigest,
+    classify_local,
+    local_digest,
+)
 from .config import Settings, google_token_path, templates_path, token_path
-from .documents import collect, describe
+from .documents import collect, describe, write_cover_letter
 from .google import GmailClient, GoogleAuth
 from .models import Job
 from .ostjob import OstjobClient, OstjobError, search_jobs
@@ -176,6 +185,82 @@ class Pipeline:
                 log.warning("Hinweis konnte nicht angezeigt werden: %s", exc)
 
     # ------------------------------------------------------------------
+    # KI-Aufbereitung von Anzeige und Texten
+    # ------------------------------------------------------------------
+    def _digest(self, job: Job) -> JobDigest:
+        """Anzeige auslesen - per KI, sonst lokal bereinigt."""
+        method = getattr(self._ai, "job_digest", None)
+        if callable(method):
+            try:
+                digest = method(job)
+                if isinstance(digest, JobDigest):
+                    return digest
+            except Exception as exc:  # noqa: BLE001 - lokaler Rueckfall
+                log.warning("Anzeige konnte nicht gelesen werden: %s", exc)
+        return local_digest(job)
+
+    def _write_mail(
+        self,
+        template: Template,
+        job: Job,
+        digest: JobDigest,
+        day: date | None = None,
+    ) -> tuple[str, str]:
+        """Betreff und Mailtext - per KI, sonst aus der Vorlage."""
+        method = getattr(self._ai, "write_application", None)
+        if callable(method):
+            try:
+                written = method(template, self.settings.profile(), job, digest)
+            except Exception as exc:  # noqa: BLE001 - Vorlage als Rueckfall
+                log.warning("KI-Bewerbungstext fehlgeschlagen: %s", exc)
+                written = None
+            if written and written[0] and written[1]:
+                return written
+        return render_mail(template, self.settings.profile(), job, day=day)
+
+    def _cover_letter(self, job: Job, digest: JobDigest, fallback: str) -> str:
+        """Anschreiben fuer den Anhang - per KI, sonst der Mailtext."""
+        method = getattr(self._ai, "cover_letter", None)
+        if callable(method):
+            try:
+                text = method(self.settings.profile(), job, digest)
+            except Exception as exc:  # noqa: BLE001 - Mailtext als Rueckfall
+                log.warning("KI-Anschreiben fehlgeschlagen: %s", exc)
+                text = None
+            if text:
+                return text
+        return fallback
+
+    def _attachments(
+        self,
+        job: Job,
+        digest: JobDigest,
+        letter: str,
+        day: date | None = None,
+    ) -> list[Path]:
+        """Unterlagen aus dem Ordner, davor das Anschreiben als PDF."""
+        attachments = collect(
+            self.settings.text("documents.folder"),
+            enabled=self.settings.flag("documents.attach", True),
+            max_mb=self.settings.number("documents.max_mb", 20) or 20,
+        )
+        if not self.settings.flag("documents.cover_letter", True):
+            return attachments
+        text = self._cover_letter(job, digest, letter)
+        try:
+            path = write_cover_letter(
+                self.settings.profile(),
+                job.title,
+                job.company,
+                text,
+                day=day,
+            )
+        except OSError as exc:
+            log.warning("Anschreiben konnte nicht gespeichert werden: %s", exc)
+            return attachments
+        return [path] + attachments
+
+    # ------------------------------------------------------------------
     # Stellen suchen und Bewerbungen vorbereiten
     # ------------------------------------------------------------------
     def run_search(self, now: datetime | None = None) -> RunSummary:
@@ -202,7 +287,6 @@ class Pipeline:
         min_score = int(self.settings.number("matching.min_score", 2) or 2)
         auto_draft = self.settings.flag("matching.auto_draft", True)
         remaining = int(self.settings.number("matching.max_drafts_per_run", 5) or 5)
-        attachments: list[Path] | None = None
 
         for job in jobs:
             is_new = self.store.upsert_job(job, now=stamp)
@@ -215,6 +299,32 @@ class Pipeline:
             existing = self.store.application_by_job(job.id)
             if existing is not None:
                 continue
+
+            # Neue Anzeigen einmal auslesen: Titel und Beschreibung bereinigt
+            # ablegen, damit weitere Laeufe keine KI mehr brauchen.
+            if is_new:
+                digest = self._digest(job)
+                job = replace(
+                    job,
+                    title=digest.title or job.title,
+                    description=digest.description or job.description,
+                    contact_email=digest.contact_email or job.contact_email,
+                )
+                self.store.update_job(
+                    job.id,
+                    title=job.title,
+                    description=job.description,
+                    contact_email=job.contact_email,
+                )
+            else:
+                stored_job = Job.from_row(known)
+                job = replace(
+                    job,
+                    title=stored_job.title or job.title,
+                    description=stored_job.description or job.description,
+                    contact_email=stored_job.contact_email or job.contact_email,
+                )
+                digest = local_digest(job)
 
             keywords = self._ai.keywords(job, terms)
             template, score, matches = choose_template(
@@ -234,18 +344,8 @@ class Pipeline:
                 self.store.update_job(job.id, status="passend")
                 continue
 
-            if attachments is None:
-                attachments = collect(
-                    self.settings.text("documents.folder"),
-                    enabled=self.settings.flag("documents.attach", True),
-                    max_mb=self.settings.number("documents.max_mb", 20) or 20,
-                )
-            subject, body = render_mail(
-                template,
-                self.settings.profile(),
-                job,
-                day=moment.date(),
-            )
+            subject, body = self._write_mail(template, job, digest, moment.date())
+            attachments = self._attachments(job, digest, body, moment.date())
             draft_id = ""
             conversation_id = ""
             web_link = ""
@@ -306,6 +406,19 @@ class Pipeline:
         if row is None:
             raise ValueError("Diese Stelle steht nicht in der Ablage.")
         job = Job.from_row(row)
+        digest = self._digest(job)
+        job = replace(
+            job,
+            title=digest.title or job.title,
+            description=digest.description or job.description,
+            contact_email=digest.contact_email or job.contact_email,
+        )
+        self.store.update_job(
+            job.id,
+            title=job.title,
+            description=job.description,
+            contact_email=job.contact_email,
+        )
         templates = self.templates()
         keywords = self._ai.keywords(
             job, vocabulary(templates) + self.settings.skills()
@@ -318,12 +431,8 @@ class Pipeline:
                 "Wählen Sie eine Vorlage mit passenden Stichworten oder "
                 "ergänzen Sie die Vorlagen."
             )
-        subject, body = render_mail(template, self.settings.profile(), job)
-        attachments = collect(
-            self.settings.text("documents.folder"),
-            enabled=self.settings.flag("documents.attach", True),
-            max_mb=self.settings.number("documents.max_mb", 20) or 20,
-        )
+        subject, body = self._write_mail(template, job, digest)
+        attachments = self._attachments(job, digest, body)
         draft_id = ""
         conversation_id = ""
         web_link = ""

@@ -1,4 +1,4 @@
-# AutoApplication 1.0.2
+# AutoApplication 1.0.3
 
 Stellen von ostjob.ch suchen, Bewerbungen als Entwurf in Outlook oder Gmail
 vorbereiten und Antworten bis zur Zusage verfolgen – als Windows-Programm mit
@@ -12,19 +12,23 @@ stillen Updates.
    Ausschluss-Stichworten. Bereits bekannte Stellen bleiben einmalig in der
    Ablage und werden nicht doppelt bearbeitet. Die Abfrage der Stellen-API ist
    standardmässig **aus** und wird unter **Einstellungen → Suche** eingeschaltet.
-2. **Stichworte bestimmen.** Die Beschreibung wird in Stichworte zerlegt – per
-   KI (OpenAI-kompatibel oder Groq) oder, ohne Schlüssel, lokal aus den
-   Portalangaben und dem Stichwortverzeichnis der Vorlagen. Interessen und
-   Fähigkeiten aus dem Profil fliessen in die Auswertung ein.
+2. **Anzeige auslesen.** Die KI liest Titel, Beschreibung und Bewerbungsadresse
+   aus der Anzeige. Zusätze ohne Bezug zur Stelle – Gendermarken wie `(m/w/d)`
+   oder `(gn*)`, Inserats-, Referenz- und Job-IDs – fallen weg; die
+   Berufsbezeichnung steht immer in der männlichen Form. Anschliessend werden
+   Stichworte bestimmt (per KI oder lokal aus den Portalangaben und dem
+   Stichwortverzeichnis der Vorlagen). Interessen und Fähigkeiten aus dem Profil
+   fliessen in die Auswertung ein.
 3. **Vorlage wählen.** Passt eine Stelle auf mindestens zwei Stichworte einer
    Vorlage, wird daraus das Anschreiben. Beispiel: „Spedition“ und
    „Disposition“ ergeben die Speditionsvorlage; „Sachbearbeitung“ und
    „Kundendienst“ die Vorlage „Tapetenwechsel“. Reicht die Passung nicht, bleibt
    die Stelle ohne Bewerbung.
-4. **Entwurf statt Versand.** Die Bewerbung wird mit Betreff, Anschreiben und
-   den Unterlagen aus dem Unterlagenordner (Lebenslauf, Zeugnisse, Diplome) als
-   **Entwurf in Outlook oder Gmail** abgelegt. Geprüft und gesendet wird von
-   Hand.
+4. **Entwurf statt Versand.** Die KI schreibt Betreff und Mailtext sowie ein
+   Anschreiben, das als PDF an die Bewerbung gehängt wird. Dazu kommen die
+   Unterlagen aus dem Unterlagenordner (Lebenslauf, Zeugnisse, Diplome). Das
+   Ganze landet als **Entwurf in Outlook oder Gmail**. Geprüft und gesendet wird
+   von Hand.
 5. **Versand erkennen.** Taucht die Mail in „Gesendete Elemente“ auf, steht das
    Versanddatum in der Bewerbungstabelle.
 6. **Antworten auswerten.** Das Postfach wird auf Antworten der Firma geprüft –
@@ -36,7 +40,7 @@ stillen Updates.
 
 ## Installation
 
-`AutoApplication-1.0.2-Setup.exe` von der
+`AutoApplication-1.0.3-Setup.exe` von der
 [Release-Seite](https://github.com/soendi/AutoApplication/releases/latest)
 herunterladen und ausführen. Windows 10 und 11, kein Administrator- und kein
 Python-Zubehör nötig.
@@ -133,6 +137,20 @@ Schlüssel von Groq unter [console.groq.com](https://console.groq.com/keys)
 erstellen. Der Schlüssel lässt sich auch über die Umgebungsvariablen
 `AUTOAPPLICATION_AI_KEY`, `OPENAI_API_KEY` oder `GROQ_API_KEY` bereitstellen.
 
+Mit Schlüssel übernimmt die KI vier Aufgaben:
+
+| Aufgabe | Ergebnis |
+| --- | --- |
+| Anzeige auslesen | sauberer Titel (männliche Form, ohne `(m/w/d)`, `(gn*)`, IDs), bereinigte Beschreibung, Bewerbungsadresse |
+| Stichworte | Grundlage für die Wahl der Vorlage |
+| Mailtext | Betreff und Text des Entwurfs, auf Stelle und Profil zugeschnitten |
+| Anschreiben | PDF im Ordner `anschreiben`, wird als erster Anhang mitgeschickt |
+
+Ohne KI bleibt alles nutzbar: Titel und Beschreibung werden lokal bereinigt,
+der Mailtext kommt aus der Vorlage und als Anschreiben wird derselbe Text als
+PDF verwendet. Abschalten lässt sich der PDF-Anhang unter
+**Einstellungen → Unterlagen**.
+
 Ohne KI bleibt alles nutzbar: die Stichworte kommen dann aus den
 Portalangaben und dem Stichwortverzeichnis der Vorlagen, die Antwortauswertung
 arbeitet mit typischen Formulierungen.
@@ -191,6 +209,7 @@ Alles im Benutzerordner `%USERPROFILE%\AutoApplication` (Linux/macOS:
 | `einstellungen.json` | Profil, Suche, KI, E-Mail, Automatik |
 | `daten.db` | Stellen, Bewerbungen, Antworten, Protokoll (SQLite) |
 | `vorlagen.json` | Vorlagen |
+| `anschreiben/` | erzeugte Anschreiben als PDF |
 | `outlook_token.json` | Anmeldung bei Microsoft (nur eigener Benutzer) |
 | `google_token.json` | Anmeldung bei Google (nur eigener Benutzer) |
 | `autoapplication.log` | Protokoll für die Fehlersuche |

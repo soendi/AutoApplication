@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 
+from autoapplication.core.ai import JobDigest, local_digest
 from autoapplication.core.config import Settings
 from autoapplication.core.models import Job
 from autoapplication.core.pipeline import Pipeline
@@ -47,6 +49,37 @@ class FakeAI:
 
     def classify(self, subject: str, body: str, sender: str = "") -> str:
         return "absage" if "Absage" in body or "Absage" in subject else "info"
+
+    def job_digest(self, job: Job) -> JobDigest:
+        return local_digest(job)
+
+    def write_application(self, template, profile, job, digest=None):
+        return None
+
+    def cover_letter(self, profile, job, digest=None):
+        return None
+
+
+class WritingAI(FakeAI):
+    """Attrappe, die Mailtext und Anschreiben selbst schreibt."""
+
+    def job_digest(self, job: Job) -> JobDigest:
+        if job.source_id != "1":
+            return local_digest(job)
+        return JobDigest(
+            "Speditionskaufmann",
+            "Disposition und Zoll",
+            "ki@muster-logistik.ch",
+        )
+
+    def write_application(self, template, profile, job, digest=None):
+        return (
+            "Bewerbung als Speditionskaufmann",
+            "Sehr geehrte Damen und Herren,\n\n" + "Ich disponiere gerne. " * 8,
+        )
+
+    def cover_letter(self, profile, job, digest=None):
+        return "Sehr geehrte Damen und Herren,\n\n" + "Anschreiben zur Stelle. " * 12
 
 
 class FakeOutlook:
@@ -151,6 +184,22 @@ def test_run_search_creates_one_draft(tmp_path) -> None:
     assert store.get_job("ostjob:1")["status"] == "beworben"
     assert store.get_job("ostjob:2")["status"] == "ohne_passung"
     assert "Entwurf" in store.events()[0]["message"] or store.events()
+
+
+def test_ai_writes_mail_and_cover_letter(tmp_path) -> None:
+    pipeline, store, outlook, _ = _pipeline(tmp_path, ai=WritingAI())
+    summary = pipeline.run_search(datetime(2026, 11, 18, 7, 30, tzinfo=timezone.utc))
+    assert summary.drafts == 1
+    draft = outlook.drafts[0]
+    assert draft["subject"] == "Bewerbung als Speditionskaufmann"
+    assert draft["to"] == "ki@muster-logistik.ch"
+    assert "Ich disponiere" in draft["body"]
+    pdfs = [path for path in draft["attachments"] if path.endswith(".pdf")]
+    assert pdfs, draft["attachments"]
+    assert Path(pdfs[0]).read_bytes().startswith(b"%PDF")
+    application = store.list_applications()[0]
+    assert application["subject"] == "Bewerbung als Speditionskaufmann"
+    assert store.get_job("ostjob:1")["title"] == "Speditionskaufmann"
 
 
 def test_second_run_does_not_duplicate(tmp_path) -> None:

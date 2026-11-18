@@ -78,6 +78,7 @@ DEFAULTS: dict[str, Any] = {
     "documents": {
         "folder": "",
         "attach": True,
+        "cover_letter": True,
         "max_mb": 20,
     },
     "automation": {

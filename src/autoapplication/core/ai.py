@@ -11,11 +11,20 @@ import logging
 import re
 import urllib.error
 import urllib.request
+from dataclasses import dataclass
 from typing import Any, Callable
 
 from .config import Settings
 from .models import Job
-from .text import has_term, normalize, strip_html, words
+from .templates import Template
+from .text import (
+    clean_job_text,
+    clean_job_title,
+    has_term,
+    normalize,
+    strip_html,
+    words,
+)
 
 log = logging.getLogger(__name__)
 
@@ -182,6 +191,22 @@ def classify_local(subject: str, body: str) -> str:
     return INFO
 
 
+@dataclass
+class JobDigest:
+    """Ausgelesene Anzeige: sauberer Titel, Beschreibung und Kontaktadresse."""
+
+    title: str
+    description: str
+    contact_email: str = ""
+
+
+def local_digest(job: Job) -> JobDigest:
+    """Anzeige ohne KI aufbereiten: Gendermarken, IDs und weibliche Formen weg."""
+    title = clean_job_title(job.title) or job.title
+    description = clean_job_text(job.description) or job.description
+    return JobDigest(title=title, description=description, contact_email=job.contact_address())
+
+
 def local_keywords(job: Job, vocabulary: list[str]) -> list[str]:
     """Stichworte ohne KI: Portalangaben plus Treffer aus dem Verzeichnis."""
     found: list[str] = []
@@ -271,6 +296,143 @@ class AiClient:
             raise ValueError("Die KI lieferte keine Antwort.")
         message = choices[0].get("message") or {}
         return str(message.get("content") or "")
+
+    # ------------------------------------------------------------------
+    def job_digest(self, job: Job) -> JobDigest:
+        """Titel, Beschreibung und Empfaengeradresse aus der Anzeige lesen.
+
+        Die KI entfernt Zusaetze ohne Bezug zur Stelle (Gendermarken wie
+        ``(m/w/d)`` oder ``(gn*)``, Anbieter-IDs) und setzt Berufsbezeichnungen
+        in die maennliche Form. Ohne KI erledigt das die lokale Aufbereitung.
+        """
+        local = local_digest(job)
+        if not self.available():
+            return local
+        system = (
+            "Du liest Stellenanzeigen aus. Antworte nur mit einem JSON-Objekt "
+            'der Form {"titel": "...", "beschreibung": "...", '
+            '"kontakt_email": "..."}. '
+            "Der Titel ist die reine Berufsbezeichnung in der maennlichen Form, "
+            "ohne (m/w/d), (gn*), (all genders) und ohne Nummern oder IDs des "
+            "Anbieters. Die Beschreibung enthaelt nur Angaben zur Stelle "
+            "(Aufgaben, Anforderungen, Pensum, Ort, Ansprechperson) - keine "
+            "Gendermarken, keine Inserats- oder Referenznummern, keine "
+            "Werbetexte. kontakt_email ist die Bewerbungsadresse oder leer."
+        )
+        content = (
+            f"Titel: {job.title}\n"
+            f"Firma: {job.company}\n"
+            f"Ort: {job.city}\n"
+            f"Bisherige Kontaktangaben: {job.contact_address() or '-'}\n\n"
+            f"{strip_html(job.description)[:6000]}"
+        )
+        try:
+            data = _json_object(self._chat(system, content, temperature=0.0))
+            title = clean_job_title(str(data.get("titel") or "")) or local.title
+            description = (
+                clean_job_text(str(data.get("beschreibung") or "")) or local.description
+            )
+            address = str(data.get("kontakt_email") or "").strip()
+            if "@" not in address:
+                address = local.contact_email
+            return JobDigest(title=title, description=description, contact_email=address)
+        except (urllib.error.URLError, OSError, ValueError, KeyError) as exc:
+            log.info("KI-Auslesen der Anzeige fehlgeschlagen (%s) - lokal weiter", exc)
+            return local
+
+    def write_application(
+        self,
+        template: Template,
+        profile: dict[str, Any],
+        job: Job,
+        digest: JobDigest | None = None,
+    ) -> tuple[str, str] | None:
+        """Betreff und Mailtext von der KI schreiben lassen (None = Vorlage)."""
+        if not self.available():
+            return None
+        digest = digest or local_digest(job)
+        name = " ".join(
+            part for part in (profile.get("vorname"), profile.get("nachname")) if part
+        ).strip()
+        system = (
+            "Du schreibst Bewerbungsmails auf Deutsch. Antworte nur mit einem "
+            'JSON-Objekt der Form {"betreff": "...", "text": "..."}. '
+            "Der Betreff nennt die Stelle in der maennlichen Form und die Firma. "
+            "Der Text ist eine formelle, persoenliche Mail (rund 150 bis 250 "
+            "Woerter) mit Anrede, Bezug auf die Stelle, zwei bis drei Bezuegen "
+            "zwischen Anforderungen und den Faehigkeiten des Bewerbers und einer "
+            "hoeflichen Schlussformel. Erfinde keine Abschluesse, Zeugnisse oder "
+            "Berufsjahre. Keine Gendermarken wie (m/w/d) oder (gn*), keine IDs, "
+            "keine Platzhalter in geschweiften Klammern."
+        )
+        content = (
+            f"Bewerber: {name or '-'}\n"
+            f"Wohnort: {profile.get('wohnort') or '-'}\n"
+            f"Erfahrung: {profile.get('erfahrung_jahre') or '-'}\n"
+            f"Verfuegbar: {profile.get('verfuegbar') or '-'}\n"
+            f"Faehigkeiten: {', '.join(self.settings.skills()) or '-'}\n"
+            f"Interessen: {', '.join(self.settings.interests()) or '-'}\n\n"
+            f"Stelle: {digest.title}\n"
+            f"Firma: {job.company}\n"
+            f"Ort: {job.city}\n"
+            f"Pensum: {job.workload}\n"
+            f"Beschreibung: {digest.description[:3000]}\n\n"
+            f"Bisherige Vorlage als Stilvorgabe:\n"
+            f"Betreff: {template.subject}\n{template.body[:2000]}"
+        )
+        try:
+            data = _json_object(self._chat(system, content, temperature=0.4))
+            subject = re.sub(r"\s+", " ", str(data.get("betreff") or "")).strip()
+            body = str(data.get("text") or "").strip()
+            if subject and len(body) >= 80 and "{" not in f"{subject}{body}":
+                return subject, body
+        except (urllib.error.URLError, OSError, ValueError, KeyError) as exc:
+            log.info("KI-Bewerbungstext fehlgeschlagen (%s) - Vorlage weiter", exc)
+        return None
+
+    def cover_letter(
+        self,
+        profile: dict[str, Any],
+        job: Job,
+        digest: JobDigest | None = None,
+    ) -> str | None:
+        """Anschreiben fuer den PDF-Anhang von der KI schreiben lassen."""
+        if not self.available():
+            return None
+        digest = digest or local_digest(job)
+        name = " ".join(
+            part for part in (profile.get("vorname"), profile.get("nachname")) if part
+        ).strip()
+        system = (
+            "Du schreibst ein Bewerbungsanschreiben auf Deutsch. Antworte nur "
+            'mit einem JSON-Objekt der Form {"anschreiben": "..."}. '
+            "Das Anschreiben beginnt mit der Anrede (ohne Adressblock), nennt "
+            "die Stelle in der maennlichen Form, verbindet zwei bis drei "
+            "Anforderungen mit den Faehigkeiten des Bewerbers und endet mit "
+            "einer Schlussformel und dem Namen. Rund 250 bis 350 Woerter, "
+            "sachlich und ohne Floskeln. Keine Gendermarken, keine IDs, keine "
+            "Platzhalter, keine erfundenen Abschluesse."
+        )
+        content = (
+            f"Bewerber: {name or '-'}\n"
+            f"Wohnort: {profile.get('wohnort') or '-'}\n"
+            f"Verfuegbar: {profile.get('verfuegbar') or '-'}\n"
+            f"Faehigkeiten: {', '.join(self.settings.skills()) or '-'}\n"
+            f"Interessen: {', '.join(self.settings.interests()) or '-'}\n\n"
+            f"Stelle: {digest.title}\n"
+            f"Firma: {job.company}\n"
+            f"Beschreibung: {digest.description[:3000]}"
+        )
+        try:
+            data = _json_object(self._chat(system, content, temperature=0.4))
+            letter = str(
+                data.get("anschreiben") or data.get("text") or ""
+            ).strip()
+            if len(letter) >= 120 and "{" not in letter:
+                return letter
+        except (urllib.error.URLError, OSError, ValueError, KeyError) as exc:
+            log.info("KI-Anschreiben fehlgeschlagen (%s) - Vorlage weiter", exc)
+        return None
 
     # ------------------------------------------------------------------
     def keywords(self, job: Job, vocabulary: list[str]) -> list[str]:
