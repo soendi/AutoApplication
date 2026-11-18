@@ -46,7 +46,7 @@ kein Administrator- und kein Python-Zubehör nötig.
 
 ### Geprüft
 
-- 40 automatisierte Tests für Portalabruf und Filter, Vorlagenauswahl und
+- 73 automatisierte Tests für Portalabruf und Filter, Vorlagenauswahl und
   Platzhalter, Stichworte und Antwortauswertung, Ablage und Statuswechsel,
   Nachfrist, Outlook-Aufrufe (mit Attrappe), Unterlagen und Update-Vergleich.
 - Selbsttest der gepackten Anwendung (`AutoApplication --self-test`) im
