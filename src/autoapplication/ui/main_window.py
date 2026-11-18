@@ -280,7 +280,7 @@ class MainWindow(QMainWindow):
     def check_mail(self) -> None:
         if not self.pipeline.mail_ready():
             provider = self.pipeline.mail_provider()
-            name = "Google (Gmail)" if provider == "google" else "Outlook"
+            name = "Outlook"
             QMessageBox.information(
                 self,
                 "E-Mail-Anbindung",
@@ -391,7 +391,7 @@ class MainWindow(QMainWindow):
             f"Über {APP_NAME}",
             f"<b>{APP_NAME}</b> {APP_VERSION}<br>{APP_TAGLINE}<br><br>"
             "Stellen von ostjob.ch, Bewerbungen als Entwurf in Outlook oder "
-            "Gmail, Antworten und Nachfragen an einem Ort.<br><br>"
+            "Antworten und Nachfragen an einem Ort.<br><br>"
             "Alle Angaben liegen unter "
             f"<code>{Path.home() / 'AutoApplication'}</code>.",
         )

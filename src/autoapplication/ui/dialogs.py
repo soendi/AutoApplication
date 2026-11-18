@@ -1,4 +1,4 @@
-"""Dialog fuer die Anmeldung per Geraetecode (Outlook oder Google)."""
+"""Dialog fuer die Outlook-Anmeldung (Geraetecode)."""
 
 from __future__ import annotations
 
@@ -20,34 +20,26 @@ from .workers import Task
 class DeviceLoginDialog(QDialog):
     """Zeigt den Code an und fragt im Hintergrund nach der Freigabe."""
 
-    def __init__(self, parent: Any, auth: Any, provider: str = "outlook") -> None:
+    def __init__(self, parent: Any, auth: Any) -> None:
         super().__init__(parent)
         self.auth = auth
         self.login: Any = None
         self._tasks: list[Task] = []
         self._polling = False
-        google = provider == "google"
-        service = "Google" if google else "Microsoft"
-        self.service = "Google" if google else "Outlook"
-        self.setWindowTitle(
-            "Mit Google verbinden" if google else "Mit Outlook verbinden"
-        )
+
+        self.setWindowTitle("Mit Outlook verbinden")
         self.resize(520, 300)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(18, 16, 18, 16)
         layout.setSpacing(10)
 
-        heading = QLabel(f"Anmeldung bei {service}")
+        heading = QLabel("Anmeldung bei Microsoft")
         heading.setObjectName("CardTitle")
         layout.addWidget(heading)
 
         self.info = QLabel(
-            "AutoApplication öffnet gleich die Google-Anmeldung im Browser. "
-            "Dort mit dem Google-Konto anmelden und die Freigabe erteilen – "
-            "danach kehrt die Anmeldung automatisch zurück."
-            if google
-            else f"AutoApplication öffnet gleich die Anmeldeseite von {service}. "
+            "AutoApplication öffnet gleich die Anmeldeseite von Microsoft. "
             "Dort den angezeigten Code eingeben und die Freigabe erteilen."
         )
         self.info.setWordWrap(True)
@@ -55,7 +47,6 @@ class DeviceLoginDialog(QDialog):
         layout.addWidget(self.info)
 
         self.code = QLabel("…")
-        self.code.setVisible(not google)
         self.code.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.code.setAlignment(Qt.AlignmentFlag.AlignCenter)
         font = QFont()
@@ -104,21 +95,14 @@ class DeviceLoginDialog(QDialog):
 
     def _ready(self, login: Any) -> None:
         self.login = login
-        self.code.setText(login.user_code or "")
-        if login.user_code:
-            self.status.setText(
-                "Code eingeben, anmelden und die Freigabe erteilen. "
-                "Dieses Fenster schliesst sich, sobald die Anmeldung abgeschlossen ist."
-            )
-        else:
-            self.status.setText(
-                "Im Browser mit dem Google-Konto anmelden und die Freigabe "
-                "erteilen. Dieses Fenster schliesst sich, sobald die Anmeldung "
-                "abgeschlossen ist."
-            )
+        self.code.setText(login.user_code)
+        self.status.setText(
+            "Code eingeben, anmelden und die Freigabe erteilen. "
+            "Dieses Fenster schliesst sich, sobald die Anmeldung abgeschlossen ist."
+        )
         self.open_button.setEnabled(True)
         self._open_page()
-        self._timer.start(max(2, int(login.interval or 2)) * 1000)
+        self._timer.start(max(5, int(login.interval or 5)) * 1000)
 
     def _open_page(self) -> None:
         if self.login is not None:
@@ -138,28 +122,16 @@ class DeviceLoginDialog(QDialog):
         self._polling = False
         if finished:
             self._timer.stop()
-            self.status.setText(f"Verbunden. {self.service} ist bereit.")
+            self.status.setText("Verbunden. Outlook ist bereit.")
             self.status.setObjectName("Ok")
             self.accept()
 
     def _failed(self, message: str) -> None:
         self._polling = False
         self._timer.stop()
-        self._cancel_login()
         self.status.setText(message)
         self.status.setObjectName("Danger")
 
-    def _cancel_login(self) -> None:
-        cancel = getattr(self.auth, "cancel_login", None)
-        if callable(cancel):
-            cancel(self.login)
-
-    def reject(self) -> None:  # noqa: D102 - Qt-Namensschema
-        self._timer.stop()
-        self._cancel_login()
-        super().reject()
-
     def closeEvent(self, event: Any) -> None:  # noqa: N802 - Qt-Namensschema
         self._timer.stop()
-        self._cancel_login()
         super().closeEvent(event)

@@ -1,3 +1,24 @@
+## AutoApplication 1.0.5
+
+Google-Anbindung entfernt – AutoApplication nutzt Outlook (Microsoft Graph).
+
+### Geändert
+
+- **Google (Gmail) ist aus den E-Mail-Optionen entfernt.** Unter Einstellungen →
+  E-Mail-Anbindung stehen nur noch „Outlook (Microsoft Graph)“ und „Keine – nur
+  im Programm“. Die Felder Client-ID und Client-Geheimnis für Google sind weg,
+  ebenso `google_token.json` und die Google-Anmeldung.
+- Bestehende Einstellungen bleiben gültig; ein früher gewähltes Google-Konto
+  wird auf „Outlook“ zurückgesetzt.
+- README und Anmeldedialog beschreiben nur noch Outlook.
+
+### Hinweis
+
+- Microsoft Graph greift ausschliesslich auf Microsoft-Postfächer zu. Ein in
+  Outlook hinzugefügtes Gmail-Konto ist für AutoApplication nicht erreichbar:
+  Entwürfe, Versand und Antwortprüfung laufen über das angemeldete
+  Microsoft-Konto. Für Gmail wäre die Google-Anbindung nötig.
+
 ## AutoApplication 1.0.4
 
 Google-Anmeldung läuft jetzt vollständig durch.

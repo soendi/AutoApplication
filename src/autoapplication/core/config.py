@@ -71,11 +71,6 @@ DEFAULTS: dict[str, Any] = {
         "tenant": "common",
         "account": "",
     },
-    "google": {
-        "client_id": "",
-        "client_secret": "",
-        "account": "",
-    },
     "documents": {
         "folder": "",
         "attach": True,
@@ -114,10 +109,6 @@ def templates_path() -> Path:
 
 def token_path() -> Path:
     return app_home() / "outlook_token.json"
-
-
-def google_token_path() -> Path:
-    return app_home() / "google_token.json"
 
 
 def log_path() -> Path:
@@ -280,9 +271,9 @@ class Settings:
         return self._terms("profile.faehigkeiten")
 
     def mail_provider(self) -> str:
-        """Welche E-Mail-Anbindung genutzt wird: outlook, google oder none."""
+        """Welche E-Mail-Anbindung genutzt wird: outlook oder none."""
         provider = self.text("mail.provider", "outlook").strip().lower()
-        return provider if provider in {"outlook", "google", "none"} else "outlook"
+        return provider if provider in {"outlook", "none"} else "outlook"
 
 
 def ensure_home() -> Path:

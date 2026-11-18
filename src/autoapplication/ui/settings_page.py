@@ -28,7 +28,6 @@ from .dialogs import DeviceLoginDialog
 
 MAIL_PROVIDERS = (
     ("Outlook (Microsoft Graph)", "outlook"),
-    ("Google (Gmail)", "google"),
     ("Keine – nur im Programm", "none"),
 )
 
@@ -285,47 +284,6 @@ class SettingsPage(QWidget):
         inner.addWidget(outlook)
 
         # ------------------------------------------------------------------
-        google = QGroupBox("Google (Gmail)")
-        google_form = QFormLayout(google)
-        self.google_client_id = QLineEdit()
-        self.google_client_id.setPlaceholderText("Client-ID des Google-OAuth-Clients")
-        self.google_client_secret = QLineEdit()
-        self.google_client_secret.setEchoMode(QLineEdit.EchoMode.Password)
-        self.google_client_secret.setPlaceholderText(
-            "Client-Geheimnis (verlangt Google beim Token-Tausch)"
-        )
-        self.google_status = QLabel("")
-        self.google_status.setObjectName("Hint")
-        google_row = QWidget()
-        google_layout = QHBoxLayout(google_row)
-        google_layout.setContentsMargins(0, 0, 0, 0)
-        self.google_connect_button = QPushButton("Google-Konto verbinden")
-        self.google_connect_button.setObjectName("Primary")
-        self.google_connect_button.clicked.connect(self.connect_google)
-        self.google_disconnect_button = QPushButton("Trennen")
-        self.google_disconnect_button.clicked.connect(self.disconnect_google)
-        google_layout.addWidget(self.google_connect_button)
-        google_layout.addWidget(self.google_disconnect_button)
-        google_layout.addWidget(self.google_status, 1)
-        google_form.addRow("Client-ID", self.google_client_id)
-        google_form.addRow("Client-Geheimnis", self.google_client_secret)
-        google_form.addRow("", google_row)
-        google_hint = QLabel(
-            "In der Google Cloud Console die Gmail-API aktivieren und einen "
-            "OAuth-Client vom Typ „Desktop app“ anlegen. Client-ID und "
-            "Client-Geheimnis hier einsetzen und „Google-Konto verbinden“ "
-            "wählen: Es öffnet sich die normale Google-Anmeldung im Browser, "
-            "danach kehrt die Freigabe automatisch zurück. Google verlangt das "
-            "Client-Geheimnis beim Token-Tausch, auch mit PKCE; es bleibt lokal "
-            "in den Einstellungen und gehört nicht ins Repository. "
-            "Berechtigung: Gmail lesen, Entwürfe anlegen und senden."
-        )
-        google_hint.setWordWrap(True)
-        google_hint.setObjectName("Hint")
-        google_form.addRow("", google_hint)
-        inner.addWidget(google)
-
-        # ------------------------------------------------------------------
         documents = QGroupBox("Unterlagen")
         documents_form = QFormLayout(documents)
         folder_row = QWidget()
@@ -398,7 +356,6 @@ class SettingsPage(QWidget):
         Formular nicht verloren geht.
         """
         self._refresh_outlook_status()
-        self._refresh_google_status()
 
     def load(self) -> None:
         settings = self.window.settings
@@ -453,8 +410,6 @@ class SettingsPage(QWidget):
         self.client_id.setText(settings.text("outlook.client_id"))
         self.tenant.setText(settings.text("outlook.tenant", "common"))
         self.account.setText(settings.text("outlook.account"))
-        self.google_client_id.setText(settings.text("google.client_id"))
-        self.google_client_secret.setText(settings.text("google.client_secret"))
 
         self.documents_folder.setText(settings.text("documents.folder"))
         self.attach.setChecked(settings.flag("documents.attach", True))
@@ -467,7 +422,6 @@ class SettingsPage(QWidget):
         self.follow_up_days.setValue(int(settings.number("automation.follow_up_days", 14)))
         self.notify_desktop.setChecked(settings.flag("automation.notify_desktop", True))
         self._refresh_outlook_status()
-        self._refresh_google_status()
 
     # ------------------------------------------------------------------
     def save(self) -> None:
@@ -529,8 +483,6 @@ class SettingsPage(QWidget):
         settings.set("outlook.client_id", self.client_id.text().strip())
         settings.set("outlook.tenant", self.tenant.text().strip() or "common")
         settings.set("outlook.account", self.account.text().strip())
-        settings.set("google.client_id", self.google_client_id.text().strip())
-        settings.set("google.client_secret", self.google_client_secret.text().strip())
 
         settings.set("documents.folder", self.documents_folder.text().strip())
         settings.set("documents.attach", self.attach.isChecked())
@@ -545,7 +497,6 @@ class SettingsPage(QWidget):
         settings.save()
         self.window.reload_settings()
         self._refresh_outlook_status()
-        self._refresh_google_status()
         self.window.store.log("einstellungen", "Einstellungen gespeichert.")
         self.window.statusBar().showMessage("Einstellungen gespeichert.", 6000)
 
@@ -576,14 +527,6 @@ class SettingsPage(QWidget):
             connected = False
         self._set_status(self.outlook_status, connected)
         self.disconnect_button.setEnabled(connected)
-
-    def _refresh_google_status(self) -> None:
-        try:
-            connected = self.window.pipeline.google_auth().connected()
-        except Exception:  # noqa: BLE001 - Statusanzeige darf nichts stoppen
-            connected = False
-        self._set_status(self.google_status, connected)
-        self.google_disconnect_button.setEnabled(connected)
 
     @staticmethod
     def _set_status(label: QLabel, connected: bool) -> None:
@@ -624,49 +567,3 @@ class SettingsPage(QWidget):
         self.window.pipeline.auth().disconnect()
         self.window.store.log("outlook", "Outlook getrennt.")
         self._refresh_outlook_status()
-
-    def connect_google(self) -> None:
-        if not self.google_client_id.text().strip():
-            QMessageBox.warning(
-                self,
-                "Client-ID fehlt",
-                "Bitte zuerst die Client-ID des Google-OAuth-Clients eintragen.",
-            )
-            return
-        if not self.google_client_secret.text().strip():
-            QMessageBox.warning(
-                self,
-                "Client-Geheimnis fehlt",
-                "Google verlangt beim Anmelden das Client-Geheimnis des "
-                "Desktop-Clients. Bitte unter Einstellungen > Google eintragen "
-                "(es bleibt lokal gespeichert).",
-            )
-            return
-        self.mail_provider.setCurrentIndex(
-            max(0, self.mail_provider.findData("google"))
-        )
-        self.save()
-        dialog = DeviceLoginDialog(
-            self.window, self.window.pipeline.google_auth(), provider="google"
-        )
-        if dialog.exec():
-            self.save()
-            self.window.store.log("google", "Google-Konto verbunden.")
-            QMessageBox.information(
-                self,
-                "Google",
-                "Das Google-Konto ist verbunden. Entwürfe werden ab jetzt in "
-                "Gmail abgelegt.",
-            )
-        else:
-            self._refresh_google_status()
-
-    def disconnect_google(self) -> None:
-        answer = QMessageBox.question(
-            self, "Google trennen", "Die gespeicherte Anmeldung wirklich entfernen?"
-        )
-        if answer != QMessageBox.Yes:
-            return
-        self.window.pipeline.google_auth().disconnect()
-        self.window.store.log("google", "Google-Konto getrennt.")
-        self._refresh_google_status()

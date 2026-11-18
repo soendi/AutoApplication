@@ -24,9 +24,8 @@ from .ai import (
     classify_local,
     local_digest,
 )
-from .config import Settings, google_token_path, templates_path, token_path
+from .config import Settings, templates_path, token_path
 from .documents import collect, describe, write_cover_letter
-from .google import GmailClient, GoogleAuth
 from .models import Job
 from .ostjob import OstjobClient, OstjobError, search_jobs
 from .outlook import GraphAuth, OutlookClient, OutlookError, message_body, sender_address
@@ -96,7 +95,6 @@ class Pipeline:
         *,
         ai_client: AiClient | None = None,
         outlook_client: OutlookClient | None = None,
-        google_client: GmailClient | None = None,
         ostjob_client: OstjobClient | None = None,
         notifier: Callable[[str, str], None] | None = None,
         templates_file: Path | None = None,
@@ -105,7 +103,6 @@ class Pipeline:
         self.store = store
         self._ai = ai_client or AiClient(settings)
         self._outlook = outlook_client
-        self._google = google_client
         self._ostjob = ostjob_client
         self.notifier = notifier
         self.templates_file = templates_file or templates_path()
@@ -128,13 +125,6 @@ class Pipeline:
             token_file=token_path(),
         )
 
-    def google_auth(self) -> GoogleAuth:
-        return GoogleAuth(
-            self.settings.text("google.client_id"),
-            client_secret=self.settings.text("google.client_secret"),
-            token_file=google_token_path(),
-        )
-
     def mail_provider(self) -> str:
         return self.settings.mail_provider()
 
@@ -143,38 +133,26 @@ class Pipeline:
         return self.mail_ready()
 
     def mail_ready(self) -> bool:
-        if self._outlook is not None or self._google is not None:
+        if self._outlook is not None:
             return True
-        provider = self.mail_provider()
-        if provider == "outlook":
-            if not self.settings.flag("outlook.enabled"):
-                return False
-            if not self.settings.text("outlook.client_id").strip():
-                return False
-            try:
-                return self.auth().connected()
-            except OutlookError:
-                return False
-        if provider == "google":
-            if not self.settings.text("google.client_id").strip():
-                return False
-            try:
-                return self.google_auth().connected()
-            except OutlookError:
-                return False
-        return False
+        if self.mail_provider() != "outlook":
+            return False
+        if not self.settings.flag("outlook.enabled"):
+            return False
+        if not self.settings.text("outlook.client_id").strip():
+            return False
+        try:
+            return self.auth().connected()
+        except OutlookError:
+            return False
 
     def outlook(self) -> OutlookClient:
         """Client der gewaehlten E-Mail-Anbindung."""
         return self.mail()
 
-    def mail(self) -> OutlookClient | GmailClient:
-        if self._google is not None and self.mail_provider() == "google":
-            return self._google
+    def mail(self) -> OutlookClient:
         if self._outlook is not None:
             return self._outlook
-        if self.mail_provider() == "google":
-            return GmailClient(self.google_auth())
         return OutlookClient(self.auth())
 
     def notify(self, title: str, message: str) -> None:

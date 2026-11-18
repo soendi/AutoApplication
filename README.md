@@ -1,6 +1,6 @@
-# AutoApplication 1.0.4
+# AutoApplication 1.0.5
 
-Stellen von ostjob.ch suchen, Bewerbungen als Entwurf in Outlook oder Gmail
+Stellen von ostjob.ch suchen, Bewerbungen als Entwurf in Outlook
 vorbereiten und Antworten bis zur Zusage verfolgen – als Windows-Programm mit
 stillen Updates.
 
@@ -27,7 +27,7 @@ stillen Updates.
 4. **Entwurf statt Versand.** Die KI schreibt Betreff und Mailtext sowie ein
    Anschreiben, das als PDF an die Bewerbung gehängt wird. Dazu kommen die
    Unterlagen aus dem Unterlagenordner (Lebenslauf, Zeugnisse, Diplome). Das
-   Ganze landet als **Entwurf in Outlook oder Gmail**. Geprüft und gesendet wird
+   Ganze landet als **Entwurf in Outlook**. Geprüft und gesendet wird
    von Hand.
 5. **Versand erkennen.** Taucht die Mail in „Gesendete Elemente“ auf, steht das
    Versanddatum in der Bewerbungstabelle.
@@ -40,7 +40,7 @@ stillen Updates.
 
 ## Installation
 
-`AutoApplication-1.0.4-Setup.exe` von der
+`AutoApplication-1.0.5-Setup.exe` von der
 [Release-Seite](https://github.com/soendi/AutoApplication/releases/latest)
 herunterladen und ausführen. Windows 10 und 11, kein Administrator- und kein
 Python-Zubehör nötig.
@@ -81,7 +81,7 @@ Stellenbeschreibung; in Vorlagen stehen sie als `{interessen}` und
 ### E-Mail-Anbindung
 
 Unter **Einstellungen → E-Mail-Anbindung** wird gewählt, wohin der Entwurf
-geht: Outlook, Google (Gmail) oder „Keine – nur im Programm“. Ohne Anbindung
+geht: Outlook oder „Keine – nur im Programm“. Ohne Anbindung
 bleibt der Text in der Bewerbungstabelle und lässt sich von dort kopieren.
 
 ### Outlook (Microsoft Graph)
@@ -102,30 +102,6 @@ AutoApplication meldet sich ohne Passwort im Programm an (Gerätecode):
 
 Die Anmeldung wird in `outlook_token.json` im Benutzerordner gespeichert (nur
 für den eigenen Benutzer lesbar) und automatisch erneuert. „Trennen“ löscht sie.
-
-### Google (Gmail)
-
-Die Anmeldung läuft über den normalen Google-Login im Browser (Authorization
-Code mit PKCE und lokalem Rückkanal). Google verlangt beim Desktop-Client
-zusätzlich das Client-Geheimnis beim Token-Tausch; es bleibt lokal in
-`einstellungen.json` und gehört nicht ins Repository.
-
-1. In der [Google Cloud Console](https://console.cloud.google.com) ein Projekt
-   wählen und die **Gmail API** aktivieren.
-2. Unter **Google Auth platform → Branding/Audience** die App einrichten
-   (extern mit Testbenutzern oder intern) und unter **Data Access** die
-   Berechtigung `https://www.googleapis.com/auth/gmail.modify` hinzufügen.
-3. Unter **Clients** einen OAuth-Client vom Typ **„Desktop app“** anlegen. Eine
-   Weiterleitung muss nicht eingetragen werden; `http://127.0.0.1` mit freiem
-   Port ist für diesen Client-Typ erlaubt.
-4. **Client-ID** und **Client-Geheimnis** unter **Einstellungen → Google**
-   eintragen und „Google-Konto verbinden“ wählen. AutoApplication öffnet die
-   Google-Anmeldung im Browser; nach der Freigabe kehrt die Anmeldung
-   automatisch zurück.
-
-Die Anmeldung liegt in `google_token.json` (nur für den eigenen Benutzer
-lesbar) und wird automatisch erneuert. Für Entwürfe und Posteingang wird die
-Berechtigung `gmail.modify` verwendet.
 
 ### KI (optional) – OpenAI-kompatibel oder Groq
 
@@ -215,7 +191,6 @@ Alles im Benutzerordner `%USERPROFILE%\AutoApplication` (Linux/macOS:
 | `vorlagen.json` | Vorlagen |
 | `anschreiben/` | erzeugte Anschreiben als PDF |
 | `outlook_token.json` | Anmeldung bei Microsoft (nur eigener Benutzer) |
-| `google_token.json` | Anmeldung bei Google (nur eigener Benutzer) |
 | `autoapplication.log` | Protokoll für die Fehlersuche |
 
 Für Tests lässt sich der Ordner über `AUTOAPPLICATION_HOME` umlenken.
@@ -235,7 +210,7 @@ Aufbau:
 ```
 src/autoapplication/
   app.py              Start, Selbsttest, Tageslauf ohne Fenster
-  core/               Konfiguration, Ablage, ostjob.ch, KI, Vorlagen, Outlook, Gmail, Ablauf, Updater
+  core/               Konfiguration, Ablage, ostjob.ch, KI, Vorlagen, Outlook, Ablauf, Updater
   data/templates.json Standardvorlagen
   ui/                 Oberfläche (PySide6)
 packaging/            PyInstaller-Spec, Inno-Setup, Build-Skript, Symbol

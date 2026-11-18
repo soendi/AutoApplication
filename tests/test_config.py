@@ -29,8 +29,8 @@ def test_interests_and_skills_are_separate(tmp_path) -> None:
 def test_mail_provider_falls_back(tmp_path) -> None:
     settings = Settings(tmp_path / "e.json")
     assert settings.mail_provider() == "outlook"
-    settings.set("mail.provider", "google")
-    assert settings.mail_provider() == "google"
+    settings.set("mail.provider", "none")
+    assert settings.mail_provider() == "none"
     settings.set("mail.provider", "unbekannt")
     assert settings.mail_provider() == "outlook"
 
