@@ -20,6 +20,7 @@ from .templates import Template
 from .text import (
     clean_job_text,
     clean_job_title,
+    contact_person,
     has_term,
     normalize,
     strip_html,
@@ -198,13 +199,24 @@ class JobDigest:
     title: str
     description: str
     contact_email: str = ""
+    contact_name: str = ""
 
 
 def local_digest(job: Job) -> JobDigest:
     """Anzeige ohne KI aufbereiten: Gendermarken, IDs und weibliche Formen weg."""
     title = clean_job_title(job.title) or job.title
     description = clean_job_text(job.description) or job.description
-    return JobDigest(title=title, description=description, contact_email=job.contact_address())
+    contact = (
+        job.contact_name
+        or contact_person(job.description)
+        or contact_person(description)
+    )
+    return JobDigest(
+        title=title,
+        description=description,
+        contact_email=job.contact_address(),
+        contact_name=contact,
+    )
 
 
 def local_keywords(job: Job, vocabulary: list[str]) -> list[str]:
@@ -311,7 +323,11 @@ class AiClient:
         system = (
             "Du liest Stellenanzeigen aus. Antworte nur mit einem JSON-Objekt "
             'der Form {"titel": "...", "beschreibung": "...", '
-            '"kontakt_email": "..."}. '
+            '"kontakt_email": "...", "ansprechperson": "..."}. '
+            "ansprechperson ist die Ansprechperson der Anzeige mit Anrede, also "
+            "\"Herr Müller\" oder \"Frau Meier\" (nur der Nachname). Steht in "
+            "der Anzeige kein Herr/Frau, bleibt ansprechperson leer - raten Sie "
+            "das Geschlecht nie. "
             "Der Titel ist die reine Berufsbezeichnung in der maennlichen Form, "
             "ohne (m/w/d), (gn*), (all genders) und ohne Nummern oder IDs des "
             "Anbieters. Die Beschreibung enthaelt nur Angaben zur Stelle "
@@ -335,7 +351,13 @@ class AiClient:
             address = str(data.get("kontakt_email") or "").strip()
             if "@" not in address:
                 address = local.contact_email
-            return JobDigest(title=title, description=description, contact_email=address)
+            person = contact_person(str(data.get("ansprechperson") or ""))
+            return JobDigest(
+                title=title,
+                description=description,
+                contact_email=address,
+                contact_name=person or local.contact_name,
+            )
         except (urllib.error.URLError, OSError, ValueError, KeyError) as exc:
             log.info("KI-Auslesen der Anzeige fehlgeschlagen (%s) - lokal weiter", exc)
             return local
@@ -358,6 +380,9 @@ class AiClient:
             "Du schreibst Bewerbungsmails auf Deutsch. Antworte nur mit einem "
             'JSON-Objekt der Form {"betreff": "...", "text": "..."}. '
             "Der Betreff nennt die Stelle in der maennlichen Form und die Firma. "
+            "Die Anrede lautet \"Sehr geehrter Herr <Nachname>\" oder \"Sehr "
+            "geehrte Frau <Nachname>\", wenn eine Ansprechperson genannt ist, "
+            "sonst \"Sehr geehrte Damen und Herren\". "
             "Der Text ist eine formelle, persoenliche Mail (rund 150 bis 250 "
             "Woerter) mit Anrede, Bezug auf die Stelle, zwei bis drei Bezuegen "
             "zwischen Anforderungen und den Faehigkeiten des Bewerbers und einer "
@@ -376,6 +401,7 @@ class AiClient:
             f"Firma: {job.company}\n"
             f"Ort: {job.city}\n"
             f"Pensum: {job.workload}\n"
+            f"Ansprechperson: {digest.contact_name or '-'}\n"
             f"Beschreibung: {digest.description[:3000]}\n\n"
             f"Bisherige Vorlage als Stilvorgabe:\n"
             f"Betreff: {template.subject}\n{template.body[:2000]}"
@@ -406,7 +432,10 @@ class AiClient:
         system = (
             "Du schreibst ein Bewerbungsanschreiben auf Deutsch. Antworte nur "
             'mit einem JSON-Objekt der Form {"anschreiben": "..."}. '
-            "Das Anschreiben beginnt mit der Anrede (ohne Adressblock), nennt "
+            "Das Anschreiben beginnt mit der Anrede (ohne Adressblock): "
+            "\"Sehr geehrter Herr <Nachname>\" oder \"Sehr geehrte Frau "
+            "<Nachname>\", wenn eine Ansprechperson genannt ist, sonst "
+            "\"Sehr geehrte Damen und Herren\". Danach nennt es "
             "die Stelle in der maennlichen Form, verbindet zwei bis drei "
             "Anforderungen mit den Faehigkeiten des Bewerbers und endet mit "
             "einer Schlussformel und dem Namen. Rund 250 bis 350 Woerter, "
@@ -421,6 +450,7 @@ class AiClient:
             f"Interessen: {', '.join(self.settings.interests()) or '-'}\n\n"
             f"Stelle: {digest.title}\n"
             f"Firma: {job.company}\n"
+            f"Ansprechperson: {digest.contact_name or '-'}\n"
             f"Beschreibung: {digest.description[:3000]}"
         )
         try:

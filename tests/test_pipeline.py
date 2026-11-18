@@ -114,7 +114,6 @@ def _pipeline(
     tmp_path,
     *,
     jobs=None,
-    auto_draft=True,
     outlook=None,
     ai=None,
     imap=None,
@@ -124,8 +123,6 @@ def _pipeline(
     settings.set("search.api_enabled", api_enabled)
     settings.set("search.queries", ["Spedition"])
     settings.set("matching.min_score", 2)
-    settings.set("matching.auto_draft", auto_draft)
-    settings.set("matching.max_drafts_per_run", 5)
     settings.set("documents.attach", False)
     store = Store(tmp_path / "daten.db")
     outlook = outlook or FakeOutlook()
@@ -152,31 +149,35 @@ def test_search_api_off_by_default(tmp_path) -> None:
     assert settings.flag("search.api_enabled") is False
 
 
-def test_run_search_creates_one_draft(tmp_path) -> None:
+def test_run_search_marks_jobs_without_draft(tmp_path) -> None:
     pipeline, store, outlook, _ = _pipeline(tmp_path)
     summary = pipeline.run_search(datetime(2026, 11, 18, 7, 30, tzinfo=timezone.utc))
     assert summary.found == 2
     assert summary.new == 2
     assert summary.matched == 1
-    assert summary.drafts == 1
+    assert summary.drafts == 0
+    assert outlook.drafts == []
+    assert store.list_applications() == []
+    assert store.get_job("ostjob:1")["status"] == "passend"
+    assert store.get_job("ostjob:2")["status"] == "ohne_passung"
+
+    application_id = pipeline.prepare_application(MATCHING.id)
+    assert application_id > 0
     assert len(outlook.drafts) == 1
     draft = outlook.drafts[0]
     assert "Muster Logistik AG" in draft["body"]
     assert draft["to"] == "bewerbung@muster-logistik.ch"
-
     applications = store.list_applications()
     assert len(applications) == 1
     assert applications[0]["template_id"] == "spedition"
     assert applications[0]["status"] == "entwurf"
     assert store.get_job("ostjob:1")["status"] == "beworben"
-    assert store.get_job("ostjob:2")["status"] == "ohne_passung"
-    assert "Entwurf" in store.events()[0]["message"] or store.events()
 
 
 def test_ai_writes_mail_and_cover_letter(tmp_path) -> None:
     pipeline, store, outlook, _ = _pipeline(tmp_path, ai=WritingAI())
-    summary = pipeline.run_search(datetime(2026, 11, 18, 7, 30, tzinfo=timezone.utc))
-    assert summary.drafts == 1
+    pipeline.run_search(datetime(2026, 11, 18, 7, 30, tzinfo=timezone.utc))
+    pipeline.prepare_application(MATCHING.id)
     draft = outlook.drafts[0]
     assert draft["subject"] == "Bewerbung als Speditionskaufmann"
     assert draft["to"] == "ki@muster-logistik.ch"
@@ -192,23 +193,28 @@ def test_ai_writes_mail_and_cover_letter(tmp_path) -> None:
 def test_second_run_does_not_duplicate(tmp_path) -> None:
     pipeline, store, outlook, _ = _pipeline(tmp_path)
     pipeline.run_search()
+    pipeline.prepare_application(MATCHING.id)
     pipeline.run_search()
     assert len(outlook.drafts) == 1
     assert len(store.list_applications()) == 1
 
 
-def test_no_draft_when_automation_off(tmp_path) -> None:
-    pipeline, store, outlook, _ = _pipeline(tmp_path, auto_draft=False)
-    summary = pipeline.run_search()
-    assert summary.matched == 1
-    assert summary.drafts == 0
-    assert outlook.drafts == []
-    assert store.get_job("ostjob:1")["status"] == "passend"
+def test_draft_uses_known_contact_person(tmp_path) -> None:
+    job = _job("1", "Speditionskaufmann", "Disposition, Transport und Zoll", ["Spedition"])
+    job.contact_name = "Frau Meier"
+    pipeline, store, outlook, _ = _pipeline(tmp_path, jobs=[job])
+    pipeline.run_search()
+    pipeline.prepare_application(job.id)
+    body = outlook.drafts[0]["body"]
+    assert body.startswith("Sehr geehrte Frau Meier")
+    assert "Sehr geehrte Damen und Herren" not in body
+    assert store.get_job(job.id)["contact_name"] == "Frau Meier"
 
 
 def test_sync_sent_marks_application(tmp_path) -> None:
     pipeline, store, outlook, _ = _pipeline(tmp_path)
     pipeline.run_search()
+    pipeline.prepare_application(MATCHING.id)
     outlook.sent = {"id": "s1", "sentDateTime": "2026-11-18T08:15:00Z"}
     assert pipeline.sync_sent() == 1
     application = store.list_applications()[0]
@@ -221,6 +227,7 @@ def test_sync_sent_marks_application(tmp_path) -> None:
 def test_reply_rejection_archives(tmp_path) -> None:
     pipeline, store, outlook, _ = _pipeline(tmp_path)
     pipeline.run_search()
+    pipeline.prepare_application(MATCHING.id)
     outlook.sent = {"sentDateTime": "2026-11-18T08:15:00+00:00"}
     pipeline.sync_sent()
     outlook.messages = [
@@ -249,6 +256,7 @@ def test_reply_rejection_archives(tmp_path) -> None:
 def test_reply_invitation_notifies(tmp_path) -> None:
     pipeline, store, outlook, _ = _pipeline(tmp_path)
     pipeline.run_search()
+    pipeline.prepare_application(MATCHING.id)
     application = store.list_applications()[0]
     store.update_application(
         application["id"], status="gesendet", sent_at="2026-11-15T08:00:00+00:00"
@@ -322,7 +330,25 @@ def test_imap_provider_uses_imap_client(tmp_path) -> None:
     imap = FakeOutlook()
     pipeline, store, outlook, settings = _pipeline(tmp_path, imap=imap)
     settings.set("mail.provider", "imap")
-    summary = pipeline.run_search()
-    assert summary.drafts == 1
+    pipeline.run_search()
+    pipeline.prepare_application(MATCHING.id)
     assert len(imap.drafts) == 1
     assert len(outlook.drafts) == 0
+
+
+def test_ai_greeting_is_replaced_with_contact(tmp_path) -> None:
+    job = _job("1", "Speditionskaufmann", "Disposition, Transport und Zoll", ["Spedition"])
+    job.contact_name = "Herr Müller"
+
+    class NamedAI(WritingAI):
+        def job_digest(self, job):
+            digest = local_digest(job)
+            digest.contact_name = "Herr Müller"
+            return digest
+
+    pipeline, store, outlook, _ = _pipeline(tmp_path, jobs=[job], ai=NamedAI())
+    pipeline.run_search()
+    pipeline.prepare_application(job.id)
+    body = outlook.drafts[0]["body"]
+    assert body.startswith("Sehr geehrter Herr Müller")
+    assert "Sehr geehrte Damen und Herren" not in body

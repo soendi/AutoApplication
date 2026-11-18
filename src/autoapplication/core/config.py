@@ -51,8 +51,6 @@ DEFAULTS: dict[str, Any] = {
     },
     "matching": {
         "min_score": 2,
-        "auto_draft": True,
-        "max_drafts_per_run": 5,
     },
     "ai": {
         "enabled": False,

@@ -31,6 +31,7 @@ JOB_FIELDS = {
     "status",
     "template_id",
     "contact_email",
+    "contact_name",
     "last_seen",
 }
 
@@ -78,6 +79,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     score INTEGER NOT NULL DEFAULT 0,
     template_id TEXT NOT NULL DEFAULT '',
     contact_email TEXT NOT NULL DEFAULT '',
+    contact_name TEXT NOT NULL DEFAULT '',
     raw TEXT NOT NULL DEFAULT '{}'
 );
 CREATE TABLE IF NOT EXISTS applications (
@@ -135,6 +137,16 @@ class Store:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self._db() as db:
             db.executescript(SCHEMA)
+            self._migrate(db)
+
+    @staticmethod
+    def _migrate(db: sqlite3.Connection) -> None:
+        """Fehlende Spalten in bestehenden Ablagen nachruesten."""
+        columns = {row["name"] for row in db.execute("PRAGMA table_info(jobs)")}
+        if "contact_name" not in columns:
+            db.execute(
+                "ALTER TABLE jobs ADD COLUMN contact_name TEXT NOT NULL DEFAULT ''"
+            )
 
     # ------------------------------------------------------------------
     @contextmanager
@@ -176,8 +188,8 @@ class Store:
                 INSERT INTO jobs (
                     id, source, source_id, title, company, city, zip, canton,
                     workload, url, published, description, keywords, distance_km,
-                    first_seen, last_seen, contact_email, raw
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    first_seen, last_seen, contact_email, contact_name, raw
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     row["id"],
@@ -197,6 +209,7 @@ class Store:
                     stamp,
                     stamp,
                     row.get("contact_email") or job.contact_address(),
+                    row.get("contact_name") or "",
                     row["raw"],
                 ),
             )

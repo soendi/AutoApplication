@@ -25,7 +25,7 @@ from .ai import (
     local_digest,
 )
 from .config import Settings, templates_path, token_path
-from .documents import collect, describe, write_cover_letter
+from .documents import collect, write_cover_letter
 from .imap_mail import GmailImapClient, ImapError
 from .models import Job
 from .ostjob import OstjobClient, OstjobError, search_jobs
@@ -46,6 +46,7 @@ from .text import (
     normalize,
     now_iso,
     parse_date,
+    salutation,
     short,
 )
 
@@ -76,7 +77,6 @@ class RunSummary:
             f"{self.found} Stellen geprüft",
             f"{self.new} neu",
             f"{self.matched} passend",
-            f"{self.drafts} Entwürfe",
         ]
         if self.skipped:
             parts.append(f"{self.skipped} ohne Passung")
@@ -202,6 +202,7 @@ class Pipeline:
         day: date | None = None,
     ) -> tuple[str, str]:
         """Betreff und Mailtext - per KI, sonst aus der Vorlage."""
+        anrede = salutation(digest.contact_name or job.contact_name)
         method = getattr(self._ai, "write_application", None)
         if callable(method):
             try:
@@ -210,11 +211,30 @@ class Pipeline:
                 log.warning("KI-Bewerbungstext fehlgeschlagen: %s", exc)
                 written = None
             if written and written[0] and written[1]:
-                return written
-        return render_mail(template, self.settings.profile(), job, day=day)
+                return written[0], self._with_salutation(written[1], anrede)
+        return render_mail(
+            template,
+            self.settings.profile(),
+            job,
+            day=day,
+            extra={"anrede": anrede},
+        )
+
+    @staticmethod
+    def _with_salutation(text: str, anrede: str) -> str:
+        """Erste Anredezeile durch die passende Anrede ersetzen."""
+        if not text or anrede.startswith("Sehr geehrte Damen und Herren"):
+            return text
+        lines = text.splitlines()
+        for index, line in enumerate(lines):
+            if line.strip().lower().startswith("sehr geehrte"):
+                lines[index] = anrede
+                return "\n".join(lines)
+        return f"{anrede}\n\n{text}"
 
     def _cover_letter(self, job: Job, digest: JobDigest, fallback: str) -> str:
         """Anschreiben fuer den Anhang - per KI, sonst der Mailtext."""
+        anrede = salutation(digest.contact_name or job.contact_name)
         method = getattr(self._ai, "cover_letter", None)
         if callable(method):
             try:
@@ -223,8 +243,8 @@ class Pipeline:
                 log.warning("KI-Anschreiben fehlgeschlagen: %s", exc)
                 text = None
             if text:
-                return text
-        return fallback
+                return self._with_salutation(text, anrede)
+        return self._with_salutation(fallback, anrede)
 
     def _attachments(
         self,
@@ -280,8 +300,6 @@ class Pipeline:
 
         summary.found = len(jobs)
         min_score = int(self.settings.number("matching.min_score", 2) or 2)
-        auto_draft = self.settings.flag("matching.auto_draft", True)
-        remaining = int(self.settings.number("matching.max_drafts_per_run", 5) or 5)
 
         for job in jobs:
             is_new = self.store.upsert_job(job, now=stamp)
@@ -304,12 +322,14 @@ class Pipeline:
                     title=digest.title or job.title,
                     description=digest.description or job.description,
                     contact_email=digest.contact_email or job.contact_email,
+                    contact_name=digest.contact_name or job.contact_name,
                 )
                 self.store.update_job(
                     job.id,
                     title=job.title,
                     description=job.description,
                     contact_email=job.contact_email,
+                    contact_name=job.contact_name,
                 )
             else:
                 stored_job = Job.from_row(known)
@@ -318,6 +338,7 @@ class Pipeline:
                     title=stored_job.title or job.title,
                     description=stored_job.description or job.description,
                     contact_email=stored_job.contact_email or job.contact_email,
+                    contact_name=stored_job.contact_name or job.contact_name,
                 )
                 digest = local_digest(job)
 
@@ -335,60 +356,20 @@ class Pipeline:
                 continue
 
             summary.matched += 1
-            if not auto_draft or remaining <= 0:
-                self.store.update_job(job.id, status="passend")
-                continue
-
-            subject, body = self._write_mail(template, job, digest, moment.date())
-            attachments = self._attachments(job, digest, body, moment.date())
-            draft_id = ""
-            conversation_id = ""
-            web_link = ""
-            problem = ""
-            if self.outlook_ready():
-                try:
-                    draft = self.outlook().create_draft(
-                        subject,
-                        body,
-                        job.contact_address(),
-                        attachments,
-                    )
-                    draft_id = str(draft.get("id") or "")
-                    conversation_id = str(draft.get("conversationId") or "")
-                    web_link = str(draft.get("webLink") or "")
-                except (OutlookError, ImapError) as exc:
-                    problem = str(exc)
-                    summary.errors.append(problem)
-                    self.store.log("fehler", f"E-Mail-Entwurf: {problem}")
-            application_id = self.store.add_application(
-                job.id,
-                template.id,
-                subject,
-                body,
-                draft_id=draft_id,
-                conversation_id=conversation_id,
-                web_link=web_link,
-                status=STATUS_ENTWURF,
-                created_at=stamp,
-            )
-            self.store.update_job(job.id, status="beworben")
+            # Entwuerfe entstehen nur noch auf Klick in der Stellenliste,
+            # damit zuerst die gefundenen Stellen geprueft werden koennen.
+            self.store.update_job(job.id, status="passend")
             self.store.log(
-                "bewerbung",
+                "stelle",
                 (
-                    f"Entwurf für {job.title} bei {job.company} "
+                    f"Passend: {job.title} bei {job.company} "
                     f"({template.name}, {score} Stichworte: {', '.join(matches[:4])})"
-                    + ("" if attachments else ", ohne Anhänge")
-                    + (f" – {describe(attachments or [])}" if attachments else "")
                 ),
             )
-            remaining -= 1
-            summary.drafts += 1
-            if application_id and problem:
-                self.store.update_application(application_id, reply_note=problem)
             if is_new:
                 self.notify(
-                    "Bewerbung vorbereitet",
-                    f"{job.company}: {job.title} liegt als Entwurf bereit.",
+                    "Neue passende Stelle",
+                    f"{job.company}: {job.title} – unter Stellen ansehen.",
                 )
 
         self.store.meta_set("letzter_lauf", stamp)
@@ -407,12 +388,14 @@ class Pipeline:
             title=digest.title or job.title,
             description=digest.description or job.description,
             contact_email=digest.contact_email or job.contact_email,
+            contact_name=digest.contact_name or job.contact_name,
         )
         self.store.update_job(
             job.id,
             title=job.title,
             description=job.description,
             contact_email=job.contact_email,
+            contact_name=job.contact_name,
         )
         templates = self.templates()
         keywords = self._ai.keywords(
@@ -480,6 +463,7 @@ class Pipeline:
             extra={
                 "bewerbungsdatum": format_date(application.get("sent_at")),
                 "tage": str(days),
+                "anrede": salutation(job.contact_name if job else ""),
             },
         )
         draft_id = ""
@@ -699,7 +683,6 @@ class Pipeline:
             self.sync_sent()
             if self.settings.flag("automation.check_replies", True):
                 self.check_replies()
-            self.prepare_follow_ups(moment)
         except (OutlookError, ImapError) as exc:
             summary.errors.append(str(exc))
             self.store.log("fehler", f"E-Mail-Anbindung: {exc}")

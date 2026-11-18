@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from .models import Job
-from .text import format_date, has_term, normalize, split_terms
+from .text import format_date, has_term, normalize, salutation, split_terms
 
 log = logging.getLogger(__name__)
 
@@ -117,7 +117,34 @@ def load_templates(path: Path) -> list[Template]:
     except (OSError, ValueError) as exc:
         log.warning("Vorlagen nicht lesbar (%s) - Standardvorlagen", exc)
         templates = load_defaults()
-    return templates or load_defaults()
+    templates = templates or load_defaults()
+    if _upgrade(templates):
+        try:
+            save_templates(path, templates)
+        except OSError as exc:
+            log.warning("Vorlagen nicht speicherbar: %s", exc)
+    return templates
+
+
+def _upgrade(templates: list[Template]) -> bool:
+    """Bestehende Vorlagen nachziehen (Anrede-Platzhalter, Branchen-Strenge)."""
+    broad = {"Produktion", "Montage", "Maschinenbedienung"}
+    changed = False
+    for template in templates:
+        if (
+            "{anrede}" not in template.body
+            and template.body.lstrip().startswith("Sehr geehrte Damen und Herren")
+        ):
+            template.body = template.body.replace(
+                "Sehr geehrte Damen und Herren", "{anrede}", 1
+            )
+            changed = True
+        if template.id == "lager":
+            kept = [keyword for keyword in template.keywords if keyword not in broad]
+            if kept != template.keywords:
+                template.keywords = kept
+                changed = True
+    return changed
 
 
 def vocabulary(templates: list[Template]) -> list[str]:
@@ -157,15 +184,30 @@ def choose_template(
     Bewerbung fuer eine Stelle, die nur zufaellig ein Wort enthaelt.
     """
     best: Template | None = None
+    best_rank = 0
     best_score = 0
     best_matches: list[str] = []
+    best_title_hits: list[str] = []
     for template in templates:
         if template.follow_up:
             continue
         score, matched = score_template(template, job, keywords)
-        if score > best_score:
-            best, best_score, best_matches = template, score, matched
-    if best is None or best_score < max(1, int(min_score)):
+        title_hits = [item for item in matched if has_term(job.title, item)]
+        rank = score + len(title_hits)  # Treffer im Titel wiegen doppelt
+        if rank > best_rank:
+            best, best_rank, best_score, best_matches = (
+                template,
+                rank,
+                score,
+                matched,
+            )
+            best_title_hits = title_hits
+    needed = max(1, int(min_score))
+    if best is None or best_score < needed:
+        return None, best_score, best_matches
+    # Ohne Treffer im Titel nur bei deutlich mehr Stichworten im Text: so
+    # entstehen keine Bewerbungen fuer fremde Branchen.
+    if not best_title_hits and best_score < needed + 1:
         return None, best_score, best_matches
     return best, best_score, best_matches
 
@@ -213,6 +255,8 @@ def context_for(
         "interessen": profile.get("interessen", ""),
         "faehigkeiten": profile.get("faehigkeiten", ""),
         "datum": day.strftime("%d.%m.%Y"),
+        "anrede": "Sehr geehrte Damen und Herren",
+        "ansprechperson": "",
         "firma": "",
         "titel": "",
         "ort": "",
@@ -231,6 +275,8 @@ def context_for(
                 "pensum": job.workload,
                 "stellen_id": job.source_id,
                 "quelle": "ostjob.ch" if job.source == "ostjob" else job.source,
+                "anrede": salutation(job.contact_name),
+                "ansprechperson": job.contact_name,
             }
         )
     if extra:

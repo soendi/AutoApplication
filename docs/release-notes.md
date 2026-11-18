@@ -1,3 +1,27 @@
+## AutoApplication 1.0.7
+
+Anreden mit Namen, Entwürfe nur auf Klick und strengere Stellenpassung.
+
+### Neu
+
+- **Anrede mit Ansprechperson.** Nennt die Anzeige „Herr …“ oder „Frau …“,
+  beginnt Mail und Anschreiben mit „Sehr geehrter Herr Müller“ bzw.
+  „Sehr geehrte Frau Meier“. Ohne klare Angabe bleibt es bei „Sehr geehrte
+  Damen und Herren“ – geraten wird nicht. Der neue Platzhalter `{anrede}`
+  steht in allen Vorlagen, `{ansprechperson}` liefert den Namen.
+- **Keine automatischen Entwürfe mehr.** Der Tageslauf merkt passende Stellen
+  nur vor; Betreff, Mailtext und Anschreiben entstehen erst mit
+  „E-Mail vorbereiten“ in der Stellenliste. Auch Nachfragen werden nur noch
+  auf Klick erzeugt.
+- **Strengere Passung.** Eine Stelle gilt nur als passend, wenn ein
+  Vorlagen-Stichwort im Titel steht oder deutlich mehr Stichworte in der
+  Anzeige vorkommen. Die Vorlage „Lager und Produktion“ enthält keine
+  allgemeinen Industriebegriffe (Produktion, Montage, Maschinenbedienung)
+  mehr – damit fallen branchenfremde Anzeigen (z. B. Metallverarbeitung)
+  heraus.
+- Bestehende `vorlagen.json` wird beim Start automatisch nachgezogen
+  (Anrede-Platzhalter, bereinigte Stichworte).
+
 ## AutoApplication 1.0.6
 
 Gmail ohne Microsoft-Konto: neue Anbindung über IMAP und SMTP mit App-Passwort.

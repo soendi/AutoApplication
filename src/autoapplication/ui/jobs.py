@@ -54,6 +54,11 @@ class JobsPage(QWidget):
         for key, label in STATUS_LABELS.items():
             self.status.addItem(label, key)
         self.status.currentIndexChanged.connect(self.refresh)
+        # Zuerst die passenden Stellen zeigen; fremde Branchen stehen unter
+        # "Ohne Passung" und lassen sich bewusst einblenden.
+        index = self.status.findData("passend")
+        if index >= 0:
+            self.status.setCurrentIndex(index)
         filters.addWidget(self.search, 1)
         filters.addWidget(self.status)
         layout.addLayout(filters)
@@ -74,7 +79,7 @@ class JobsPage(QWidget):
 
         buttons = QHBoxLayout()
         buttons.setSpacing(8)
-        self.prepare_button = QPushButton("Bewerbung vorbereiten")
+        self.prepare_button = QPushButton("E-Mail vorbereiten")
         self.prepare_button.setObjectName("Primary")
         self.prepare_button.clicked.connect(self.prepare)
         self.open_button = QPushButton("Stelle öffnen")

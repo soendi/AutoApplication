@@ -27,6 +27,7 @@ class Job:
     url: str = ""
     apply_url: str = ""
     contact_email: str = ""
+    contact_name: str = ""
     published: str = ""
     description: str = ""
     keywords: list[str] = field(default_factory=list)
@@ -96,6 +97,7 @@ class Job:
             "url": self.url,
             "published": self.published_date(),
             "description": self.description,
+            "contact_name": self.contact_name,
             "keywords": json.dumps(self.keywords, ensure_ascii=False),
             "distance_km": self.distance_km,
             "raw": json.dumps(self.raw, ensure_ascii=False),
@@ -124,6 +126,7 @@ class Job:
             url=str(row.get("url") or ""),
             apply_url=str((raw or {}).get("urlApplication") or ""),
             contact_email=str(row.get("contact_email") or ""),
+            contact_name=str(row.get("contact_name") or ""),
             published=str(row.get("published") or ""),
             description=str(row.get("description") or ""),
             keywords=[str(item) for item in keywords],

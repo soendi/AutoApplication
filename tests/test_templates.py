@@ -126,3 +126,69 @@ def test_broken_file_uses_defaults(tmp_path) -> None:
     path.write_text("{kaputt", encoding="utf-8")
     loaded = load_templates(path)
     assert loaded == load_defaults()
+
+
+def test_defaults_use_salutation_placeholder() -> None:
+    templates = load_defaults()
+    assert all("{anrede}" in template.body for template in templates)
+
+
+def test_render_uses_contact_salutation() -> None:
+    templates = load_defaults()
+    template = next(item for item in templates if item.id == "spedition")
+    profile = {"vorname": "Erika", "nachname": "Muster", "wohnort": "Balgach"}
+    job = _job()
+    job.contact_name = "Herr Müller"
+    _subject, body = render_mail(template, profile, job)
+    assert body.startswith("Sehr geehrter Herr Müller")
+    assert "Sehr geehrte Damen und Herren" not in body
+
+
+def test_render_without_contact_uses_general_greeting() -> None:
+    templates = load_defaults()
+    template = next(item for item in templates if item.id == "spedition")
+    _subject, body = render_mail(template, {"vorname": "Erika"}, _job())
+    assert body.startswith("Sehr geehrte Damen und Herren")
+
+
+def test_template_needs_title_hit_or_one_more_keyword() -> None:
+    template = Template(
+        id="x", name="X", keywords=["Produktion", "Montage"], subject="S", body="B"
+    )
+    job = Job(
+        id="ostjob:9",
+        source="ostjob",
+        source_id="9",
+        title="Facharbeiter",
+        company="Firma AG",
+        description="Produktion und Montage",
+    )
+    chosen, score, _ = choose_template([template], job, [], 2)
+    assert chosen is None and score == 2
+
+    job.title = "Mitarbeiter Produktion"
+    chosen, score, _ = choose_template([template], job, [], 2)
+    assert chosen is not None and score == 2
+
+
+def test_old_templates_are_upgraded(tmp_path) -> None:
+    path = tmp_path / "vorlagen.json"
+    payload = {
+        "version": 1,
+        "templates": [
+            {
+                "id": "lager",
+                "name": "Lager",
+                "keywords": ["Lager", "Produktion", "Montage", "Maschinenbedienung"],
+                "subject": "S",
+                "body": "Sehr geehrte Damen und Herren\n\nText",
+            }
+        ],
+    }
+    path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    loaded = load_templates(path)
+    body = loaded[0].body
+    assert body.startswith("{anrede}")
+    assert "Produktion" not in loaded[0].keywords
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    assert "{anrede}" in saved["templates"][0]["body"]

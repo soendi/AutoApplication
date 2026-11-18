@@ -1,4 +1,4 @@
-# AutoApplication 1.0.6
+# AutoApplication 1.0.7
 
 Stellen von ostjob.ch suchen, Bewerbungen als Entwurf in Outlook oder Gmail
 vorbereiten und Antworten bis zur Zusage verfolgen – als Windows-Programm mit
@@ -19,28 +19,32 @@ stillen Updates.
    Stichworte bestimmt (per KI oder lokal aus den Portalangaben und dem
    Stichwortverzeichnis der Vorlagen). Interessen und Fähigkeiten aus dem Profil
    fliessen in die Auswertung ein.
-3. **Vorlage wählen.** Passt eine Stelle auf mindestens zwei Stichworte einer
-   Vorlage, wird daraus das Anschreiben. Beispiel: „Spedition“ und
-   „Disposition“ ergeben die Speditionsvorlage; „Sachbearbeitung“ und
-   „Kundendienst“ die Vorlage „Tapetenwechsel“. Reicht die Passung nicht, bleibt
-   die Stelle ohne Bewerbung.
-4. **Entwurf statt Versand.** Die KI schreibt Betreff und Mailtext sowie ein
-   Anschreiben, das als PDF an die Bewerbung gehängt wird. Dazu kommen die
-   Unterlagen aus dem Unterlagenordner (Lebenslauf, Zeugnisse, Diplome). Das
-   Ganze landet als **Entwurf in Outlook oder Gmail**. Geprüft und gesendet
-   wird von Hand.
+3. **Vorlage wählen.** Eine Stelle gilt als passend, wenn ein Stichwort der
+   Vorlage im Titel steht oder deutlich mehr Stichworte in der Anzeige
+   vorkommen. Beispiel: „Spedition“ und „Disposition“ ergeben die
+   Speditionsvorlage; „Sachbearbeitung“ und „Kundendienst“ die Vorlage
+   „Tapetenwechsel“. Reicht die Passung nicht, bleibt die Stelle ohne Bewerbung.
+   Passende Stellen werden nur vorgemerkt.
+4. **Entwurf auf Klick.** Erst wenn du eine Stelle in der Liste auswählst und
+   **„E-Mail vorbereiten“** wählst, schreibt die KI Betreff und Mailtext sowie
+   ein Anschreiben, das als PDF angehängt wird. Dazu kommen die Unterlagen aus
+   dem Unterlagenordner (Lebenslauf, Zeugnisse, Diplome). Die Anrede lautet
+   „Sehr geehrter Herr …“ oder „Sehr geehrte Frau …“, wenn die Anzeige eine
+   Ansprechperson mit Herr/Frau nennt; sonst „Sehr geehrte Damen und Herren“.
+   Der Entwurf landet in Outlook oder Gmail und wird von Hand gesendet.
 5. **Versand erkennen.** Taucht die Mail in „Gesendete Elemente“ auf, steht das
    Versanddatum in der Bewerbungstabelle.
 6. **Antworten auswerten.** Das Postfach wird auf Antworten der Firma geprüft –
    über die Unterhaltung, die Absenderdomain, den Firmennamen oder den
    Stellentitel. Eine **Absage** archiviert die Bewerbung, eine **Zusage** oder
    **Einladung** erscheint als Hinweis.
-7. **Nachfassen.** Ohne Antwort nach 14 Tagen legt AutoApplication eine
-   Nachfrage nach Vorlage als Entwurf bereit – einmal je Bewerbung.
+7. **Nachfassen.** Ohne Antwort nach 14 Tagen zeigt die Übersicht die
+   Bewerbung als fällig; auf Klick entsteht die Nachfrage nach Vorlage als
+   Entwurf – einmal je Bewerbung.
 
 ## Installation
 
-`AutoApplication-1.0.6-Setup.exe` von der
+`AutoApplication-1.0.7-Setup.exe` von der
 [Release-Seite](https://github.com/soendi/AutoApplication/releases/latest)
 herunterladen und ausführen. Windows 10 und 11, kein Administrator- und kein
 Python-Zubehör nötig.
@@ -174,6 +178,8 @@ Platzhalter in Betreff und Text:
 
 | Platzhalter | Inhalt |
 | --- | --- |
+| `{anrede}` | „Sehr geehrter Herr Müller“, „Sehr geehrte Frau Meier“ oder „Sehr geehrte Damen und Herren“ |
+| `{ansprechperson}` | Ansprechperson aus der Anzeige (z. B. `Frau Meier`) oder leer |
 | `{titel}` | Stellentitel |
 | `{firma}` | Firmenname |
 | `{ort}` | Arbeitsort |
@@ -188,8 +194,8 @@ Platzhalter in Betreff und Text:
 
 ## Automatik
 
-- **Täglicher Lauf** zur eingestellten Uhrzeit: Stellen suchen, Entwürfe
-  anlegen, Versand prüfen, Antworten auswerten, Nachfragen vorbereiten.
+- **Täglicher Lauf** zur eingestellten Uhrzeit: Stellen suchen, Versand
+  prüfen, Antworten auswerten. Entwürfe und Nachfragen entstehen nur auf Klick.
 - **Beim Start** läuft der Tageslauf einmal, wenn er heute noch nicht lief.
 - **Postfach prüfen** und **Nachfragen vorbereiten** gehen auch von Hand.
 

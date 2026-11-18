@@ -188,16 +188,18 @@ class SettingsPage(QWidget):
         # ------------------------------------------------------------------
         matching = QGroupBox("Bewerbungen")
         matching_form = QFormLayout(matching)
-        self.auto_draft = QCheckBox(
-            "Passende Stellen automatisch als Entwurf vorbereiten"
-        )
         self.min_score = QSpinBox()
         self.min_score.setRange(1, 10)
-        self.max_drafts = QSpinBox()
-        self.max_drafts.setRange(0, 50)
-        matching_form.addRow("", self.auto_draft)
         matching_form.addRow("Mindestens passende Stichworte", self.min_score)
-        matching_form.addRow("Entwürfe pro Lauf höchstens", self.max_drafts)
+        matching_hint = QLabel(
+            "Gefundene Stellen werden nur vorgemerkt. Den Entwurf bereiten Sie "
+            "in der Stellenliste mit einem Klick vor – erst dann entsteht eine "
+            "E-Mail. Als passend gilt eine Stelle, wenn ein Stichwort im Titel "
+            "steht oder deutlich mehr Stichworte in der Anzeige vorkommen."
+        )
+        matching_hint.setWordWrap(True)
+        matching_hint.setObjectName("Hint")
+        matching_form.addRow("", matching_hint)
         inner.addWidget(matching)
 
         # ------------------------------------------------------------------
@@ -427,9 +429,7 @@ class SettingsPage(QWidget):
         self.max_pages.setValue(int(settings.number("search.max_pages", 3)))
         self.max_age.setValue(int(settings.number("search.max_age_days", 45)))
 
-        self.auto_draft.setChecked(settings.flag("matching.auto_draft", True))
         self.min_score.setValue(int(settings.number("matching.min_score", 2)))
-        self.max_drafts.setValue(int(settings.number("matching.max_drafts_per_run", 5)))
 
         self.ai_enabled.setChecked(settings.flag("ai.enabled"))
         provider = settings.text("ai.provider", "openai").strip().lower()
@@ -507,9 +507,7 @@ class SettingsPage(QWidget):
         settings.set("search.max_pages", self.max_pages.value())
         settings.set("search.max_age_days", self.max_age.value())
 
-        settings.set("matching.auto_draft", self.auto_draft.isChecked())
         settings.set("matching.min_score", self.min_score.value())
-        settings.set("matching.max_drafts_per_run", self.max_drafts.value())
 
         settings.set("ai.enabled", self.ai_enabled.isChecked())
         settings.set("ai.provider", self.ai_provider.currentData() or "openai")

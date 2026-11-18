@@ -44,10 +44,11 @@ class TemplatesPage(QWidget):
         heading.setObjectName("CardTitle")
         layout.addWidget(heading)
         hint = QLabel(
-            "Passt eine Stelle auf mindestens zwei Stichworte einer Vorlage, "
-            "wird diese für das Anschreiben verwendet. Platzhalter: {titel}, "
-            "{firma}, {ort}, {pensum}, {stellen_id}, {vorname}, {nachname}, "
-            "{erfahrung}, {verfuegbar}."
+            "Eine Stelle gilt als passend, wenn ein Stichwort der Vorlage im "
+            "Titel steht oder deutlich mehr Stichworte in der Anzeige "
+            "vorkommen. Platzhalter: {anrede} (Herr/Frau mit Nachname, sonst "
+            "allgemein), {ansprechperson}, {titel}, {firma}, {ort}, {pensum}, "
+            "{stellen_id}, {vorname}, {nachname}, {erfahrung}, {verfuegbar}."
         )
         hint.setWordWrap(True)
         hint.setObjectName("Hint")

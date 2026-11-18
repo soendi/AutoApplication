@@ -10,6 +10,13 @@ from urllib.parse import urlparse
 
 _TAG_RE = re.compile(r"<[^>]+>")
 _EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
+_CONTACT_RE = re.compile(
+    r"\b(Herr|Frau)\s+([A-ZÄÖÜ][a-zäöüß\-]+(?:\s+[A-ZÄÖÜ][a-zäöüß\-]+)?)"
+)
+_CONTACT_STOP = {
+    "und", "oder", "von", "vom", "in", "im", "der", "die", "das", "den",
+    "bei", "mit", "für", "fuer", "als", "ihr", "ihre",
+}
 _SPACE_RE = re.compile(r"[ \t\u00a0]+")
 _WORD_RE = re.compile(r"[A-Za-zÄÖÜäöüß][A-Za-zÄÖÜäöüß0-9\-+/.]{1,}")
 
@@ -165,6 +172,40 @@ def format_workload(minimum: int | float | None, maximum: int | float | None) ->
     if low > high:
         low, high = high, low
     return f"{low}-{high} %"
+
+
+def contact_person(value: str | None) -> str:
+    """Ansprechperson aus der Anzeige: "Herr Müller" oder "Frau Meier".
+
+    Ohne klares ``Herr``/``Frau`` bleibt das Ergebnis leer - geraten wird
+    nicht, damit keine falsche Anrede entsteht.
+    """
+    text = strip_html(value)
+    if not text:
+        return ""
+    for match in _CONTACT_RE.finditer(text):
+        tokens = [
+            token
+            for token in match.group(2).split()
+            if token.lower() not in _CONTACT_STOP
+        ]
+        if not tokens:
+            continue
+        # Bei "Hans Müller" ist das letzte Wort der Nachname.
+        name = tokens[-1] if len(tokens) > 1 else tokens[0]
+        return f"{match.group(1)} {name}"
+    return ""
+
+
+def salutation(contact: str | None) -> str:
+    """Anrede aus "Herr Müller"/"Frau Meier"; sonst allgemein."""
+    text = (contact or "").strip()
+    lowered = text.lower()
+    if lowered.startswith("herr "):
+        return f"Sehr geehrter {text}"
+    if lowered.startswith("frau "):
+        return f"Sehr geehrte {text}"
+    return "Sehr geehrte Damen und Herren"
 
 
 def short(value: str | None, length: int = 120) -> str:

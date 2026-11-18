@@ -38,3 +38,16 @@ def test_description_is_cleaned() -> None:
     assert "123456" not in text
     assert "Lagermitarbeiter" in text
     assert "Gute Arbeit" in text
+
+
+def test_contact_person_from_ad() -> None:
+    from autoapplication.core.text import contact_person, salutation
+
+    assert contact_person("Ansprechperson: Herr Müller, Tel. 071 000") == "Herr Müller"
+    assert contact_person("Fragen an Frau Anna Meier gerne.") == "Frau Meier"
+    assert contact_person("Bewerbungen an das Team") == ""
+    assert contact_person("Herr von Arx") == ""
+    assert salutation("Herr Müller") == "Sehr geehrter Herr Müller"
+    assert salutation("Frau Meier") == "Sehr geehrte Frau Meier"
+    assert salutation("") == "Sehr geehrte Damen und Herren"
+    assert salutation("Müller") == "Sehr geehrte Damen und Herren"
