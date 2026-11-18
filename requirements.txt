@@ -1,1 +1,6 @@
 PySide6>=6.6
+# Texterkennung fuer Kontaktdaten, die nur als Bild in der Anzeige stehen
+winrt-Windows-Media-Ocr; sys_platform == "win32"
+winrt-Windows-Graphics-Imaging; sys_platform == "win32"
+winrt-Windows-Globalization; sys_platform == "win32"
+winrt-Windows-Storage-Streams; sys_platform == "win32"

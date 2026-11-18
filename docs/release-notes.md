@@ -1,3 +1,27 @@
+## AutoApplication 1.0.13
+
+Die Bewerbungsmail geht an die richtige Adresse und spricht die richtige Person
+an – notfalls nach einer kurzen Rückfrage.
+
+### Neu
+
+- **Kontaktdaten stehen im Entwurf.** E-Mail-Adresse und Ansprechperson werden
+  aus der Anzeige gelesen und beim Vorbereiten in den Entwurf übernommen; die
+  Adresse steht bereits im Feld «An» des Entwurfs.
+- **Texterkennung für Bilder.** Nennen Anzeigen den Kontakt nur in einem Bild,
+  liest die unter Windows eingebaute Texterkennung den Text aus den Bildern der
+  Anzeige und sucht darin nach Adresse und Ansprechperson.
+- **Rückfrage vor dem Entwurf.** Fehlt die Adresse oder die Ansprechperson auch
+  danach, erscheint vor dem Erzeugen der Mail ein Fenster: E-Mail-Adresse und
+  Ansprechperson («Herr …» oder «Frau …») eingeben, danach entsteht der Entwurf.
+  Die Angaben bleiben bei der Stelle gespeichert.
+
+### Geändert
+
+- Verschleierte Adressen wie `personal [at] firma [dot] ch` werden erkannt.
+- «Herrn Müller» wird als «Herr Müller» übernommen; Titel wie «Dr.» fallen bei
+  der Anrede weg.
+
 ## AutoApplication 1.0.12
 
 Die Vorlagen nennen jetzt die echten Stationen; die Erfahrungsjahre haben einen

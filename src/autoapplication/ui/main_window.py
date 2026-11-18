@@ -33,6 +33,7 @@ from ..core.store import Store
 from ..core.text import now_iso
 from .applications import ApplicationsPage
 from .branding import app_icon, logo_pixmap
+from .dialogs import ContactDialog
 from .jobs import JobsPage
 from .log_page import LogPage
 from .overview import OverviewPage
@@ -315,6 +316,33 @@ class MainWindow(QMainWindow):
         )
 
     def prepare_application(self, job_id: str) -> None:
+        """Erst Kontakt und Anrede klaeren, dann den Entwurf erstellen."""
+        self.run_task(
+            lambda: self.pipeline.contact_check(job_id),
+            done=lambda gaps: self._prepare_with_contact(job_id, list(gaps or [])),
+            busy="Kontaktdaten werden geprüft …",
+        )
+
+    def _prepare_with_contact(self, job_id: str, gaps: list[str]) -> None:
+        if gaps:
+            row = self.store.get_job(job_id) or {}
+            dialog = ContactDialog(
+                self,
+                title=str(row.get("title") or ""),
+                company=str(row.get("company") or ""),
+                email=str(row.get("contact_email") or ""),
+                person=str(row.get("contact_name") or ""),
+                need_email="email" in gaps,
+                need_person="anrede" in gaps,
+            )
+            if not dialog.exec():
+                self.statusBar().showMessage("Bewerbung nicht vorbereitet.", 8000)
+                return
+            email_value, person_value = dialog.values()
+            self.store.update_job(
+                job_id, contact_email=email_value, contact_name=person_value
+            )
+            self.refresh_all()
         self.run_task(
             lambda: self.pipeline.prepare_application(job_id),
             done=lambda _result: self.statusBar().showMessage(

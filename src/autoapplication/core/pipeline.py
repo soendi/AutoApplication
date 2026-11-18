@@ -14,6 +14,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+from . import ocr
 from .ai import (
     ABSAGE,
     EINLADUNG,
@@ -40,8 +41,10 @@ from .templates import (
     vocabulary,
 )
 from .text import (
+    contact_person,
     days_until,
     domain_of,
+    emails,
     format_date,
     normalize,
     now_iso,
@@ -185,15 +188,74 @@ class Pipeline:
     # ------------------------------------------------------------------
     def _digest(self, job: Job) -> JobDigest:
         """Anzeige auslesen - per KI, sonst lokal bereinigt."""
+        digest = local_digest(job)
         method = getattr(self._ai, "job_digest", None)
         if callable(method):
             try:
-                digest = method(job)
-                if isinstance(digest, JobDigest):
-                    return digest
+                found = method(job)
+                if isinstance(found, JobDigest):
+                    digest = found
             except Exception as exc:  # noqa: BLE001 - lokaler Rueckfall
                 log.warning("Anzeige konnte nicht gelesen werden: %s", exc)
-        return local_digest(job)
+        return self._with_image_contact(job, digest)
+
+    def _with_image_contact(self, job: Job, digest: JobDigest) -> JobDigest:
+        """Fehlenden Kontakt aus Bildern der Anzeige lesen (Texterkennung)."""
+        if digest.contact_email and digest.contact_name:
+            return digest
+        address, person = self._ocr_contact(job)
+        if not digest.contact_email and address:
+            digest.contact_email = address
+        if not digest.contact_name and person:
+            digest.contact_name = person
+        return digest
+
+    def _ocr_contact(self, job: Job) -> tuple[str, str]:
+        """Ansprechperson und Adresse aus den Bildern der Anzeige lesen."""
+        raw = job.raw if isinstance(job.raw, dict) else {}
+        html = " ".join(
+            str(value)
+            for value in raw.values()
+            if isinstance(value, str) and "<img" in value.lower()
+        )
+        if not html or not ocr.available():
+            return "", ""
+        text = ocr.text_from_html(html, job.url or job.apply_url)
+        if not text.strip():
+            return "", ""
+        addresses = emails(text)
+        return (addresses[0] if addresses else ""), contact_person(text)
+
+    def contact_check(self, job_id: str) -> list[str]:
+        """Vor dem Entwurf melden, welche Kontaktdaten noch fehlen.
+
+        Fehlendes wird zuerst aus Bildern der Anzeige gelesen; was danach
+        fehlt, fragt die Oberflaeche von Hand ab, bevor der Entwurf entsteht.
+        """
+        row = self.store.get_job(job_id)
+        if row is None:
+            return []
+        job = Job.from_row(row)
+        address = job.contact_address()
+        person = job.contact_name
+        if not address or not person:
+            found_address, found_person = self._ocr_contact(job)
+            updates: dict[str, Any] = {}
+            if not address and found_address:
+                address = found_address
+                updates["contact_email"] = found_address
+            if not person and found_person:
+                person = found_person
+                updates["contact_name"] = found_person
+            if updates:
+                self.store.update_job(job_id, **updates)
+                log.info("Kontakt aus der Anzeige gelesen: %s", job_id)
+        gaps: list[str] = []
+        if not address:
+            gaps.append("email")
+        if not person:
+            gaps.append("anrede")
+        return gaps
 
     def _write_mail(
         self,

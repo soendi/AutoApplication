@@ -1,4 +1,4 @@
-# AutoApplication 1.0.12
+# AutoApplication 1.0.13
 
 Stellen von ostjob.ch suchen, Bewerbungen als Entwurf in Outlook oder Gmail
 vorbereiten und Antworten bis zur Zusage verfolgen – als Windows-Programm mit
@@ -32,10 +32,13 @@ stillen Updates.
    Empfängeradresse links auf der Höhe des Fenstercouverts (rund 4,6 cm unter
    dem oberen Rand), Datum rechts, fetter Betreff, Grussformel mit Namen – ohne
    Linien und ohne Fusszeile. Dazu kommen die Unterlagen aus dem
-   Unterlagenordner (Lebenslauf, Zeugnisse, Diplome). Die Anrede lautet
-   „Sehr geehrter Herr …“ oder „Sehr geehrte Frau …“, wenn die Anzeige eine
-   Ansprechperson mit Herr/Frau nennt; sonst „Sehr geehrte Damen und Herren“.
-   Der Entwurf landet in Outlook oder Gmail und wird von Hand gesendet.
+   Unterlagenordner (Lebenslauf, Zeugnisse, Diplome). Die Adresse steht schon im
+   Feld „An“ des Entwurfs; die Anrede lautet „Sehr geehrter Herr …“ oder
+   „Sehr geehrte Frau …“, wenn die Anzeige eine Ansprechperson mit Herr/Frau
+   nennt. Steht der Kontakt in der Anzeige nur als Bild, liest ihn die
+   Texterkennung aus dem Bild. Fehlt danach immer noch etwas, fragt vor dem
+   Entwurf ein Fenster nach E-Mail-Adresse und Ansprechperson. Der Entwurf
+   landet in Outlook oder Gmail und wird von Hand gesendet.
 5. **Versand erkennen.** Taucht die Mail in „Gesendete Elemente“ auf, steht das
    Versanddatum in der Bewerbungstabelle.
 6. **Antworten auswerten.** Jede Bewerbung trägt eine einmalige Kennung
@@ -53,7 +56,7 @@ stillen Updates.
 
 ## Installation
 
-`AutoApplication-1.0.12-Setup.exe` von der
+`AutoApplication-1.0.13-Setup.exe` von der
 [Release-Seite](https://github.com/soendi/AutoApplication/releases/latest)
 herunterladen und ausführen. Windows 10 und 11, kein Administrator- und kein
 Python-Zubehör nötig.

@@ -1,7 +1,8 @@
-"""Dialog fuer die Outlook-Anmeldung (Geraetecode)."""
+"""Dialoge: Outlook-Anmeldung (Geraetecode) und fehlende Kontaktdaten."""
 
 from __future__ import annotations
 
+import re
 from typing import Any, Callable
 
 from PySide6.QtCore import Qt, QTimer, QUrl
@@ -10,6 +11,8 @@ from PySide6.QtWidgets import (
     QDialog,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
+    QMessageBox,
     QPushButton,
     QVBoxLayout,
 )
@@ -135,3 +138,111 @@ class DeviceLoginDialog(QDialog):
     def closeEvent(self, event: Any) -> None:  # noqa: N802 - Qt-Namensschema
         self._timer.stop()
         super().closeEvent(event)
+
+
+class ContactDialog(QDialog):
+    """Fragt E-Mail-Adresse und Ansprechperson ab, bevor der Entwurf entsteht."""
+
+    def __init__(
+        self,
+        parent: Any,
+        *,
+        title: str = "",
+        company: str = "",
+        email: str = "",
+        person: str = "",
+        need_email: bool = True,
+        need_person: bool = True,
+    ) -> None:
+        super().__init__(parent)
+        self.need_email = need_email
+        self.need_person = need_person
+
+        self.setWindowTitle("Kontakt für die Bewerbung")
+        self.resize(520, 0)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(18, 16, 18, 16)
+        layout.setSpacing(10)
+
+        heading = QLabel("Kontaktdaten ergänzen")
+        heading.setObjectName("CardTitle")
+        layout.addWidget(heading)
+
+        info = QLabel(
+            "In der Anzeige fehlt, an wen die Bewerbung geht. Bitte die Angaben "
+            "ergänzen – sie werden bei der Stelle gespeichert und für die Anrede "
+            "im Entwurf verwendet."
+        )
+        info.setWordWrap(True)
+        info.setObjectName("Hint")
+        layout.addWidget(info)
+
+        if title or company:
+            job = QLabel(" – ".join(part for part in (title, company) if part))
+            job.setWordWrap(True)
+            layout.addWidget(job)
+
+        layout.addWidget(QLabel("E-Mail-Adresse"))
+        self.email = QLineEdit(email)
+        self.email.setPlaceholderText("z. B. bewerbung@firma.ch")
+        layout.addWidget(self.email)
+
+        layout.addWidget(QLabel("Ansprechperson"))
+        self.person = QLineEdit(person)
+        self.person.setPlaceholderText("z. B. Frau Meier")
+        layout.addWidget(self.person)
+
+        hint = QLabel(
+            "Für eine persönliche Anrede «Herr …» oder «Frau …» angeben. Leer "
+            "lassen nur, wenn die Anzeige keine Person nennt."
+        )
+        hint.setWordWrap(True)
+        hint.setObjectName("Hint")
+        layout.addWidget(hint)
+
+        buttons = QHBoxLayout()
+        buttons.addStretch(1)
+        cancel = QPushButton("Abbrechen")
+        cancel.clicked.connect(self.reject)
+        confirm = QPushButton("Entwurf erstellen")
+        confirm.setObjectName("Primary")
+        confirm.setDefault(True)
+        confirm.clicked.connect(self.accept)
+        buttons.addWidget(cancel)
+        buttons.addWidget(confirm)
+        layout.addLayout(buttons)
+
+    def values(self) -> tuple[str, str]:
+        return self.email.text().strip(), self.person.text().strip()
+
+    def accept(self) -> None:
+        email, person = self.values()
+        if not email or "@" not in email or "." not in email.rsplit("@", 1)[-1]:
+            QMessageBox.warning(
+                self,
+                "E-Mail-Adresse",
+                "Bitte eine vollständige E-Mail-Adresse angeben, "
+                "z. B. bewerbung@firma.ch.",
+            )
+            self.email.setFocus()
+            return
+        if not person:
+            answer = QMessageBox.question(
+                self,
+                "Anrede",
+                "Ohne Ansprechperson fortfahren? Die Anrede lautet dann "
+                "«Sehr geehrte Damen und Herren».",
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                self.person.setFocus()
+                return
+        elif not re.match(r"(?i)^(herr|herrn|frau)\s+\S+", person):
+            QMessageBox.warning(
+                self,
+                "Ansprechperson",
+                "Bitte mit «Herr …» oder «Frau …» angeben, z. B. «Frau Meier».",
+            )
+            self.person.setFocus()
+            return
+        super().accept()

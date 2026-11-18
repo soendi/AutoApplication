@@ -13,6 +13,22 @@ datas = [
     ),
 ]
 
+OCR_MODULES = (
+    "{}.windows.media.ocr",
+    "{}.windows.graphics.imaging",
+    "{}.windows.globalization",
+    "{}.windows.storage.streams",
+)
+
+# Texterkennung nur einbinden, wenn sie auf dem Build-Rechner vorhanden ist.
+ocr_imports = []
+for package in ("winrt", "winsdk"):
+    try:
+        __import__(package)
+    except Exception:
+        continue
+    ocr_imports.extend(module.format(package) for module in OCR_MODULES)
+
 icon_file = ROOT / "packaging" / "autoapplication.ico"
 
 a = Analysis(
@@ -20,7 +36,7 @@ a = Analysis(
     pathex=[str(SRC)],
     binaries=[],
     datas=datas,
-    hiddenimports=[],
+    hiddenimports=ocr_imports,
     hookspath=[],
     runtime_hooks=[],
     excludes=[

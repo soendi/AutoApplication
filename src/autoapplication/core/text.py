@@ -10,9 +10,19 @@ from urllib.parse import urlparse
 
 _TAG_RE = re.compile(r"<[^>]+>")
 _EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
-_CONTACT_RE = re.compile(
-    r"\b(Herr|Frau)\s+([A-ZÄÖÜ][a-zäöüß\-]+(?:\s+[A-ZÄÖÜ][a-zäöüß\-]+)?)"
+_OBFUSCATED_AT = re.compile(r"\s*[\[\(\{]\s*(?:at|ät)\s*[\]\)\}]\s*", re.IGNORECASE)
+_OBFUSCATED_DOT = re.compile(
+    r"\s*[\[\(\{]\s*(?:dot|punkt)\s*[\]\)\}]\s*", re.IGNORECASE
 )
+_CONTACT_RE = re.compile(
+    r"\b(Herr|Herrn|Frau)\s+("
+    r"(?:[A-ZÄÖÜ][a-zäöüß]{1,4}\.\s+)*"  # Titel wie "Dr. "
+    r"[A-ZÄÖÜ][a-zäöüß\-]+(?:\s+[A-ZÄÖÜ][a-zäöüß\-]+)?"
+    r")"
+)
+_CONTACT_TITLES = {
+    "dr", "prof", "dipl", "med", "phil", "ing", "lic", "hans",
+}
 _CONTACT_STOP = {
     "und", "oder", "von", "vom", "in", "im", "der", "die", "das", "den",
     "bei", "mit", "für", "fuer", "als", "ihr", "ihre",
@@ -67,7 +77,8 @@ def split_terms(value: str | None, separator: str = ",") -> list[str]:
 
 
 def emails(value: str | None) -> list[str]:
-    return _EMAIL_RE.findall(html.unescape(str(value or "")))
+    text = deobfuscate(html.unescape(str(value or "")))
+    return _EMAIL_RE.findall(text)
 
 
 def domain_of(value: str | None) -> str:
@@ -174,6 +185,16 @@ def format_workload(minimum: int | float | None, maximum: int | float | None) ->
     return f"{low}-{high} %"
 
 
+def deobfuscate(value: str | None) -> str:
+    """Verschleierte Adressen lesbar machen: "personal [at] firma [dot] ch"."""
+    text = str(value or "")
+    if not any(marker in text for marker in ("[", "(", "{")):
+        return text
+    text = _OBFUSCATED_AT.sub("@", text)
+    text = _OBFUSCATED_DOT.sub(".", text)
+    return text
+
+
 def contact_person(value: str | None) -> str:
     """Ansprechperson aus der Anzeige: "Herr Müller" oder "Frau Meier".
 
@@ -188,12 +209,14 @@ def contact_person(value: str | None) -> str:
             token
             for token in match.group(2).split()
             if token.lower() not in _CONTACT_STOP
+            and token.lower().rstrip(".") not in _CONTACT_TITLES
         ]
         if not tokens:
             continue
         # Bei "Hans Müller" ist das letzte Wort der Nachname.
         name = tokens[-1] if len(tokens) > 1 else tokens[0]
-        return f"{match.group(1)} {name}"
+        title = "Herr" if match.group(1).lower() == "herrn" else match.group(1)
+        return f"{title} {name}"
     return ""
 
 
