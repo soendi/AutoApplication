@@ -1,4 +1,4 @@
-# AutoApplication 1.0.31
+# AutoApplication 1.0.32
 
 Stellen von ostjob.ch suchen, Bewerbungen als Entwurf in Outlook oder Gmail
 vorbereiten und Antworten bis zur Zusage verfolgen – als Windows-Programm mit
@@ -95,7 +95,8 @@ zählen dabei 60 %, die Fähigkeiten 40 %; ist nur eine der beiden Listen
 eingetragen, zählt sie allein. Dabei zählen auch verwandte Begriffe – «Lager»
 trifft «Kommissionierung», «IT» trifft «Helpdesk», «Büro» trifft
 «Sachbearbeitung». So genügen wenige Stichworte, statt jede Schreibweise
-einzeln aufzuzählen. Die Spalte
+einzeln aufzuzählen. Der höchste Prozentwert der Liste steht grün, der
+tiefste rot, dazwischen verläuft die Farbe über Gelb. Die Spalte
 **Briefvorlage** nennt die Vorlage, mit der das Anschreiben entstehen wird –
 zum Beispiel «Spedition und Logistik» oder «Allgemeine Bewerbung»; der
 Mauszeiger darüber nennt zusätzlich den Status. Steht dort «Allgemeine
@@ -132,7 +133,7 @@ vorhandene Adressen werden bei späteren Läufen nachgetragen.
 
 ## Installation
 
-`AutoApplication-1.0.31-Setup.exe` von der
+`AutoApplication-1.0.32-Setup.exe` von der
 [Release-Seite](https://github.com/soendi/AutoApplication/releases/latest)
 herunterladen und ausführen. Windows 10 und 11, kein Administrator- und kein
 Python-Zubehör nötig.

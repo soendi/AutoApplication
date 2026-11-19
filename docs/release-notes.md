@@ -1,3 +1,23 @@
+## AutoApplication 1.0.32
+
+Die Stellenliste zeigt die Trefferquote auf einen Blick: der beste Wert grün,
+der schwächste rot.
+
+### Neu
+
+- **Trefferquote farbig.** In der Spalte «Treffer» ist der höchste Prozentwert
+  der angezeigten Liste grün, der tiefste rot; dazwischen verläuft die Farbe
+  über Gelb. So ist die Rangfolge ohne Lesen der Zahlen erkennbar. Sind alle
+  Werte gleich, richtet sich die Farbe nach dem Wert selbst (100 % grün, 0 %
+  rot). Zellen mit «–» bleiben neutral.
+
+### Geaendert
+
+- **Zeilen nicht mehr nach Vorlage eingefärbt.** Die frühere Zeilenfarbe
+  richtete sich nach der Passung der Briefvorlage und war neben der
+  Trefferquote missverständlich. Jetzt tragen nur noch die Prozentwerte eine
+  Farbe.
+
 ## AutoApplication 1.0.31
 
 Die Statusleiste zeigt, wann der nächste Postfach-Abruf ansteht.

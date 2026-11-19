@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from PySide6.QtCore import Qt, QTimer, Signal
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QBrush, QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
 from ..core.matching import personal_fit, personal_match, priority_key
 from ..core.templates import load_templates
 from ..core.text import format_date, normalize
-from .theme import FIT_COLORS, FIT_LABELS, fit_level
+from .theme import FIT_LABELS, fit_level
 
 # Die offenen Status, die «Ungefiltert» zusammen zeigt.
 OPEN_STATUSES = ("neu", "ohne_passung", "passend", "allgemein")
@@ -62,6 +62,16 @@ COLUMNS = (
 )
 
 CHECK_COLUMN = 0
+HIT_COLUMN = 14
+
+
+def hit_color(percent: int, lowest: int, highest: int) -> QColor:
+    """Farbe fuer den Treffer: hoechster Wert gruen, tiefster rot."""
+    span = highest - lowest
+    ratio = (percent - lowest) / span if span > 0 else percent / 100
+    ratio = max(0.0, min(1.0, ratio))
+    # Von Rot (0) ueber Gelb nach Gruen (0.38 im HSV-Farbkreis).
+    return QColor.fromHsvF(0.38 * ratio, 0.55, 0.95)
 
 # Startbreiten; ab dem ersten Ziehen gilt, was der Benutzer eingestellt hat.
 DEFAULT_WIDTHS = (
@@ -203,6 +213,10 @@ class JobsPage(QWidget):
 
         self.table = QTableWidget(0, len(COLUMNS))
         self.table.setHorizontalHeaderLabels(list(COLUMNS))
+        self.table.horizontalHeaderItem(HIT_COLUMN).setToolTip(
+            "Treffer in Prozent. Grün ist der höchste Wert der Liste, "
+            "rot der tiefste."
+        )
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SingleSelection)
@@ -256,11 +270,9 @@ class JobsPage(QWidget):
         self.hint = QLabel("")
         self.hint.setObjectName("Hint")
         self.hint.setToolTip(
-            "Farbe der Zeile nach Passung:\n"
-            "Grün: deutlich über der Schwelle der Vorlage\n"
-            "Gelb: Schwelle erreicht\n"
-            "Orange: knapp darunter\n"
-            "Rot: kein Stichwort passt"
+            "Trefferquote in der Spalte Treffer:\n"
+            "Grün: höchster Wert in der Liste\n"
+            "Rot: tiefster Wert in der Liste"
         )
         buttons.addWidget(self.hint)
         layout.addLayout(buttons)
@@ -416,9 +428,11 @@ class JobsPage(QWidget):
         # Waehrend des Fuellens keine Rueckmeldung je Zelle auswerten.
         self._filling = True
         self.table.setRowCount(len(decorated))
+        percents = [item[3] for item in decorated if item[3] is not None]
+        lowest = min(percents) if percents else 0
+        highest = max(percents) if percents else 0
         for row, (job, found_interests, found_skills, percent) in enumerate(decorated):
             level = fit_level(int(job.get("score") or 0), min_score)
-            tint = QColor(FIT_COLORS[level])
             check = QTableWidgetItem("")
             check.setFlags(
                 Qt.ItemFlag.ItemIsEnabled
@@ -426,7 +440,6 @@ class JobsPage(QWidget):
                 | Qt.ItemFlag.ItemIsSelectable
             )
             check.setCheckState(Qt.CheckState.Unchecked)
-            check.setBackground(tint)
             check.setToolTip(
                 "Anhaken, um diese Stelle zusammen mit anderen zu ignorieren."
             )
@@ -458,7 +471,6 @@ class JobsPage(QWidget):
             )
             for column, value in enumerate(values, start=CHECK_COLUMN + 1):
                 item = QTableWidgetItem(str(value))
-                item.setBackground(tint)
                 if column == 1:
                     if value:
                         item.setToolTip("Bewerbungsformular")
@@ -501,8 +513,10 @@ class JobsPage(QWidget):
                         if found_skills
                         else "Keine Fähigkeit aus dem Profil in der Anzeige"
                     )
-                elif column == 14:
+                elif column == HIT_COLUMN:
                     item.setTextAlignment(Qt.AlignCenter)
+                    if percent is not None:
+                        item.setForeground(QBrush(hit_color(percent, lowest, highest)))
                     if percent is None:
                         item.setToolTip(
                             "Im Profil sind keine Interessen oder Fähigkeiten "
