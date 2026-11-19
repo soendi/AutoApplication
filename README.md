@@ -1,4 +1,4 @@
-# AutoApplication 1.0.29
+# AutoApplication 1.0.30
 
 Stellen von ostjob.ch suchen, Bewerbungen als Entwurf in Outlook oder Gmail
 vorbereiten und Antworten bis zur Zusage verfolgen – als Windows-Programm mit
@@ -86,19 +86,24 @@ stillen Updates.
 ## Stellenliste
 
 Der Tab **Stellen** zeigt je Anzeige: ein **F** für ein Bewerbungsformular,
-ein **Vorlage**-Feld, Datum, Titel, Ansprechperson, E-Mail, Firma, Ort, Adresse
-und PLZ sowie Pensum, Weg, Interesse, Fähigkeit, Treffer und Briefvorlage.
-Die Spalte **Briefvorlage** nennt die Vorlage, mit der das Anschreiben
-entstehen wird – zum Beispiel «Spedition und Logistik» oder «Allgemeine
-Bewerbung»; der Mauszeiger darüber nennt zusätzlich den Status. Die Spalte
+Datum, Titel, Ansprechperson, E-Mail, Firma, Ort, Adresse und PLZ sowie
+Pensum, Weg, Interesse, Fähigkeit, Treffer und Briefvorlage. Die Spalte
 **Treffer** zeigt in Prozent, wie viele Ihrer Interessen und Fähigkeiten in der
 Anzeige vorkommen: 100 % heisst, dass jedes hinterlegte Stichwort vorkommt,
-0 %, dass keines passt; ohne Einträge im Profil steht dort «–». Steht in der
-Spalte **Vorlage** «allgemein», passt keine besondere Vorlage – dann wird die
-Allgemeine Bewerbung verwendet und der Status ist **Allgemein** statt
-**Passend**. Der Statusfilter **Passend** zeigt damit nur Stellen mit mindestens
-einem passenden Stichwort; **Allgemein** oder **Alle Status** zeigen die
-übrigen. Das **F** steht auch dann, wenn das
+0 %, dass keines passt; ohne Einträge im Profil steht dort «–». Die Interessen
+zählen dabei 60 %, die Fähigkeiten 40 %; ist nur eine der beiden Listen
+eingetragen, zählt sie allein. Dabei zählen auch verwandte Begriffe – «Lager»
+trifft «Kommissionierung», «IT» trifft «Helpdesk», «Büro» trifft
+«Sachbearbeitung». So genügen wenige Stichworte, statt jede Schreibweise
+einzeln aufzuzählen. Die Spalte
+**Briefvorlage** nennt die Vorlage, mit der das Anschreiben entstehen wird –
+zum Beispiel «Spedition und Logistik» oder «Allgemeine Bewerbung»; der
+Mauszeiger darüber nennt zusätzlich den Status. Steht dort «Allgemeine
+Bewerbung», passt keine besondere Vorlage; der Status ist dann **Allgemein**
+statt **Passend**. Der Statusfilter **Passend** zeigt damit nur Stellen mit
+mindestens einem passenden Stichwort; **Allgemein** oder **Alle Status** zeigen
+die übrigen. Der Punkt **Ungefiltert** fasst Neu, Ohne Passung, Passend und
+Allgemein in einer Ansicht zusammen. Das **F** steht auch dann, wenn das
 Formular nicht auf der Anzeige selbst liegt, sondern auf einer eingebetteten
 Seite des Arbeitgebers oder hinter «Jetzt bewerben». Die Suchzeile darüber
 findet auch Adresse und Postleitzahl. Die Checkbox **ohne Bewerbungsformulare**
@@ -127,7 +132,7 @@ vorhandene Adressen werden bei späteren Läufen nachgetragen.
 
 ## Installation
 
-`AutoApplication-1.0.29-Setup.exe` von der
+`AutoApplication-1.0.30-Setup.exe` von der
 [Release-Seite](https://github.com/soendi/AutoApplication/releases/latest)
 herunterladen und ausführen. Windows 10 und 11, kein Administrator- und kein
 Python-Zubehör nötig.

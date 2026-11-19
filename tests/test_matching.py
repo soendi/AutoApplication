@@ -32,7 +32,14 @@ def test_personal_match_separates_interests_and_skills() -> None:
 
 def test_interests_count_even_without_template_fit() -> None:
     # Branchenwechsel: die Stelle passt auf keine Vorlage, interessiert aber.
-    job = _job(title="Techniker Kassensysteme", description="Montage und Service")
+    # (Ohne Portal-Stichworte: «Spedition» wuerde sonst als Verwandter von
+    # «Disposition» zaehlen.)
+    job = _job(
+        title="Techniker Kassensysteme",
+        company="Kassensysteme AG",
+        description="Montage und Service",
+        keywords="",
+    )
     interests, skills = personal_match(job, ["Technik"], ["Disposition"])
     assert interests == ["Technik"]
     assert skills == []
@@ -55,6 +62,45 @@ def test_personal_fit_counts_all_profile_terms() -> None:
     assert personal_fit(job, ["Technik"], ["SAP"]) == 0
     # Ohne Stichworte im Profil gibt es keinen Wert.
     assert personal_fit(job, [], []) is None
+
+
+def test_personal_fit_weights_interests_60_and_skills_40() -> None:
+    job = _job()
+    # Nur das Interesse trifft -> 60 %, nur die Faehigkeit -> 40 %.
+    assert personal_fit(job, ["Zoll"], ["SAP"]) == 60
+    assert personal_fit(job, ["Technik"], ["Disposition"]) == 40
+    # Ist nur eine Liste gefuellt, zaehlt sie allein.
+    assert personal_fit(job, ["Zoll"], []) == 100
+    assert personal_fit(job, [], ["Disposition"]) == 100
+
+
+def test_synonyms_count_as_hit() -> None:
+    # «Lager» trifft die Warenwirtschaft auch ohne das Wort «Lager».
+    job = _job(
+        title="Lagermitarbeiter",
+        description="Kommissionierung und Warenannahme",
+        keywords="",
+    )
+    assert personal_match(job, ["Lager"], []) == (["Lager"], [])
+    assert personal_fit(job, ["Lager"], []) == 100
+    # «IT» trifft Helpdesk und Anwenderbetreuung.
+    helpdesk = _job(title="Supporter", description="Helpdesk und Anwenderbetreuung", keywords="")
+    assert personal_match(helpdesk, ["IT"], []) == (["IT"], [])
+
+
+def test_short_alias_does_not_match_every_text() -> None:
+    # «mit» enthaelt «it» - das darf kein Treffer sein.
+    job = _job(
+        title="Allrounder",
+        description="Wir bieten mit Sicherheit eine gute Einarbeitung",
+        keywords="",
+    )
+    assert personal_match(job, ["IT"], []) == ([], [])
+
+
+def test_synonyms_do_not_match_a_foreign_branch() -> None:
+    job = _job(title="Augenoptiker", description="Brillen und Sehtests", keywords="")
+    assert personal_fit(job, ["Lager"], ["SAP"]) == 0
 
 
 def test_matching_terms_ignores_case() -> None:

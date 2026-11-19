@@ -1,3 +1,32 @@
+## AutoApplication 1.0.30
+
+Die Trefferquote in der Stellenliste versteht verwandte Begriffe, gewichtet
+Interessen und Faehigkeiten, und ein Filter zeigt alle offenen Stellen.
+
+### Neu
+
+- **Synonyme beim Treffer.** Ein Stichwort trifft jetzt auch verwandte
+  Begriffe: «Lager» findet «Kommissionierung» und «Warenannahme», «IT» findet
+  «Helpdesk» und «Anwenderbetreuung», «Büro» findet «Sachbearbeitung» und
+  «Backoffice». So genuegen wenige Stichworte im Profil, statt jede
+  Schreibweise einzeln aufzuzaehlen. Kurze Stichworte wie «IT», «HR» oder «QS»
+  werden nur ueber ihre Begriffgruppe gesucht und treffen deshalb nicht
+  zufaellige Wortteile.
+- **Gewichtung der Trefferquote.** Interessen zaehlen 60 %, Faehigkeiten 40 %.
+  Ist nur eine der beiden Listen im Profil gefuellt, zaehlt sie allein. Der
+  Mauszeiger ueber der Zelle nennt die Gewichtung und die gefundenen
+  Stichworte.
+- **Filter «Ungefiltert».** In der Stellenliste fasst ein Punkt im
+  Statusfilter Neu, Ohne Passung, Passend und Allgemein zusammen - so sind
+  auch die Stellen sichtbar, fuer die nur die Allgemeine Vorlage passt. Die
+  uebrigen Status bleiben einzeln waehlbar.
+
+### Geaendert
+
+- **Spalte «Vorlage» entfernt.** Sie zeigte nur bei allgemeinen Stellen
+  «allgemein» und stand neben der Spalte «Briefvorlage», die den Namen der
+  Vorlage nennt. Die Kennzeichnung ist damit an einer Stelle.
+
 ## AutoApplication 1.0.29
 
 Mehr Vorlagen fuer fast jede Branche, und die Stellenliste zeigt, welche Vorlage

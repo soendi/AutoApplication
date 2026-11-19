@@ -24,9 +24,12 @@ from PySide6.QtWidgets import (
 )
 
 from ..core.matching import personal_fit, personal_match, priority_key
-from ..core.templates import fallback_template, load_templates
+from ..core.templates import load_templates
 from ..core.text import format_date, normalize
 from .theme import FIT_COLORS, FIT_LABELS, fit_level
+
+# Die offenen Status, die «Ungefiltert» zusammen zeigt.
+OPEN_STATUSES = ("neu", "ohne_passung", "passend", "allgemein")
 
 STATUS_LABELS = {
     "neu": "Neu",
@@ -42,7 +45,6 @@ STATUS_LABELS = {
 COLUMNS = (
     "",  # Haekchen: mehrere Stellen zusammen ignorieren
     "F",  # Bewerbungsformular
-    "Vorlage",  # allgemein: nur die Auffangvorlage passt
     "Datum",
     "Titel",
     "Ansprechperson",
@@ -63,14 +65,13 @@ CHECK_COLUMN = 0
 
 # Startbreiten; ab dem ersten Ziehen gilt, was der Benutzer eingestellt hat.
 DEFAULT_WIDTHS = (
-    34, 26, 95, 85, 210, 120, 175, 160, 100, 160, 55, 70, 55, 70, 75, 70, 170
+    34, 26, 85, 210, 120, 175, 160, 100, 160, 55, 70, 55, 70, 75, 70, 170
 )
 
 
 def _sort_value(
     item: tuple[Any, list[str], list[str], int | None],
     column: int,
-    general_id: str = "",
     names: dict[str, str] | None = None,
 ) -> Any:
     """Sortierwert einer Zeile passend zur sichtbaren Spalte."""
@@ -80,37 +81,34 @@ def _sort_value(
     if column == 1:
         return 1 if job.get("has_form") else 0
     if column == 2:
-        general = bool(general_id) and str(job.get("template_id") or "") == general_id
-        return 1 if general else 0
-    if column == 3:
         # ISO-Datum aus der Ablage sortiert richtig, auch wenn dd.mm. steht.
         return str(job.get("published") or job.get("first_seen") or "")
-    if column == 4:
+    if column == 3:
         return str(job.get("title") or "").casefold()
-    if column == 5:
+    if column == 4:
         return str(job.get("contact_name") or "").casefold()
-    if column == 6:
+    if column == 5:
         return str(job.get("contact_email") or "").casefold()
-    if column == 7:
+    if column == 6:
         return str(job.get("company") or "").casefold()
-    if column == 8:
+    if column == 7:
         return str(job.get("city") or "").casefold()
-    if column == 9:
+    if column == 8:
         return str(job.get("street") or "").casefold()
-    if column == 10:
+    if column == 9:
         zone = str(job.get("zip") or "")
         return int(zone) if zone.isdigit() else 0
-    if column == 11:
+    if column == 10:
         return str(job.get("workload") or "").casefold()
-    if column == 12:
+    if column == 11:
         distance = job.get("distance_km")
         # Ohne Angabe steht die Zeile vorne (aufsteigend) bzw. hinten.
         return float(distance) if distance is not None else -1.0
-    if column == 13:
+    if column == 12:
         return len(interests)
-    if column == 14:
+    if column == 13:
         return len(skills)
-    if column == 15:
+    if column == 14:
         return percent if percent is not None else -1
     template_name = (names or {}).get(str(job.get("template_id") or ""), "")
     if template_name:
@@ -147,6 +145,9 @@ class JobsPage(QWidget):
         self.search.textChanged.connect(self.refresh)
         self.status = QComboBox()
         self.status.addItem("Alle Status", "")
+        self.status.addItem(
+            "Ungefiltert (Neu, Ohne Passung, Passend, Allgemein)", "offen"
+        )
         for key, label in STATUS_LABELS.items():
             self.status.addItem(label, key)
         self.status.currentIndexChanged.connect(self.refresh)
@@ -357,8 +358,16 @@ class JobsPage(QWidget):
     def refresh(self) -> None:
         status = self.status.currentData() or None
         jobs = self.window.store.list_jobs(
-            status=status or None, search=self.search.text()
+            status=status if status and status != "offen" else None,
+            search=self.search.text(),
         )
+        if status == "offen":
+            # Neu, Ohne Passung, Passend und Allgemein zusammen.
+            jobs = [
+                job
+                for job in jobs
+                if str(job.get("status") or "") in OPEN_STATUSES
+            ]
         if self.hide_forms.isChecked():
             jobs = [job for job in jobs if not job.get("has_form")]
         if self.hide_brokers.isChecked():
@@ -373,11 +382,8 @@ class JobsPage(QWidget):
                 ]
         interests = self.window.settings.interests()
         skills = self.window.settings.skills()
-        # Welche Vorlage ist die Auffangvorlage? Nur sie wird als «allgemein»
-        # gekennzeichnet - der Name bleibt frei waehlbar.
+        # Namen der Vorlagen fuer die Spalte «Briefvorlage».
         templates = load_templates(self.window.pipeline.templates_file)
-        general = fallback_template(templates)
-        general_id = general.id if general is not None else ""
         names = {template.id: template.name for template in templates}
         decorated = []
         for job in jobs:
@@ -400,7 +406,7 @@ class JobsPage(QWidget):
             # zweiter Wert, damit gleiche Werte nicht springen.
             decorated.sort(
                 key=lambda item: (
-                    _sort_value(item, self._sort_column, general_id, names),
+                    _sort_value(item, self._sort_column, names),
                     str(item[0].get("title") or "").casefold(),
                 ),
                 reverse=not self._sort_ascending,
@@ -426,13 +432,8 @@ class JobsPage(QWidget):
             )
             check.setData(Qt.UserRole, job.get("id"))
             self.table.setItem(row, CHECK_COLUMN, check)
-            uses_general = (
-                bool(general_id)
-                and str(job.get("template_id") or "") == general_id
-            )
             values = (
                 "F" if job.get("has_form") else "",
-                "allgemein" if uses_general else "",
                 format_date(job.get("published") or job.get("first_seen")),
                 job.get("title") or "",
                 job.get("contact_name") or "–",
@@ -461,34 +462,26 @@ class JobsPage(QWidget):
                 if column == 1:
                     if value:
                         item.setToolTip("Bewerbungsformular")
-                elif column == 2:
-                    if value:
-                        item.setToolTip(
-                            "Für diese Stelle passen keine oder zu wenige "
-                            "Stichworte einer besonderen Vorlage. Das "
-                            "Anschreiben entsteht deshalb mit der Allgemeinen "
-                            "Vorlage."
-                        )
-                elif column == 5:
+                elif column == 4:
                     item.setToolTip(
                         "Ansprechperson aus der Anzeige"
                         if value != "–"
                         else "Die Anzeige nennt keine Ansprechperson"
                     )
-                elif column == 6:
+                elif column == 5:
                     item.setToolTip(
                         "Bewerbungsadresse aus der Anzeige"
                         if value != "–"
                         else "Die Anzeige nennt keine E-Mail-Adresse"
                     )
-                elif column in {9, 10}:
+                elif column in {8, 9}:
                     item.setToolTip(
                         "Adresse der Firma – aus dem Portal oder von der "
                         "Firmenwebsite"
                         if value != "–"
                         else "Adresse noch nicht gefunden"
                     )
-                elif column == 13:
+                elif column == 12:
                     item.setTextAlignment(Qt.AlignCenter)
                     item.setToolTip(
                         (
@@ -501,14 +494,14 @@ class JobsPage(QWidget):
                         f"({FIT_LABELS[level]}, Schwelle {min_score})\n"
                         f"Stichworte: {job.get('keywords') or ''}"
                     )
-                elif column == 14:
+                elif column == 13:
                     item.setTextAlignment(Qt.AlignCenter)
                     item.setToolTip(
                         "Fähigkeiten in der Anzeige: " + ", ".join(found_skills)
                         if found_skills
                         else "Keine Fähigkeit aus dem Profil in der Anzeige"
                     )
-                elif column == 15:
+                elif column == 14:
                     item.setTextAlignment(Qt.AlignCenter)
                     if percent is None:
                         item.setToolTip(
@@ -517,14 +510,14 @@ class JobsPage(QWidget):
                         )
                     else:
                         item.setToolTip(
-                            f"{percent} % der Stichworte aus Interessen und "
-                            "Fähigkeiten stehen in der Anzeige.\n"
+                            f"{percent} % gewichteter Treffer "
+                            "(Interessen 60 %, Fähigkeiten 40 %).\n"
                             "Interessen: "
                             + (", ".join(found_interests) or "keine")
                             + "\nFähigkeiten: "
                             + (", ".join(found_skills) or "keine")
                         )
-                elif column == 16:
+                elif column == 15:
                     item.setToolTip(
                         "Briefvorlage: "
                         + (
@@ -537,11 +530,9 @@ class JobsPage(QWidget):
                             str(job.get("status") or ""),
                         )
                     )
-                if column in {1, 2, 3, 10, 11, 12, 13, 14, 15}:
+                if column in {1, 2, 9, 10, 11, 12, 13, 14}:
                     item.setTextAlignment(Qt.AlignCenter)
-                if column == 2 and value:
-                    item.setForeground(QColor("#e6a23c"))
-                if column == 3:
+                if column == 2:
                     item.setData(Qt.UserRole, job.get("id"))
                 self.table.setItem(row, column, item)
             self.table.setRowHeight(row, 28)
