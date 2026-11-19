@@ -1,3 +1,35 @@
+## AutoApplication 1.0.22
+
+Ansprechperson und E-Mail werden zuverlaessiger gelesen - notfalls liest die
+KI den Seitentext mit.
+
+### Neu
+
+- **KI liest mit, wenn lokal nichts Zuverlaessiges steht.** Bleiben Ansprechperson
+  oder E-Mail nach Anzeigetext, eingebetteter Seite und PDF-Beilage offen, liest
+  die eingerichtete KI den bereits geholten Seitentext und nennt Person und
+  Bewerbungsadresse. Sie darf nur uebernehmen, was ausdruecklich dasteht; das
+  Programm prueft danach Adresse (keine Portaladresse, keine technische
+  Kennung) und Namen. Ohne eingerichtete KI entfaellt der Schritt. Firmenadressen
+  liest die KI weiterhin nicht.
+- **Ansprechperson ohne Anrede.** Namen gelten jetzt auch ohne "Herr/Frau",
+  wenn sie nach einer klaren Angabe stehen: nach "Deine Ansprechperson" (auch
+  ohne Doppelpunkt), nach "Kontakt:" oder nach einer Rolle wie "Personalleiter,
+  Steven Mueller". Uebernommen wird der Name wie geschrieben, eine Anrede wird
+  nicht erfunden.
+
+### Behoben
+
+- **"Frau Divers" statt des echten Namens.** Die Optionen einer Anrede-Auswahl
+  im HTML ("Herr", "Frau", "Divers") klebten zu einem Namen zusammen. Auswahl-
+  listen werden jetzt verworfen; Platzhalter wie "Divers" gelten nie als Person.
+- **"wir freuen uns" als Ansprechperson.** Das Kontaktmuster war versehentlich
+  fuer den ganzen Ausdruck gross-/kleinschreibunempfindlich. Jetzt muss der Name
+  gross geschrieben sein; Fuellwoerter wie "wir", "uns" oder "gerne" werden
+  verworfen.
+- **Lange Portalseiten.** Fuer die KI wird der Text so gekuerzt, dass Anfang und
+  die Stellen um "Ansprechperson", "Kontakt" und "E-Mail" erhalten bleiben.
+
 ## AutoApplication 1.0.21
 
 Abgelaufene oder deaktivierte Anzeigen verschwinden aus der Stellenliste.

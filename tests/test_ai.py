@@ -250,3 +250,70 @@ def test_local_classifier_separates_offer_from_invitation() -> None:
         )
         == EINLADUNG
     )
+
+
+def test_contact_from_page_reads_only_the_text(tmp_path) -> None:
+    def send(url, payload, headers, timeout):
+        assert "erfinde" in payload["messages"][0]["content"]
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": (
+                            '{"ansprechperson": "Kevin Verling", '
+                            '"email": "verling@avoris.li"}'
+                        )
+                    }
+                }
+            ]
+        }
+
+    client = AiClient(_settings(tmp_path), transport=send)
+    assert client.contact_from_page(
+        "Deine Ansprechperson Kevin Verling, verling@avoris.li",
+        portal="ostjob.ch",
+        company="avoris.li",
+    ) == ("verling@avoris.li", "Kevin Verling")
+
+
+def test_contact_from_page_rejects_portal_and_garbage(tmp_path) -> None:
+    def send(url, payload, headers, timeout):
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": (
+                            '{"ansprechperson": "wir freuen uns", '
+                            '"email": "info@ostjob.ch"}'
+                        )
+                    }
+                }
+            ]
+        }
+
+    client = AiClient(_settings(tmp_path), transport=send)
+    assert client.contact_from_page("Kontakt", portal="ostjob.ch") == ("", "")
+
+
+def test_contact_from_page_without_ai(tmp_path) -> None:
+    def fail(*args, **kwargs):
+        raise AssertionError("ohne KI darf nicht gefragt werden")
+
+    client = AiClient(_settings(tmp_path, enabled=False), transport=fail)
+    assert client.contact_from_page("Kontakt: Kevin Verling") == ("", "")
+
+
+def test_contact_excerpt_keeps_the_contact_section(tmp_path) -> None:
+    seen = {}
+
+    def send(url, payload, headers, timeout):
+        seen["user"] = payload["messages"][1]["content"]
+        return {"choices": [{"message": {"content": "{}"}}]}
+
+    client = AiClient(_settings(tmp_path), transport=send)
+    filler = "Ähnliche Stellen und Werbung. " * 1200
+    client.contact_from_page(
+        filler + " Deine Ansprechperson Kevin Verling, verling@avoris.li",
+        portal="ostjob.ch",
+    )
+    assert "verling@avoris.li" in seen["user"]

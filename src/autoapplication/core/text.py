@@ -24,14 +24,30 @@ _CONTACT_TITLES = {
     "dr", "prof", "dipl", "med", "phil", "ing", "lic", "hans",
 }
 # Kontaktangabe ohne Anrede: "Weitere Auskuenfte unter: Claudio Zai, ...".
+# Nur die Beschriftung ist gross-/kleinschreibunempfindlich; der Name muss
+# gross geschrieben sein, sonst wuerde "Kontakt - wir freuen uns" als Person
+# gelesen.
+_CONTACT_LABEL = (
+    r"(?:weitere\s+)?ausk[\u00fc\u00fc]nfte\s+unter|auskunft\s+(?:unter|bei)"
+    r"|ansprech(?:person|partner(?:in)?)|kontakt(?:person)?"
+    r"|personalleiter(?:in)?|produktionsleiter(?:in)?|teamleiter(?:in)?"
+    r"|gesch[\u00e4a]ftsf[\u00fc\u00fc]hrer(?:in)?|personalchef(?:in)?"
+)
 _CONTACT_NAME_RE = re.compile(
-    r"(?i)(?:(?:weitere\s+)?ausk[\u00fc\u00fc]nfte\s+unter|auskunft\s+(?:unter|bei)"
-    r"|ansprech(?:person|partner(?:in)?)|kontakt(?:person)?)\s*[:\-\u2013]\s*"
-    r"([A-Z\u00c4\u00d6\u00dc][a-z\u00e4\u00f6\u00fc\u00df\-]+(?:\s+[A-Z\u00c4\u00d6\u00dc][a-z\u00e4\u00f6\u00fc\u00df\-]+){1,2})"
+    r"(?i:" + _CONTACT_LABEL + r")[\s,:\-\u2013]*"
+    r"([A-Z\u00c4\u00d6\u00dc][a-z\u00e4\u00f6\u00fc\u00df\-]+[ \t]+"
+    r"[A-Z\u00c4\u00d6\u00dc][a-z\u00e4\u00f6\u00fc\u00df\-]+)"
 )
 _CONTACT_NAME_STOP = {
     "team", "personal", "personalabteilung", "bewerbung", "bewerbungen",
     "sekretariat", "empfang", "info", "office", "telefon", "montag",
+    "wir", "uns", "dich", "sie", "ihr", "ihnen", "gerne", "gern",
+    "unser", "unsere", "unserem", "dein", "deine", "ihre", "und",
+    "oder", "bei", "mit", "f\u00fcr", "fuer", "der", "die", "das",
+}
+_CONTACT_NAME_PLACEHOLDER = {
+    "divers", "diverse", "unbekannt", "name", "nachname", "vorname",
+    "mustermann", "beispiel", "bewerber", "kandidat", "kandidatin",
 }
 _CONTACT_STOP = {
     "und", "oder", "von", "vom", "in", "im", "der", "die", "das", "den",
@@ -49,7 +65,13 @@ def strip_html(value: str | None) -> str:
     """
     if not value:
         return ""
-    text = re.sub(r"(?s)<!--.*?-->", " ", str(value))
+    text = str(value)
+    # Auswahllisten sind keine Anzeige: die Optionen einer Anrede-Auswahl
+    # ("Herr", "Frau", "Divers") wuerden sonst zu einem Namen zusammenkleben.
+    # Skripte bleiben stehen, weil manche Portale den Kontakt nur dort ablegen.
+    text = re.sub(r"(?is)<select\b.*?</select\s*>", " ", text)
+    text = re.sub(r"(?is)<option\b.*?</option\s*>", " ", text)
+    text = re.sub(r"(?s)<!--.*?-->", " ", text)
     text = re.sub(r"(?i)<br\s*/?>", "\n", text)
     text = re.sub(r"(?i)<li[^>]*>", "- ", text)
     text = re.sub(r"(?i)</(p|li|div|tr|h[1-6]|ul|ol)>", "\n", text)
@@ -249,6 +271,9 @@ def contact_person(value: str | None) -> str:
             continue
         # Bei "Hans Müller" ist das letzte Wort der Nachname.
         name = tokens[-1] if len(tokens) > 1 else tokens[0]
+        if name.lower().rstrip(".") in _CONTACT_NAME_PLACEHOLDER:
+            # "Frau Divers" stammt aus einer Anrede-Auswahl, ist kein Name.
+            continue
         title = "Herr" if match.group(1).lower() == "herrn" else match.group(1)
         return f"{title} {name}"
     return ""
@@ -266,13 +291,44 @@ def contact_name(value: str | None) -> str:
         return ""
     for match in _CONTACT_NAME_RE.finditer(text):
         tokens = match.group(1).split()
-        if tokens[0].lower() in _CONTACT_NAME_STOP:
-            continue
-        # "RAV" & Co. sind keine Namen, sondern Abteilungen.
-        if tokens[0].isupper() or not any(char.islower() for char in tokens[-1]):
+        lowered = [token.lower() for token in tokens]
+        if any(
+            token in _CONTACT_NAME_STOP or token in _CONTACT_NAME_PLACEHOLDER
+            for token in lowered
+        ):
             continue
         return " ".join(tokens)
     return ""
+
+
+_NAME_ONLY_RE = re.compile(
+    r"^[A-ZÄÖÜ][a-zäöüß\-]+(?:[ \t]+[A-ZÄÖÜ][a-zäöüß\-]+){1,2}$"
+)
+
+
+def person_name(value: str | None) -> str:
+    """Einen fertigen Namen prüfen ("Kevin Verling"), sonst leer.
+
+    Gedacht für Namensvorschläge von aussen (z. B. aus der KI): Mit Anrede
+    gilt die strenge Regel von :func:`contact_person`; ohne Anrede bleibt der
+    Name so stehen, wie er geschrieben ist. Sätze, Abteilungen und Platzhalter
+    werden verworfen.
+    """
+    text = re.sub(r"\s+", " ", str(value or "")).strip(" .,;:–-")
+    if not text:
+        return ""
+    with_title = contact_person(text)
+    if with_title:
+        return with_title
+    if not _NAME_ONLY_RE.match(text):
+        return ""
+    tokens = [token.lower() for token in text.split()]
+    if any(
+        token in _CONTACT_NAME_STOP or token in _CONTACT_NAME_PLACEHOLDER
+        for token in tokens
+    ):
+        return ""
+    return text
 
 
 def salutation(contact: str | None) -> str:

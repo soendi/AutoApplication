@@ -21,8 +21,11 @@ from .text import (
     clean_job_text,
     clean_job_title,
     contact_person,
+    domain_of,
+    emails,
     has_term,
     normalize,
+    person_name,
     strip_html,
     words,
 )
@@ -403,6 +406,47 @@ class AiClient:
             log.info("KI-Auslesen der Anzeige fehlgeschlagen (%s) - lokal weiter", exc)
             return local
 
+    def contact_from_page(
+        self, text: str, portal: str = "", company: str = ""
+    ) -> tuple[str, str]:
+        """Ansprechperson und E-Mail aus einem Seitentext lesen.
+
+        Ergänzt die lokale Auslese, wenn Text unübersichtlich ist: Die KI
+        übernimmt ausschliesslich, was im vorliegenden Text ausdrücklich steht,
+        und liefert sonst leere Angaben. Die Adresse wird gegen die
+        Portaldomain und technische Kennungen geprüft; ohne eingerichtete KI
+        bleibt das Ergebnis leer.
+        """
+        if not self.available() or not (text or "").strip():
+            return "", ""
+        system = (
+            "Du liest aus dem Text einer Stellenanzeige die Ansprechperson und "
+            "die Bewerbungsadresse heraus. Antworte nur mit einem JSON-Objekt "
+            'der Form {"ansprechperson": "...", "email": "..."}. '
+            "Übernimm ausschliesslich, was im Text ausdrücklich steht - "
+            "erfinde weder Namen noch Adressen. Steht die Ansprechperson mit "
+            "Anrede da (Herr/Frau), übernimm die Anrede und den Nachnamen; "
+            "steht dort nur ein Name, übernimm ihn wie geschrieben. Ist die "
+            "Person unklar oder nicht genannt, bleibt ansprechperson leer. "
+            "email ist die Bewerbungsadresse aus dem Text, Zeichen für Zeichen "
+            "übernommen; die Adresse des Portals selbst und technische "
+            "Kennungen zählen nicht, dann bleibt email leer. Nenne keine "
+            "Telefonnummern und keine Postadressen."
+        )
+        content = (
+            f"Portaldomain: {portal or '-'}\n"
+            f"Firmendomain: {company or '-'}\n\n"
+            f"Seitentext:\n{_contact_excerpt(text)}"
+        )
+        try:
+            data = _json_object(self._chat(system, content, temperature=0.0))
+        except (urllib.error.URLError, OSError, ValueError, KeyError) as exc:
+            log.info("KI-Kontaktsuche fehlgeschlagen (%s) - lokal weiter", exc)
+            return "", ""
+        address = _checked_email(str(data.get("email") or ""), portal)
+        person = person_name(str(data.get("ansprechperson") or ""))
+        return address, person
+
     # Firmenadressen liest bewusst keine KI: sie kämen aus dem Modellgedächtnis
     # und könnten erfunden sein. Adressen stammen nur aus Portalangaben oder
     # klar aus dem Seitentext gelesenen Zeilen (siehe Pipeline).
@@ -624,6 +668,52 @@ class AiClient:
         except (urllib.error.URLError, OSError, ValueError, KeyError) as exc:
             log.info("KI-Antwortauswertung fehlgeschlagen (%s) - lokal weiter", exc)
         return classify_local(subject, body)
+
+
+_HEX_LOCAL_RE = re.compile(r"[0-9a-f]{16,}")
+_CONTACT_WORDS = (
+    "ansprechperson",
+    "ansprechpartner",
+    "kontakt",
+    "bewerbung",
+    "e-mail",
+    "email",
+)
+
+
+def _contact_excerpt(value: str, limit: int = 8000) -> str:
+    """Seitentext für die KI kürzen, aber die Kontaktstelle behalten.
+
+    Lange Portalseiten (ähnliche Jobs, Navigation) würden den Kontaktblock sonst
+    aus dem Fenster drängen. Der Anfang und je ein Stück um die typischen
+    Kontaktwörter kommen mit.
+    """
+    text = strip_html(value)
+    if len(text) <= limit:
+        return text
+    lowered = text.lower()
+    pieces: list[str] = [text[:3000]]
+    for word in _CONTACT_WORDS:
+        start = lowered.find(word)
+        if start == -1:
+            continue
+        piece = text[max(0, start - 500) : start + 1500]
+        if piece not in pieces:
+            pieces.append(piece)
+    return "\n...\n".join(pieces)[:limit]
+
+
+def _checked_email(value: str, portal: str = "") -> str:
+    """Adresse prüfen: echte Adresse, nicht die des Portals."""
+    for candidate in emails(value):
+        domain = domain_of(candidate)
+        if not domain or (portal and domain == portal):
+            continue
+        if _HEX_LOCAL_RE.fullmatch(candidate.split("@", 1)[0].lower()):
+            # Technische Kennung statt Kontaktadresse.
+            continue
+        return candidate
+    return ""
 
 
 def _json_object(raw: str) -> dict[str, Any]:

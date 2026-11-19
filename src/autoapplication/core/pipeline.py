@@ -332,15 +332,53 @@ class Pipeline:
             address = (preferred or candidates)[0]
         return address, contact_person(text) or contact_name(text)
 
-    def _text_contact(self, job: Job) -> tuple[str, str]:
-        """Ansprechperson und Adresse aus dem Fliesstext der Anzeige lesen."""
+    @staticmethod
+    def _description_text(job: Job) -> str:
+        """Fliesstext der Anzeige aus den Portalangaben."""
         raw = job.raw if isinstance(job.raw, dict) else {}
         parts = [job.description or ""]
         for key in ("description", "beschreibung", "contact", "kontakt"):
             value = raw.get(key)
             if isinstance(value, str):
                 parts.append(value)
-        return self._contact_from_text(" ".join(parts), *self._contact_domains(job))
+        return " ".join(parts)
+
+    def _text_contact(self, job: Job) -> tuple[str, str]:
+        """Ansprechperson und Adresse aus dem Fliesstext der Anzeige lesen."""
+        return self._contact_from_text(
+            self._description_text(job), *self._contact_domains(job)
+        )
+
+    def _ai_contact(self, job: Job) -> tuple[str, str]:
+        """Erst wenn lokal nichts Zuverlaessiges gefunden wurde: KI fragen.
+
+        Die KI liest nur den vorliegenden Text (Anzeige, eingebettete Seite,
+        PDF-Beilage). Ohne eingerichtete KI oder ohne Text entfaellt der Aufruf.
+        """
+        method = getattr(self._ai, "contact_from_page", None)
+        if not callable(method):
+            return "", ""
+        text = "\n".join(
+            part
+            for part in (
+                self._description_text(job),
+                self._page_text(job),
+                self._frame_text(job),
+                self._pdf_text(job),
+            )
+            if part
+        )
+        if not text.strip():
+            return "", ""
+        portal, company = self._contact_domains(job)
+        try:
+            found = method(text, portal=portal, company=company)
+        except Exception as exc:  # noqa: BLE001 - lokaler Befund bleibt
+            log.info("KI-Kontaktsuche fehlgeschlagen (%s) - lokal weiter", exc)
+            return "", ""
+        if not isinstance(found, tuple) or len(found) != 2:
+            return "", ""
+        return str(found[0] or ""), str(found[1] or "")
 
     def _page_text(self, job: Job) -> str:
         """Text der Anzeigenseite - einmal je Adresse geholt.
@@ -462,6 +500,12 @@ class Pipeline:
             image_address, image_person = self._ocr_contact(job)
             address = address or image_address
             person = person or image_person
+        if not address or not person:
+            # Letzter Schritt: die KI liest den bereits geholten Text, streng
+            # nur das, was dort ausdruecklich steht.
+            ai_address, ai_person = self._ai_contact(job)
+            address = address or ai_address
+            person = person or ai_person
         return address, person
 
     def _ocr_contact(self, job: Job) -> tuple[str, str]:

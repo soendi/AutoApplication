@@ -1080,3 +1080,38 @@ def test_expired_advert_during_search_is_skipped(tmp_path) -> None:
     summary = pipeline.run_search()
     assert summary.found == 1
     assert store.get_job("ostjob:2") is None
+
+
+class ContactAI(FakeAI):
+    """KI-Attrappe, die den Kontakt aus dem Seitentext ergaenzt."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def contact_from_page(self, text, portal="", company=""):
+        self.calls += 1
+        return "sandra.keller@firma.ch", "Frau Keller"
+
+
+def test_ai_reads_contact_when_local_text_is_unclear(tmp_path) -> None:
+    page = "<p>Kontakt: sandra.keller@firma.ch</p>"
+    ai = ContactAI()
+    pipeline, store, _outlook, _ = _pipeline(
+        tmp_path, jobs=[], ai=ai, page_fetcher=lambda url: page
+    )
+    job = Job(
+        id="ostjob:5",
+        source="ostjob",
+        source_id="5",
+        title="Sachbearbeiterin",
+        company="Firma AG",
+        city="Balgach",
+        url="https://www.ostjob.ch/job/x/5",
+    )
+    store.upsert_job(job, now="2026-11-01T08:00:00+00:00")
+
+    assert pipeline.complete_job("ostjob:5") is True
+    row = store.get_job("ostjob:5")
+    assert row["contact_email"] == "sandra.keller@firma.ch"
+    assert row["contact_name"] == "Frau Keller"
+    assert ai.calls == 1
