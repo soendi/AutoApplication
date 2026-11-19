@@ -271,3 +271,34 @@ def test_job_remembers_failed_contact_lookups(tmp_path) -> None:
     row = store.get_job("ostjob:5")
     assert row["contact_tried_for"] == "zip"
     assert row["contact_tried_at"].startswith("2026-11-19")
+
+
+def test_upsert_fills_missing_job_fields(tmp_path) -> None:
+    store = Store(tmp_path / "daten.db")
+    first = Job(
+        id="ostjob:7",
+        source="ostjob",
+        source_id="7",
+        title="Speditionskaufmann",
+        company="",
+        city="",
+    )
+    assert store.upsert_job(first) is True
+    second = Job(
+        id="ostjob:7",
+        source="ostjob",
+        source_id="7",
+        title="Anderer Titel",
+        company="Muster AG",
+        city="Balgach",
+        contact_name="Frau Meier",
+        contact_email="hr@muster.ch",
+    )
+    assert store.upsert_job(second) is False
+    row = store.get_job("ostjob:7")
+    # Bestehendes bleibt, Leeres wird aus der neuen Portalantwort ergaenzt.
+    assert row["title"] == "Speditionskaufmann"
+    assert row["company"] == "Muster AG"
+    assert row["city"] == "Balgach"
+    assert row["contact_name"] == "Frau Meier"
+    assert row["contact_email"] == "hr@muster.ch"

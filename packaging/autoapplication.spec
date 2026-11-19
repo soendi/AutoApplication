@@ -40,7 +40,9 @@ a = Analysis(
     pathex=[str(SRC)],
     binaries=[],
     datas=datas,
-    hiddenimports=ocr_imports,
+    # QtPdf wird erst beim Lesen einer PDF-Beilage importiert; ohne diesen
+    # Eintrag fehlt das Modul in der Windows-Fassung.
+    hiddenimports=ocr_imports + ["PySide6.QtPdf"],
     hookspath=[],
     runtime_hooks=[],
     excludes=[
@@ -64,7 +66,6 @@ a = Analysis(
         "PySide6.QtDataVisualization",
         "PySide6.QtBluetooth",
         "PySide6.QtNfc",
-        "PySide6.QtPdf",
         "PySide6.QtPdfWidgets",
         "PySide6.QtDesigner",
         "PySide6.QtTest",

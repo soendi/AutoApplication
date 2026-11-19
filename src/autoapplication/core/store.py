@@ -235,7 +235,16 @@ class Store:
                 db.execute(
                     "UPDATE jobs SET last_seen = ?, published = ?, distance_km = ?, "
                     "street = CASE WHEN ? <> '' THEN ? ELSE street END, "
-                    "zip = CASE WHEN ? <> '' THEN ? ELSE zip END WHERE id = ?",
+                    "zip = CASE WHEN ? <> '' THEN ? ELSE zip END, "
+                    # Leere Angaben aus der neuen Portalantwort nachtragen;
+                    # bereits gefuellte Felder bleiben unangetastet.
+                    "title = CASE WHEN title = '' THEN ? ELSE title END, "
+                    "company = CASE WHEN company = '' THEN ? ELSE company END, "
+                    "city = CASE WHEN city = '' THEN ? ELSE city END, "
+                    "contact_name = CASE WHEN contact_name = '' THEN ? "
+                    "ELSE contact_name END, "
+                    "contact_email = CASE WHEN contact_email = '' THEN ? "
+                    "ELSE contact_email END WHERE id = ?",
                     (
                         stamp,
                         row["published"],
@@ -244,6 +253,11 @@ class Store:
                         row["street"],
                         row["zip"],
                         row["zip"],
+                        row["title"],
+                        row["company"],
+                        row["city"],
+                        row.get("contact_name") or "",
+                        row.get("contact_email") or "",
                         row["id"],
                     ),
                 )

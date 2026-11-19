@@ -1,3 +1,39 @@
+## AutoApplication 1.0.20
+
+Ansprechperson, E-Mail und Adresse kommen jetzt auch aus PDF-Beilaugen und
+eingebetteten Ausschreibungen; unvollstaendige Zeilen werden bei jeder Suche
+neu geprueft.
+
+### Neu
+
+- **PDF-Beilage der Anzeige wird gelesen.** Viele Anzeigen verlinken die
+  Ausschreibung als PDF. AutoApplication findet den Verweis, laedt die Datei
+  (hoechstens 8 MB, erste drei Seiten) und liest Ansprechperson, E-Mail und
+  Firmenadresse im Klartext. Qt bringt die PDF-Lesefunktion mit, es kommt keine
+  neue Abhaengigkeit dazu; die Windows-Fassung liefert `PySide6.QtPdf` mit.
+- **Eingebettete Ausschreibungen werden gelesen.** Steckt die Anzeige in einem
+  iframe (z. B. bei umantis), wird dieser Rahmen geholt und ausgewertet - dort
+  stehen die Kontakte der Firma, waehrend die Portalseite nur eigene Adressen
+  nennt. Werbe-, Karten- und Video-Rahmen bleiben aussen vor; hoechstens drei
+  Rahmen je Anzeige.
+- **Ansprechperson auch ohne Anrede.** Nennt die Anzeige den Namen nach einer
+  klaren Kontaktangabe («Weitere Auskuenfte unter: Claudio Zai, Teamleiter»),
+  wird er so uebernommen, wie er dasteht - eine Anrede wird nicht erfunden.
+  Abteilungen wie «RAV Heerbrugg» gelten nicht als Person.
+
+### Geaendert
+
+- **Uebersprungen wird nur noch, was vollstaendig ist.** Fehlt in der Zeile
+  Titel, Ansprechperson, E-Mail, Firma, Ort, Adresse oder PLZ, wird die Stelle
+  bei der naechsten Suche erneut abgerufen; ein frueherer Fehlversuch blockiert
+  nicht mehr. Vollstaendige Zeilen kosten keinen Netzzugriff.
+- **Leere Felder werden aus der Portalantwort ergaenzt.** Liefert das Portal
+  Titel, Firma, Ort oder Kontakt nach, werden leere Felder gefuellt;
+  vorhandene Angaben bleiben stehen.
+- **Ausgeblendete Angaben zaehlen nicht.** Text in HTML-Kommentaren
+  (`<!-- ... -->`) wird nicht als Kontakt verwendet, weil er auf der Seite
+  nicht steht.
+
 ## AutoApplication 1.0.19
 
 Stellensuche direkt aus der Stellenliste, und erfolglose Kontaktsuchen bremsen

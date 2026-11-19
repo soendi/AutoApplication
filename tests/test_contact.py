@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from autoapplication.core import ocr, text
+from autoapplication.core import ocr, pdf, text
 from autoapplication.core.ai import local_digest
 from autoapplication.core.config import Settings
 from autoapplication.core.models import Job
@@ -313,7 +313,7 @@ def test_complete_job_keeps_existing_values(tmp_path) -> None:
     assert row["zip"] == "9436"
 
 
-def test_failed_lookup_is_remembered_and_not_repeated(tmp_path) -> None:
+def test_incomplete_rows_are_searched_again(tmp_path) -> None:
     job = _image_job(
         contact_email="",
         description="Disposition, Transport und Zoll",
@@ -328,14 +328,16 @@ def test_failed_lookup_is_remembered_and_not_repeated(tmp_path) -> None:
         calls.append(url)
         return ""
 
-    pipeline = Pipeline(
-        settings,
-        store,
-        ai_client=FakeAI(),
-        templates_file=tmp_path / "vorlagen.json",
-        page_fetcher=fetch,
-    )
-    assert pipeline.complete_job("ostjob:77") is False
+    def build() -> Pipeline:
+        return Pipeline(
+            settings,
+            store,
+            ai_client=FakeAI(),
+            templates_file=tmp_path / "vorlagen.json",
+            page_fetcher=fetch,
+        )
+
+    assert build().complete_job("ostjob:77") is False
     assert calls, "der erste Versuch soll im Netz suchen"
     row = store.get_job("ostjob:77")
     assert row["contact_tried_at"]
@@ -346,19 +348,147 @@ def test_failed_lookup_is_remembered_and_not_repeated(tmp_path) -> None:
         "zip",
     }
 
-    # Zweiter Lauf: derselbe Fehlversuch wird nicht wiederholt.
+    # Die Zeile ist weiterhin unvollstaendig: die naechste Suche fragt erneut.
     first_round = len(calls)
-    assert pipeline.complete_job("ostjob:77") is False
-    assert len(calls) == first_round
+    assert build().complete_job("ostjob:77") is False
+    assert len(calls) > first_round
 
-    # Ein ausdruecklicher neuer Versuch darf wieder suchen; frische Instanz,
-    # damit der Zwischenspeicher des ersten Laufs nicht hilft.
-    second = Pipeline(
+
+def test_contact_is_read_from_the_attached_pdf(tmp_path, monkeypatch) -> None:
+    job = _image_job(contact_email="", description="", raw={})
+    settings = Settings(tmp_path / "einstellungen.json")
+    store = Store(tmp_path / "daten.db")
+    store.upsert_job(job)
+    page = (
+        "<p>Bewerbung bitte per E-Mail an uns.</p>"
+        '<a href="//barberry.ostjob.ch/c89.pdf">Stellenausschreibung (PDF)</a>'
+    )
+    pipeline = Pipeline(
+        settings,
+        store,
+        ai_client=FakeAI(),
+        templates_file=tmp_path / "vorlagen.json",
+        page_fetcher=lambda url: page,
+    )
+    monkeypatch.setattr(
+        pdf,
+        "text_from_html",
+        lambda value, base_url="", **kwargs: (
+            "Arbeitsort Optiprint AG, Auerstrasse 37, 9442 Berneck\n"
+            "Bewerbung bitte ausschliesslich per E-Mail an:\n"
+            "Herr Yves Scheliesnig\nE-Mail: HR@optiprint.ch"
+        ),
+    )
+    assert pipeline.contact_check("ostjob:77") == []
+    row = store.get_job("ostjob:77")
+    # Wie ueberall: Anrede mit Nachname, Vornamen fallen weg.
+    assert row["contact_name"] == "Herr Scheliesnig"
+    assert row["contact_email"] == "HR@optiprint.ch"
+
+
+def test_address_is_read_from_the_attached_pdf(tmp_path, monkeypatch) -> None:
+    job = _image_job(
+        contact_email="HR@optiprint.ch",
+        contact_name="Herr Yves Scheliesnig",
+        description="",
+        city="Berneck",
+        raw={"company": {"homepage": "https://optiprint.ch"}},
+    )
+    settings = Settings(tmp_path / "einstellungen.json")
+    store = Store(tmp_path / "daten.db")
+    store.upsert_job(job)
+    page = '<a href="//barberry.ostjob.ch/c89.pdf">Stellenausschreibung (PDF)</a>'
+    pipeline = Pipeline(
+        settings,
+        store,
+        ai_client=FakeAI(),
+        templates_file=tmp_path / "vorlagen.json",
+        page_fetcher=lambda url: page,
+    )
+    monkeypatch.setattr(
+        pdf,
+        "text_from_html",
+        lambda value, base_url="", **kwargs: (
+            "Arbeitsort Optiprint AG, Auerstrasse 37, 9442 Berneck"
+        ),
+    )
+    assert pipeline.complete_job("ostjob:77") is True
+    row = store.get_job("ostjob:77")
+    assert row["street"] == "Auerstrasse 37"
+    assert row["zip"] == "9442"
+
+
+def test_contact_is_read_from_an_embedded_frame(tmp_path) -> None:
+    job = Job(
+        id="ostjob:1129708",
+        source="ostjob",
+        source_id="1129708",
+        title="Personalberater/in RAV Heerbrugg (m/w/d)",
+        company="Kanton St.Gallen",
+        city="Heerbrugg",
+        url="https://www.ostjob.ch/job/personalberater-in-rav-heerbrugg-m-w-d/1129708",
+    )
+    settings = Settings(tmp_path / "einstellungen.json")
+    store = Store(tmp_path / "daten.db")
+    store.upsert_job(job)
+    seen: list[str] = []
+
+    def fetch(url: str) -> str:
+        seen.append(url)
+        if "umantis" in url:
+            return (
+                "<p>Weitere Auskünfte unter: Claudio Zai, Teamleiter</p>"
+                "<!-- Frau Annina Sulser, annina.sulser@sg.ch -->"
+            )
+        return (
+            '<iframe src="https://recruitingapp-2800.umantis.com/'
+            'Vacancies/6463/Description/1?lang=ger"></iframe>'
+        )
+
+    pipeline = Pipeline(
         settings,
         store,
         ai_client=FakeAI(),
         templates_file=tmp_path / "vorlagen.json",
         page_fetcher=fetch,
     )
-    assert second.complete_job("ostjob:77", retry=True) is False
-    assert len(calls) > first_round
+
+    assert pipeline.complete_job("ostjob:1129708") is True
+    row = store.get_job("ostjob:1129708")
+    # Nur der sichtbare Kontakt zaehlt; der auskommentierte bleibt aussen vor.
+    assert row["contact_name"] == "Claudio Zai"
+    assert row["contact_email"] == ""
+    assert any("umantis" in url for url in seen)
+
+
+def test_pdf_inside_an_embedded_frame_is_read(tmp_path, monkeypatch) -> None:
+    def fake_text(value: str, base_url: str = "") -> str:
+        if "umantis" not in value:
+            return ""
+        return "Frau Annina Sulser\nE-Mail: annina.sulser@sg.ch"
+
+    monkeypatch.setattr(pdf, "text_from_html", fake_text)
+    job = Job(
+        id="ostjob:1129708",
+        source="ostjob",
+        source_id="1129708",
+        title="Personalberater/in RAV Heerbrugg (m/w/d)",
+        company="Kanton St.Gallen",
+        url="https://www.ostjob.ch/job/personalberater-in-rav-heerbrugg-m-w-d/1129708",
+    )
+    settings = Settings(tmp_path / "einstellungen.json")
+    store = Store(tmp_path / "daten.db")
+    store.upsert_job(job)
+    pipeline = Pipeline(
+        settings,
+        store,
+        ai_client=FakeAI(),
+        templates_file=tmp_path / "vorlagen.json",
+        page_fetcher=lambda url: (
+            '<iframe src="https://recruitingapp-2800.umantis.com/6463"></iframe>'
+        ),
+    )
+
+    assert pipeline._pdf_text(job).strip()
+    assert pipeline.complete_job("ostjob:1129708") is True
+    assert store.get_job("ostjob:1129708")["contact_email"] == "annina.sulser@sg.ch"

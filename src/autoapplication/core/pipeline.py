@@ -16,7 +16,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-from . import ocr
+from . import embed, ocr, pdf
 from .ai import (
     ABSAGE,
     EINLADUNG,
@@ -43,6 +43,7 @@ from .templates import (
     vocabulary,
 )
 from .text import (
+    contact_name,
     contact_person,
     days_until,
     domain_of,
@@ -184,6 +185,10 @@ class Pipeline:
         self._page_texts: dict[str, str] = {}
         # Firmenadressen je Domain nur einmal im Netz suchen.
         self._address_cache: dict[str, tuple[str, str]] = {}
+        # Text der PDF-Beilaen je Anzeige (viele Portale haengen eine an).
+        self._pdf_texts: dict[str, str] = {}
+        # Inhalt eingebetteter Rahmen (dort steht oft die ganze Ausschreibung).
+        self._frame_texts: dict[str, str] = {}
         # Zuletzt zusammengestellte Bewerbung je Stelle (fuer die Vorschau).
         self._previews: dict[str, dict[str, Any]] = {}
         # Dasselbe fuer Nachfragen, damit die Vorlage nicht doppelt laeuft.
@@ -320,7 +325,7 @@ class Pipeline:
         if candidates:
             preferred = [item for item in candidates if company and domain_of(item) == company]
             address = (preferred or candidates)[0]
-        return address, contact_person(text)
+        return address, contact_person(text) or contact_name(text)
 
     def _text_contact(self, job: Job) -> tuple[str, str]:
         """Ansprechperson und Adresse aus dem Fliesstext der Anzeige lesen."""
@@ -341,9 +346,70 @@ class Pipeline:
             self._page_texts[url] = self._page_fetcher(url)
         return self._page_texts[url]
 
+    def _frame_text(self, job: Job) -> str:
+        """HTML der eingebetteten Rahmen einer Anzeige - einmal geholt.
+
+        Viele Portale zeigen die Ausschreibung in einem iframe (z. B. bei
+        umantis). Dort stehen Ansprechperson und E-Mail; die Portalseite
+        selbst nennt oft nur das Portal.
+        """
+        key = job.url or job.apply_url or job.id
+        cached = self._frame_texts.get(key)
+        if cached is not None:
+            return cached
+        raw = job.raw if isinstance(job.raw, dict) else {}
+        sources = [self._page_text(job)]
+        sources.extend(value for value in raw.values() if isinstance(value, str))
+        base = job.url or job.apply_url
+        text = ""
+        for source in sources:
+            if not source:
+                continue
+            for url in embed.frame_urls(source, base):
+                page = self._page_text_for(url)
+                if page:
+                    text = "\n".join(part for part in (text, page) if part)
+        self._frame_texts[key] = text
+        return text
+
+    def _pdf_text(self, job: Job) -> str:
+        """Text der PDF-Beilaen einer Anzeige - einmal je Anzeige geholt.
+
+        Viele Portale verlinken die Ausschreibung als PDF; dort stehen
+        Ansprechperson, E-Mail und Adresse oft im Klartext, waehrend die
+        Anzeigenseite selbst nur den Link zeigt.
+        """
+        key = job.url or job.apply_url or job.id
+        cached = self._pdf_texts.get(key)
+        if cached is not None:
+            return cached
+        raw = job.raw if isinstance(job.raw, dict) else {}
+        sources = [self._page_text(job), self._frame_text(job)]
+        sources.extend(value for value in raw.values() if isinstance(value, str))
+        base = job.url or job.apply_url
+        text = ""
+        for source in sources:
+            if not source:
+                continue
+            found = pdf.text_from_html(source, base)
+            if found:
+                text = "\n".join(part for part in (text, found) if part)
+        self._pdf_texts[key] = text
+        return text
+
     def _find_contact(self, job: Job) -> tuple[str, str]:
-        """Kontakt suchen: Anzeigetext, dann Anzeigenseite, dann Bilder."""
+        """Kontakt suchen: Anzeigetext, Rahmen, Seite, PDF, dann Bilder."""
         address, person = self._text_contact(job)
+        if not address or not person:
+            # Eingebettete Ausschreibung zuerst: dort steht die Ansprechperson
+            # der Firma, waehrend die Portalseite nur eigene Adressen nennt.
+            frame = self._frame_text(job)
+            if frame:
+                frame_address, frame_person = self._contact_from_text(
+                    frame, *self._contact_domains(job)
+                )
+                address = address or frame_address
+                person = person or frame_person
         if not address or not person:
             # Viele Portale betten den Anzeigentext als Seite ein; dort steht
             # die Adresse oft im Fliesstext.
@@ -354,6 +420,15 @@ class Pipeline:
                 )
                 address = address or page_address
                 person = person or page_person
+        if not address or not person:
+            # PDF-Beilage vor der Bildauslese: dort steht der Text im Klartext.
+            pdf_text = self._pdf_text(job)
+            if pdf_text:
+                pdf_address, pdf_person = self._contact_from_text(
+                    pdf_text, *self._contact_domains(job)
+                )
+                address = address or pdf_address
+                person = person or pdf_person
         if not address or not person:
             image_address, image_person = self._ocr_contact(job)
             address = address or image_address
@@ -374,7 +449,9 @@ class Pipeline:
         if not text.strip():
             return "", ""
         addresses = emails(text)
-        return (addresses[0] if addresses else ""), contact_person(text)
+        return (addresses[0] if addresses else ""), (
+            contact_person(text) or contact_name(text)
+        )
 
     # ------------------------------------------------------------------
     # Firmenadresse (Strasse und Postleitzahl)
@@ -502,20 +579,12 @@ class Pipeline:
     # ------------------------------------------------------------------
     # Datensaetze vervollstaendigen
     # ------------------------------------------------------------------
-    def complete_job(self, job_id: str, *, retry: bool = False) -> bool:
-        """Eine gespeicherte Stelle um fehlende Kontaktdaten ergaenzen.
-
-        ``retry`` erzwingt einen neuen Versuch, auch wenn fuer die Luecken
-        schon einmal ohne Ergebnis gesucht wurde.
-        """
+    def complete_job(self, job_id: str) -> bool:
+        """Eine gespeicherte Stelle um fehlende Kontaktdaten ergaenzen."""
         row = self.store.get_job(job_id)
         if row is None:
             return False
-        return self._complete_job(
-            Job.from_row(row),
-            tried=str(row.get("contact_tried_for") or ""),
-            retry=retry,
-        )
+        return self._complete_job(Job.from_row(row))
 
     @staticmethod
     def _missing_contact_fields(job: Job) -> list[str]:
@@ -531,22 +600,17 @@ class Pipeline:
             if not value
         ]
 
-    def _complete_job(
-        self, job: Job, *, tried: str = "", retry: bool = False
-    ) -> bool:
-        """Name, E-Mail und Adresse nachschauen, soweit sie fehlen.
+    def _complete_job(self, job: Job) -> bool:
+        """Name, E-Mail und Adresse nachschauen, solange sie fehlen.
 
-        Gelesen wird nur, was Anzeige, Portal oder Firmenseite klar hergeben;
-        geraten wird nichts, und vorhandene Angaben bleiben stehen. Ein
-        erfolgloser Versuch wird gemerkt, damit derselbe Datensatz nicht bei
-        jedem Lauf erneut im Netz gesucht wird.
+        Gelesen wird nur, was Anzeige, Portal, PDF-Beilage oder Firmenseite
+        klar hergeben; geraten wird nichts, und vorhandene Angaben bleiben
+        stehen. Uebersprungen wird erst ein Datensatz, dessen Zeile in der
+        Stellentabelle alle Angaben zeigt - fehlt eines, wird bei der
+        naechsten Suche erneut nachgesehen.
         """
         missing = self._missing_contact_fields(job)
         if not missing:
-            return False
-        attempted = {part for part in (tried or "").split(",") if part}
-        if not retry and set(missing) <= attempted:
-            # Fuer genau diese Luecken wurde schon ohne Ergebnis gesucht.
             return False
         updates: dict[str, Any] = {}
         if not (job.contact_email and job.contact_name):
@@ -560,6 +624,14 @@ class Pipeline:
                 updates["contact_name"] = person
         if not (job.street and job.zip):
             street, zip_code = self._lookup_address(job)
+            if not (street and zip_code):
+                # Bleibt die Firmenseite stumm, steht die Adresse oft in der
+                # PDF-Beilage der Anzeige.
+                pdf_street, pdf_zip = self._address_from_text(
+                    self._pdf_text(job), job.city
+                )
+                street = street or pdf_street
+                zip_code = zip_code or pdf_zip
             if street and not job.street:
                 updates["street"] = street
             if zip_code and not job.zip:
@@ -571,8 +643,8 @@ class Pipeline:
             "zip": job.zip,
         }
         values.update(updates)
-        # Auch ein Fehlversuch wird vermerkt: dieselbe Luecke wird nicht bei
-        # jedem Lauf erneut im Netz gesucht.
+        # Nur zur Information (wann zuletzt gesucht, was damals fehlte); der
+        # Vermerk blockiert keinen neuen Versuch, solange etwas fehlt.
         self.store.update_job(
             job.id,
             contact_tried_at=now_iso(),
@@ -589,7 +661,11 @@ class Pipeline:
         return True
 
     def _complete_stored_jobs(self, seen: set[str], limit: int = 15) -> int:
-        """Gespeicherte Stellen mit Luecken nachziehen - begrenzt je Lauf."""
+        """Gespeicherte Stellen mit Luecken nachziehen - begrenzt je Lauf.
+
+        Vollstaendige Zeilen kosten nur einen Vergleich; unvollstaendige werden
+        erneut gesucht, damit am Ende jede Zeile alle Angaben zeigt.
+        """
         done = 0
         for row in self.store.list_jobs(limit=400):
             if done >= limit:
@@ -599,14 +675,7 @@ class Pipeline:
                 continue
             if str(row.get("status") or "") in {"ignoriert", "archiviert"}:
                 continue
-            if all(
-                row.get(key)
-                for key in ("contact_email", "contact_name", "street", "zip")
-            ):
-                continue
-            if self._complete_job(
-                Job.from_row(row), tried=str(row.get("contact_tried_for") or "")
-            ):
+            if self._complete_job(Job.from_row(row)):
                 done += 1
         return done
 
@@ -771,7 +840,7 @@ class Pipeline:
 
             # Adresse, E-Mail und Ansprechperson gleich mitnehmen, damit der
             # Datensatz vollstaendig ist - auch bei Stellen ohne Passung.
-            self._complete_job(job, tried=str(known.get("contact_tried_for") or ""))
+            self._complete_job(job)
             stored = self.store.get_job(job.id)
             if stored:
                 job = Job.from_row(stored)

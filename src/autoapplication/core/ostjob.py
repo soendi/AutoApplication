@@ -22,6 +22,7 @@ from typing import Any, Callable
 from .config import Settings
 from .models import Job
 from .text import (
+    contact_name,
     contact_person,
     emails,
     format_workload,
@@ -200,7 +201,7 @@ def parse_vacancy(
         url=web_url(source_id, title),
         apply_url=str(item.get("urlApplication") or "").strip(),
         contact_email=contact_email,
-        contact_name=contact_person(contact_block),
+        contact_name=contact_person(contact_block) or contact_name(contact_block),
         published=parsed.isoformat(),
         description=description,
         keywords=split_terms(item.get("keywords")),

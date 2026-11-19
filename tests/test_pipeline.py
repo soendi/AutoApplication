@@ -974,47 +974,44 @@ def test_search_completes_contact_data_right_away(tmp_path) -> None:
     assert stored["zip"] == "9436"
 
 
-def test_hopeless_records_do_not_take_the_backfill_slots(tmp_path) -> None:
+def test_only_complete_rows_are_skipped(tmp_path) -> None:
     urls: list[str] = []
 
     def fetch(url: str) -> str:
         urls.append(url)
         return "Muster Logistik AG, Bahnhofstrasse 12, 9436 Balgach"
 
-    pipeline, store, _outlook, _ = _pipeline(
-        tmp_path, jobs=[], page_fetcher=fetch
-    )
-    hopeless = Job(
-        id="ostjob:hoffnungslos",
+    pipeline, store, _outlook, _ = _pipeline(tmp_path, jobs=[], page_fetcher=fetch)
+    complete = Job(
+        id="ostjob:komplett",
         source="ostjob",
-        source_id="hoffnungslos",
-        title="Ohne Kontakt",
+        source_id="komplett",
+        title="Komplett",
+        company="Muster AG",
+        city="Balgach",
+        street="Bahnhofstrasse 12",
+        zip="9436",
+        contact_email="hr@muster.ch",
+        contact_name="Frau Meier",
+        published="2026-11-19",
+        raw={"company": {"homepage": "https://komplett.ch"}},
+    )
+    store.upsert_job(complete, now="2026-11-19T08:00:00+00:00")
+    incomplete = Job(
+        id="ostjob:offen",
+        source="ostjob",
+        source_id="offen",
+        title="Offen",
         company="Nirgends AG",
         city="Balgach",
-        published="2026-11-19",
+        published="2026-11-01",
         raw={"company": {"homepage": "https://nirgends.ch"}},
     )
-    store.upsert_job(hopeless, now="2026-11-19T08:00:00+00:00")
-    store.update_job(
-        "ostjob:hoffnungslos",
-        contact_tried_at="2026-11-19T08:00:00+00:00",
-        contact_tried_for="contact_email,contact_name,street,zip",
-    )
-    fillable = Job(
-        id="ostjob:fuellbar",
-        source="ostjob",
-        source_id="fuellbar",
-        title="Mit Adresse",
-        company="Muster Logistik AG",
-        city="Balgach",
-        published="2026-11-01",
-        raw={"company": {"homepage": "https://muster-logistik.ch"}},
-    )
-    store.upsert_job(fillable, now="2026-11-01T08:00:00+00:00")
+    store.upsert_job(incomplete, now="2026-11-01T08:00:00+00:00")
 
     assert pipeline._complete_stored_jobs(set(), limit=1) == 1
-    row = store.get_job("ostjob:fuellbar")
-    assert row["street"] == "Bahnhofstrasse 12"
-    assert row["zip"] == "9436"
-    # Der hoffnungslose Datensatz wurde nicht nochmals im Netz gesucht.
-    assert not any("nirgends" in url for url in urls)
+    # Die vollstaendige Zeile kostet kein Netz; die offene wurde gesucht.
+    assert not any("komplett" in url for url in urls)
+    assert any("nirgends" in url for url in urls)
+    assert store.get_job("ostjob:komplett")["contact_tried_at"] == ""
+    assert store.get_job("ostjob:offen")["contact_tried_at"]

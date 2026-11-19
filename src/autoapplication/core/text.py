@@ -23,6 +23,16 @@ _CONTACT_RE = re.compile(
 _CONTACT_TITLES = {
     "dr", "prof", "dipl", "med", "phil", "ing", "lic", "hans",
 }
+# Kontaktangabe ohne Anrede: "Weitere Auskuenfte unter: Claudio Zai, ...".
+_CONTACT_NAME_RE = re.compile(
+    r"(?i)(?:(?:weitere\s+)?ausk[\u00fc\u00fc]nfte\s+unter|auskunft\s+(?:unter|bei)"
+    r"|ansprech(?:person|partner(?:in)?)|kontakt(?:person)?)\s*[:\-\u2013]\s*"
+    r"([A-Z\u00c4\u00d6\u00dc][a-z\u00e4\u00f6\u00fc\u00df\-]+(?:\s+[A-Z\u00c4\u00d6\u00dc][a-z\u00e4\u00f6\u00fc\u00df\-]+){1,2})"
+)
+_CONTACT_NAME_STOP = {
+    "team", "personal", "personalabteilung", "bewerbung", "bewerbungen",
+    "sekretariat", "empfang", "info", "office", "telefon", "montag",
+}
 _CONTACT_STOP = {
     "und", "oder", "von", "vom", "in", "im", "der", "die", "das", "den",
     "bei", "mit", "für", "fuer", "als", "ihr", "ihre",
@@ -32,10 +42,15 @@ _WORD_RE = re.compile(r"[A-Za-zÄÖÜäöüß][A-Za-zÄÖÜäöüß0-9\-+/.]{1,}
 
 
 def strip_html(value: str | None) -> str:
-    """HTML aus dem Stellenportal in lesbaren Text verwandeln."""
+    """HTML aus dem Stellenportal in lesbaren Text verwandeln.
+
+    Auskommentierte Stellen (``<!-- ... -->``) werden entfernt: sie stehen
+    nicht auf der Seite und taugen nicht als Kontaktangabe.
+    """
     if not value:
         return ""
-    text = re.sub(r"(?i)<br\s*/?>", "\n", str(value))
+    text = re.sub(r"(?s)<!--.*?-->", " ", str(value))
+    text = re.sub(r"(?i)<br\s*/?>", "\n", text)
     text = re.sub(r"(?i)<li[^>]*>", "- ", text)
     text = re.sub(r"(?i)</(p|li|div|tr|h[1-6]|ul|ol)>", "\n", text)
     text = _TAG_RE.sub(" ", text)
@@ -236,6 +251,27 @@ def contact_person(value: str | None) -> str:
         name = tokens[-1] if len(tokens) > 1 else tokens[0]
         title = "Herr" if match.group(1).lower() == "herrn" else match.group(1)
         return f"{title} {name}"
+    return ""
+
+
+def contact_name(value: str | None) -> str:
+    """Ansprechperson ohne Anrede, wenn die Anzeige sie so nennt.
+
+    Nur nach einer klaren Kontaktangabe ("Weitere Ausk\u00fcnfte unter:",
+    "Kontakt:", "Ansprechpartner:"); eine Anrede wie Herr/Frau wird nicht
+    erfunden, der Name bleibt wie geschrieben.
+    """
+    text = strip_html(value)
+    if not text:
+        return ""
+    for match in _CONTACT_NAME_RE.finditer(text):
+        tokens = match.group(1).split()
+        if tokens[0].lower() in _CONTACT_NAME_STOP:
+            continue
+        # "RAV" & Co. sind keine Namen, sondern Abteilungen.
+        if tokens[0].isupper() or not any(char.islower() for char in tokens[-1]):
+            continue
+        return " ".join(tokens)
     return ""
 
 
