@@ -462,6 +462,8 @@ class ApplicationsPage(QWidget):
         MailDialog(self, title, blocks).exec()
         self.window.store.mark_replies_seen(application_id)
         self.refresh()
+        # Die Uebersicht zaehlt nur ungelesene Antworten - sofort nachziehen.
+        self.window.overview.refresh()
 
     def open_draft(self) -> None:
         application = self._selected()

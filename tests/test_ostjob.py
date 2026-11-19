@@ -40,6 +40,8 @@ ITEM = {
         "homepage": "https://www.gw-world.com/ch/",
         "city": "Altenrhein",
         "zip": "9423",
+        "street": "Bahnhofstrasse",
+        "houseNumber": "12",
     },
 }
 
@@ -85,6 +87,8 @@ def test_parse_vacancy_cleans_html_and_distance() -> None:
     assert "Speditionslogistik" in job.title
     assert job.workload == "80-100 %"
     assert job.canton == "St. Gallen"
+    assert job.street == "Bahnhofstrasse 12"
+    assert job.zip == "9423"
     assert job.keywords[0] == "Spedition"
     assert "nadia.volek@example.ch" in job.contact_address()
     assert "gw-world.com" in job.domained()

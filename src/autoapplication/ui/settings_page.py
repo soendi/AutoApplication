@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from PySide6.QtCore import QUrl
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -19,11 +21,19 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSpinBox,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
 
 from ..core.ai import GROQ_BASE, GROQ_MODEL, OPENAI_BASE, OPENAI_MODEL
+from ..core.documents import (
+    ensure_default_letter_template,
+    letter_template_folder,
+    list_letter_templates,
+    resolve_letter_template,
+    write_template_preview,
+)
 from ..core.imap_mail import GmailImapClient
 from .dialogs import DeviceLoginDialog
 from .workers import Task
@@ -52,15 +62,16 @@ class SettingsPage(QWidget):
         self._tasks: list[Task] = []
 
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        outer.addWidget(scroll)
-        body = QWidget()
-        scroll.setWidget(body)
-        inner = QVBoxLayout(body)
-        inner.setContentsMargins(18, 16, 18, 16)
-        inner.setSpacing(12)
+        outer.setContentsMargins(18, 10, 18, 12)
+        outer.setSpacing(8)
+        # Vier Reiter statt einer langen Seite: Persönliches, Ostjob,
+        # E-Mail samt Unterlagen sowie KI und Automatik.
+        self.tabs = QTabWidget()
+        outer.addWidget(self.tabs, 1)
+        personal = self._tab("Persönliches")
+        ostjob = self._tab("Ostjob")
+        mail_tab = self._tab("E-Mail und Anhänge (Unterlagen)")
+        automation_tab = self._tab("KI & Automatisierung")
 
         # ------------------------------------------------------------------
         person = QGroupBox("Person")
@@ -115,7 +126,7 @@ class SettingsPage(QWidget):
         person_hint.setWordWrap(True)
         person_hint.setObjectName("Hint")
         person_form.addRow("", person_hint)
-        inner.addWidget(person)
+        personal.addWidget(person)
 
         # ------------------------------------------------------------------
         search = QGroupBox("Suche auf ostjob.ch")
@@ -194,7 +205,7 @@ class SettingsPage(QWidget):
         hint.setWordWrap(True)
         hint.setObjectName("Hint")
         search_form.addRow("", hint)
-        inner.addWidget(search)
+        ostjob.addWidget(search)
 
         # ------------------------------------------------------------------
         matching = QGroupBox("Bewerbungen")
@@ -211,7 +222,7 @@ class SettingsPage(QWidget):
         matching_hint.setWordWrap(True)
         matching_hint.setObjectName("Hint")
         matching_form.addRow("", matching_hint)
-        inner.addWidget(matching)
+        ostjob.addWidget(matching)
 
         # ------------------------------------------------------------------
         ai = QGroupBox("KI (optional)")
@@ -246,7 +257,7 @@ class SettingsPage(QWidget):
         ai_hint.setWordWrap(True)
         ai_hint.setObjectName("Hint")
         ai_form.addRow("", ai_hint)
-        inner.addWidget(ai)
+        automation_tab.addWidget(ai)
 
         # ------------------------------------------------------------------
         mail = QGroupBox("E-Mail-Anbindung")
@@ -262,7 +273,7 @@ class SettingsPage(QWidget):
         mail_hint.setWordWrap(True)
         mail_hint.setObjectName("Hint")
         mail_form.addRow("", mail_hint)
-        inner.addWidget(mail)
+        mail_tab.addWidget(mail)
 
         # ------------------------------------------------------------------
         outlook = QGroupBox("Outlook (Microsoft Graph)")
@@ -298,7 +309,7 @@ class SettingsPage(QWidget):
         outlook_hint.setWordWrap(True)
         outlook_hint.setObjectName("Hint")
         outlook_form.addRow("", outlook_hint)
-        inner.addWidget(outlook)
+        mail_tab.addWidget(outlook)
 
         # ------------------------------------------------------------------
         imap = QGroupBox("Gmail (IMAP/SMTP)")
@@ -330,7 +341,7 @@ class SettingsPage(QWidget):
         imap_hint.setWordWrap(True)
         imap_hint.setObjectName("Hint")
         imap_form.addRow("", imap_hint)
-        inner.addWidget(imap)
+        mail_tab.addWidget(imap)
 
         # ------------------------------------------------------------------
         documents = QGroupBox("Unterlagen")
@@ -363,7 +374,43 @@ class SettingsPage(QWidget):
         documents_hint.setWordWrap(True)
         documents_hint.setObjectName("Hint")
         documents_form.addRow("", documents_hint)
-        inner.addWidget(documents)
+        mail_tab.addWidget(documents)
+
+        # ------------------------------------------------------------------
+        letter = QGroupBox("Anschreiben-Vorlage")
+        letter_form = QFormLayout(letter)
+        self.letter_template = QComboBox()
+        letter_form.addRow("Vorlage", self.letter_template)
+        letter_row = QWidget()
+        letter_layout = QHBoxLayout(letter_row)
+        letter_layout.setContentsMargins(0, 0, 0, 0)
+        self.letter_folder_button = QPushButton("Ordner öffnen")
+        self.letter_folder_button.clicked.connect(self.open_letter_folder)
+        self.letter_sample_button = QPushButton("Beispielvorlage anlegen")
+        self.letter_sample_button.clicked.connect(self.create_letter_sample)
+        self.letter_preview_button = QPushButton("Vorschau als PDF")
+        self.letter_preview_button.clicked.connect(self.preview_letter_template)
+        for button in (
+            self.letter_folder_button,
+            self.letter_sample_button,
+            self.letter_preview_button,
+        ):
+            letter_layout.addWidget(button)
+        letter_layout.addStretch(1)
+        letter_form.addRow("", letter_row)
+        letter_hint = QLabel(
+            "Das Anschreiben entsteht aus einer Textvorlage im Ordner "
+            "„briefvorlagen“. Jede .txt-Datei dort steht in der Liste; sie "
+            "enthält den ganzen Brief, und die Platzhalter in geschweiften "
+            "Klammern werden ersetzt. „Vorschau als PDF“ zeigt jeden "
+            "Platzhalter an seinem Platz – so lässt sich die Vorlage "
+            "gestalten. Änderungen an einer Datei gelten ab dem nächsten "
+            "Anschreiben."
+        )
+        letter_hint.setWordWrap(True)
+        letter_hint.setObjectName("Hint")
+        letter_form.addRow("", letter_hint)
+        mail_tab.addWidget(letter)
 
         # ------------------------------------------------------------------
         automation = QGroupBox("Automatik")
@@ -384,7 +431,7 @@ class SettingsPage(QWidget):
             ("", self.notify_desktop),
         ):
             automation_form.addRow(label, field)
-        inner.addWidget(automation)
+        automation_tab.addWidget(automation)
 
         save_row = QHBoxLayout()
         self.save_button = QPushButton("Einstellungen speichern")
@@ -392,10 +439,64 @@ class SettingsPage(QWidget):
         self.save_button.clicked.connect(self.save)
         save_row.addWidget(self.save_button)
         save_row.addStretch(1)
-        inner.addLayout(save_row)
-        inner.addStretch(1)
+        outer.addLayout(save_row)
 
         self.load()
+
+    # ------------------------------------------------------------------
+    def _tab(self, title: str) -> QVBoxLayout:
+        """Eigener, scrollbarer Reiter für eine Gruppe von Einstellungen."""
+        body = QWidget()
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(body)
+        layout = QVBoxLayout(body)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(12)
+        self.tabs.addTab(scroll, title)
+        return layout
+
+    def _load_letter_templates(self) -> None:
+        current = self.window.settings.text("documents.letter_template")
+        self.letter_template.blockSignals(True)
+        self.letter_template.clear()
+        self.letter_template.addItem("Eingebaute Standardvorlage", "")
+        for path in list_letter_templates():
+            self.letter_template.addItem(path.name, path.name)
+        index = self.letter_template.findData(current)
+        self.letter_template.setCurrentIndex(index if index >= 0 else 0)
+        self.letter_template.blockSignals(False)
+
+    def open_letter_folder(self) -> None:
+        folder = letter_template_folder()
+        try:
+            ensure_default_letter_template(folder)
+        except OSError as exc:
+            QMessageBox.warning(self, "Vorlagen", f"Ordner nicht schreibbar: {exc}")
+            return
+        self._load_letter_templates()
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
+
+    def create_letter_sample(self) -> None:
+        folder = letter_template_folder()
+        try:
+            ensure_default_letter_template(folder)
+        except OSError as exc:
+            QMessageBox.warning(self, "Vorlage", f"Vorlage nicht schreibbar: {exc}")
+            return
+        self._load_letter_templates()
+        self.window.statusBar().showMessage(
+            f"Vorlage im Ordner {folder} angelegt.", 6000
+        )
+
+    def preview_letter_template(self) -> None:
+        name = self.letter_template.currentData() or ""
+        try:
+            path = write_template_preview(resolve_letter_template(name))
+        except OSError as exc:
+            QMessageBox.warning(self, "Vorlage", f"Vorschau nicht möglich: {exc}")
+            return
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
 
     # ------------------------------------------------------------------
     def refresh(self) -> None:
@@ -469,6 +570,7 @@ class SettingsPage(QWidget):
         self.attach.setChecked(settings.flag("documents.attach", True))
         self.cover_letter.setChecked(settings.flag("documents.cover_letter", True))
         self.max_mb.setValue(int(settings.number("documents.max_mb", 20)))
+        self._load_letter_templates()
 
         self.daily_time.setText(settings.text("automation.daily_time", "07:30"))
         self.auto_on_start.setChecked(settings.flag("automation.auto_on_start", True))
@@ -547,6 +649,9 @@ class SettingsPage(QWidget):
         settings.set("documents.attach", self.attach.isChecked())
         settings.set("documents.cover_letter", self.cover_letter.isChecked())
         settings.set("documents.max_mb", self.max_mb.value())
+        settings.set(
+            "documents.letter_template", self.letter_template.currentData() or ""
+        )
 
         settings.set("automation.daily_time", time_text or "07:30")
         settings.set("automation.auto_on_start", self.auto_on_start.isChecked())

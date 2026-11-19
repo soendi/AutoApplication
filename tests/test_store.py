@@ -174,3 +174,46 @@ def test_replies_store_the_whole_mail_and_stay_unread_until_opened(tmp_path) -> 
     )
     assert store.unseen_by_application() == {application_id: 1}
     assert store.reply_counts() == {application_id: 2}
+
+
+def test_unseen_total_counts_only_unread_replies(tmp_path) -> None:
+    store = Store(tmp_path / "daten.db")
+    job = Job(id="ostjob:1", source="ostjob", source_id="1", title="T", company="C")
+    store.upsert_job(job)
+    first = store.add_application(job.id, "spedition", "Betreff", "Text")
+    second = store.add_application(job.id, "lager", "Betreff", "Text")
+    store.add_reply(first, "m1", "2026-11-18T09:00:00Z", "a@firma.ch", "Antwort", "info", "")
+    store.add_reply(second, "m2", "2026-11-18T10:00:00Z", "b@firma.ch", "Antwort", "info", "")
+    store.add_reply(second, "m3", "2026-11-18T11:00:00Z", "b@firma.ch", "Antwort", "info", "")
+    assert store.unseen_total() == 3
+    store.mark_replies_seen(first)
+    assert store.unseen_total() == 2
+    store.mark_replies_seen(second)
+    assert store.unseen_total() == 0
+
+
+def test_job_stores_street_postcode_and_email(tmp_path) -> None:
+    store = Store(tmp_path / "daten.db")
+    job = Job(
+        id="ostjob:9",
+        source="ostjob",
+        source_id="9",
+        title="Speditionskaufmann",
+        company="Muster AG",
+        city="Balgach",
+        zip="9436",
+        street="Bahnhofstrasse 12",
+        contact_email="bewerbung@muster.ch",
+        contact_name="Frau Meier",
+    )
+    assert store.upsert_job(job) is True
+    row = store.get_job(job.id)
+    assert row["street"] == "Bahnhofstrasse 12"
+    assert row["zip"] == "9436"
+    assert row["contact_email"] == "bewerbung@muster.ch"
+    assert row["contact_name"] == "Frau Meier"
+    # Adresse laesst sich nachtragen und in der Suche finden.
+    store.update_job(job.id, street="Neue Strasse 7")
+    assert store.get_job(job.id)["street"] == "Neue Strasse 7"
+    assert [item["id"] for item in store.list_jobs(search="Neue Strasse")] == [job.id]
+    assert [item["id"] for item in store.list_jobs(search="9436")] == [job.id]

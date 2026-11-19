@@ -412,6 +412,8 @@ class MainWindow(QMainWindow):
         dialog = DraftPreviewDialog(
             self,
             email=str(preview.get("email") or ""),
+            address=str(preview.get("address") or ""),
+            warnings=[str(item) for item in preview.get("warnings") or []],
             salutation=str(preview.get("salutation") or ""),
             subject=str(preview.get("subject") or ""),
             body=str(preview.get("body") or ""),

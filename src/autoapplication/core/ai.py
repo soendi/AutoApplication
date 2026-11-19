@@ -364,9 +364,11 @@ class AiClient:
             'der Form {"titel": "...", "beschreibung": "...", '
             '"kontakt_email": "...", "ansprechperson": "..."}. '
             "ansprechperson ist die Ansprechperson der Anzeige mit Anrede, also "
-            "\"Herr Müller\" oder \"Frau Meier\" (nur der Nachname). Steht in "
-            "der Anzeige kein Herr/Frau, bleibt ansprechperson leer - raten Sie "
-            "das Geschlecht nie. "
+            "\"Herr Müller\" oder \"Frau Meier\" (nur der Nachname). Steht "
+            "dort nur ein Name ohne Herr/Frau, leiten Sie die Anrede aus dem "
+            "Vornamen ab, wenn er eindeutig männlich oder weiblich ist (Sandra "
+            "-> Frau, Michael -> Herr). Bei unklaren, mehrdeutigen oder "
+            "fehlenden Vornamen bleibt ansprechperson leer - raten Sie dort nie. "
             "Der Titel ist die reine Berufsbezeichnung in der maennlichen Form, "
             "ohne (m/w/d), (gn*), (all genders) und ohne Nummern oder IDs des "
             "Anbieters. Die Beschreibung enthaelt nur Angaben zur Stelle "
@@ -400,6 +402,10 @@ class AiClient:
         except (urllib.error.URLError, OSError, ValueError, KeyError) as exc:
             log.info("KI-Auslesen der Anzeige fehlgeschlagen (%s) - lokal weiter", exc)
             return local
+
+    # Firmenadressen liest bewusst keine KI: sie kämen aus dem Modellgedächtnis
+    # und könnten erfunden sein. Adressen stammen nur aus Portalangaben oder
+    # klar aus dem Seitentext gelesenen Zeilen (siehe Pipeline).
 
     def proofread(self, text: str) -> str:
         """Rechtschreibung und Grammatik korrigieren, Inhalt unverändert.

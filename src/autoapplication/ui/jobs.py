@@ -38,8 +38,12 @@ STATUS_LABELS = {
 COLUMNS = (
     "Datum",
     "Titel",
+    "Ansprechperson",
+    "E-Mail",
     "Firma",
     "Ort",
+    "Adresse",
+    "PLZ",
     "Pensum",
     "Weg",
     "Interesse",
@@ -60,7 +64,9 @@ class JobsPage(QWidget):
         filters = QHBoxLayout()
         filters.setSpacing(8)
         self.search = QLineEdit()
-        self.search.setPlaceholderText("In Titel, Firma, Ort oder Stichworten suchen …")
+        self.search.setPlaceholderText(
+            "In Titel, Firma, Ort, Adresse, PLZ oder Stichworten suchen …"
+        )
         self.search.textChanged.connect(self.refresh)
         self.status = QComboBox()
         self.status.addItem("Alle Status", "")
@@ -89,6 +95,7 @@ class JobsPage(QWidget):
             QHeaderView.ResizeToContents
         )
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(6, QHeaderView.Stretch)
         self.table.itemSelectionChanged.connect(self._update_buttons)
         self.table.cellDoubleClicked.connect(lambda *_: self.open_job())
         layout.addWidget(self.table, 1)
@@ -150,8 +157,12 @@ class JobsPage(QWidget):
             values = (
                 format_date(job.get("published") or job.get("first_seen")),
                 job.get("title") or "",
+                job.get("contact_name") or "–",
+                job.get("contact_email") or "–",
                 job.get("company") or "",
                 job.get("city") or "",
+                job.get("street") or "–",
+                job.get("zip") or "–",
                 job.get("workload") or "",
                 (
                     f"{job.get('distance_km'):.0f} km"
@@ -165,7 +176,26 @@ class JobsPage(QWidget):
             for column, value in enumerate(values):
                 item = QTableWidgetItem(str(value))
                 item.setBackground(tint)
-                if column == 6:
+                if column == 2:
+                    item.setToolTip(
+                        "Ansprechperson aus der Anzeige"
+                        if value != "–"
+                        else "Die Anzeige nennt keine Ansprechperson"
+                    )
+                elif column == 3:
+                    item.setToolTip(
+                        "Bewerbungsadresse aus der Anzeige"
+                        if value != "–"
+                        else "Die Anzeige nennt keine E-Mail-Adresse"
+                    )
+                elif column in {6, 7}:
+                    item.setToolTip(
+                        "Adresse der Firma – aus dem Portal oder von der "
+                        "Firmenwebsite"
+                        if value != "–"
+                        else "Adresse noch nicht gefunden"
+                    )
+                elif column == 10:
                     item.setTextAlignment(Qt.AlignCenter)
                     item.setToolTip(
                         (
@@ -178,13 +208,15 @@ class JobsPage(QWidget):
                         f"({FIT_LABELS[level]}, Schwelle {min_score})\n"
                         f"Stichworte: {job.get('keywords') or ''}"
                     )
-                elif column == 7:
+                elif column == 11:
                     item.setTextAlignment(Qt.AlignCenter)
                     item.setToolTip(
                         "Fähigkeiten in der Anzeige: " + ", ".join(found_skills)
                         if found_skills
                         else "Keine Fähigkeit aus dem Profil in der Anzeige"
                     )
+                if column in {0, 7, 8, 9, 10, 11}:
+                    item.setTextAlignment(Qt.AlignCenter)
                 if column == 0:
                     item.setData(Qt.UserRole, job.get("id"))
                 self.table.setItem(row, column, item)

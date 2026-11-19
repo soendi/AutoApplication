@@ -129,6 +129,15 @@ def _first_coordinate(item: dict[str, Any]) -> tuple[float | None, float | None]
     return None, None
 
 
+def _street(company: dict[str, Any], item: dict[str, Any]) -> str:
+    """Strasse samt Hausnummer der Firma, wie sie das Portal mitgibt."""
+    street = str(item.get("workplaceStreet") or company.get("street") or "").strip()
+    number = str(company.get("houseNumber") or "").strip()
+    if street and number and number not in street.split():
+        return f"{street} {number}"
+    return street
+
+
 def parse_vacancy(
     item: dict[str, Any],
     home: tuple[float, float] | None = None,
@@ -183,6 +192,7 @@ def parse_vacancy(
         company=str(company.get("name") or item.get("companyName") or "").strip(),
         city=str(item.get("workplaceCity") or company.get("city") or "").strip(),
         zip=str(item.get("workplaceZip") or company.get("zip") or "").strip(),
+        street=_street(company, item),
         canton=canton,
         workload=format_workload(item.get("typeValueMin"), item.get("typeValueMax")),
         workload_min=_as_int(item.get("typeValueMin")),

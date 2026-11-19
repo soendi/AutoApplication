@@ -230,6 +230,8 @@ def letter_flow(
     letter: str,
     *,
     city: str = "",
+    street: str = "",
+    zip_code: str = "",
     day: date | None = None,
 ) -> list[Text]:
     """Absender, Empfaenger im Couvertfenster, Datum, Betreff und Text."""
@@ -254,11 +256,13 @@ def letter_flow(
     # Empfaengerblock: beginnt rund 4,5 cm unter dem Rand und liegt links, wo
     # das Fenster des Couverts sitzt.
     first = True
-    if company.strip():
-        flow.append(Text(company.strip(), FONT_SIZE, gap=ADDRESS_GAP))
-        first = False
-    if city.strip():
-        flow.append(Text(city.strip(), FONT_SIZE, gap=0.0 if first else 1.5))
+    recipient = [
+        company.strip(),
+        street.strip(),
+        " ".join(part for part in (zip_code.strip(), city.strip()) if part),
+    ]
+    for line in [entry for entry in recipient if entry]:
+        flow.append(Text(line, FONT_SIZE, gap=ADDRESS_GAP if first else 1.5))
         first = False
     if first:
         flow.append(Text("", FONT_SIZE, gap=ADDRESS_GAP))
@@ -410,16 +414,344 @@ def write_cover_letter(
     letter: str,
     *,
     city: str = "",
+    street: str = "",
+    zip_code: str = "",
     folder: Path | None = None,
     day: date | None = None,
+    template: str | Path | None = None,
 ) -> Path:
-    """Anschreiben als PDF im Benutzerordner ablegen und den Pfad liefern."""
+    """Anschreiben als PDF im Benutzerordner ablegen und den Pfad liefern.
+
+    Die Gestaltung kommt aus einer eigenen Textvorlage im Ordner
+    ``briefvorlagen`` (siehe ``template_flow``); fehlt sie, gilt das
+    eingebaute Standardlayout.
+    """
     target = Path(folder) if folder else cover_letter_folder()
     target.mkdir(parents=True, exist_ok=True)
     stem = re.sub(r"[^\w\-. ]+", "", f"Anschreiben {company} {job_title}").strip()
     stem = re.sub(r"\s{2,}", " ", stem)[:70] or "Anschreiben"
     stamp = (day or date.today()).isoformat()
     path = target / f"{stem} {stamp}.pdf"
-    pages = _paginate(letter_flow(profile, job_title, company, letter, city=city, day=day))
-    path.write_bytes(build_pdf(pages))  # type: ignore[arg-type]
+    flow = _flow_from_template(
+        profile,
+        job_title,
+        company,
+        letter,
+        city=city,
+        street=street,
+        zip_code=zip_code,
+        day=day,
+        template=template,
+    )
+    path.write_bytes(build_pdf(_paginate(flow)))  # type: ignore[arg-type]
+    return path
+
+
+# ----------------------------------------------------------------------
+# Eigene Anschreiben-Vorlagen
+# ----------------------------------------------------------------------
+LETTER_TEMPLATE_SUFFIXES = {".txt", ".md"}
+DEFAULT_TEMPLATE_NAME = "standard.txt"
+
+# Die Vorlage ist der ganze Brief: Absender, Empfaenger, Datum, Betreff und
+# Text. Leerzeilen bestimmen die Abstände, damit der Empfaengerblock dort
+# sitzt, wo das Fenster des Couverts ist. Zeilen mit # sind nur Notizen.
+DEFAULT_LETTER_TEMPLATE = """# AutoApplication — Anschreiben-Vorlage (frei anpassbar)
+#
+# Alles, was hier steht, kommt ins PDF. Zeilen mit # am Anfang sind Notizen
+# und werden nicht gedruckt. Leerzeilen bestimmen die Abstände; mehrere
+# Leerzeilen am Anfang schieben den Brief nach unten.
+#
+# Platzhalter (werden beim Erzeugen ersetzt):
+#   {vorname} {nachname} {name} {strasse} {plz} {wohnort} {telefon} {email}
+#   {firma} {firma_strasse} {firma_plz_ort} {ort} {titel} {betreff}
+#   {datum} {ort_datum}
+#   {verfuegbar} {erfahrung} {erfahrung_spedition}
+#   {text}   der ganze Brieftext; beginnt mit der Anrede und endet ohne
+#            Schlussformel — die steht hier in der Vorlage
+#
+# Zusätze am Zeilenanfang:
+#   {fett}   diese Zeile fett setzen (z. B. Betreff)
+#   {rechts} diese Zeile rechtsbündig setzen (z. B. Ort und Datum)
+
+{vorname} {nachname}
+{strasse}
+{plz} {wohnort}
+{telefon} · {email}
+
+{firma}
+{firma_strasse}
+{firma_plz_ort}
+
+{rechts} {ort_datum}
+
+{fett} {betreff}
+
+{text}
+
+Freundliche Grüsse
+
+
+{vorname} {nachname}
+"""
+
+
+def letter_template_folder() -> Path:
+    return app_home() / "briefvorlagen"
+
+
+def ensure_default_letter_template(folder: Path | None = None) -> Path:
+    """Beispielvorlage anlegen, wenn der Ordner noch keine enthaelt."""
+    target = Path(folder) if folder else letter_template_folder()
+    target.mkdir(parents=True, exist_ok=True)
+    existing = list_letter_templates(target)
+    if existing:
+        return existing[0]
+    path = target / DEFAULT_TEMPLATE_NAME
+    path.write_text(DEFAULT_LETTER_TEMPLATE, encoding="utf-8")
+    return path
+
+
+def list_letter_templates(folder: Path | None = None) -> list[Path]:
+    """Alle Vorlagen im Ordner, alphabetisch."""
+    root = Path(folder) if folder else letter_template_folder()
+    if not root.is_dir():
+        return []
+    return sorted(
+        (
+            path
+            for path in root.iterdir()
+            if path.is_file()
+            and path.suffix.lower() in LETTER_TEMPLATE_SUFFIXES
+            and not path.name.startswith(".")
+        ),
+        key=lambda path: path.name.lower(),
+    )
+
+
+def read_letter_template(path: str | Path) -> str:
+    return Path(path).read_text(encoding="utf-8", errors="replace")
+
+
+def resolve_letter_template(value: str | Path | None = None) -> Path:
+    """Gewaehlte Vorlage als Pfad - Dateiname im Ordner oder voller Pfad."""
+    name = str(value or "").strip()
+    if name:
+        candidate = Path(name).expanduser()
+        if candidate.is_file():
+            return candidate
+        in_folder = letter_template_folder() / name
+        if in_folder.is_file():
+            return in_folder
+    return ensure_default_letter_template()
+
+
+_MARK_BOLD = "{fett}"
+_MARK_RIGHT = "{rechts}"
+_PLACEHOLDER = re.compile(r"\{([A-Za-z\u00c4\u00d6\u00dc\u00e4\u00f6\u00fc\u00df_][A-Za-z\u00c4\u00d6\u00dc\u00e4\u00f6\u00fc\u00df0-9_ ]*)\}")
+
+
+def template_values(
+    profile: dict[str, Any],
+    job_title: str = "",
+    company: str = "",
+    letter: str = "",
+    *,
+    city: str = "",
+    street: str = "",
+    zip_code: str = "",
+    day: date | None = None,
+) -> dict[str, str]:
+    """Werte fuer die Platzhalter der Vorlage."""
+    day = day or date.today()
+    stamp = day.strftime("%d.%m.%Y")
+    place = _text(profile.get("wohnort"))
+    subject = " ".join(
+        part for part in ("Bewerbung als", _text(job_title)) if part
+    ).strip()
+    return {
+        "vorname": _text(profile.get("vorname")),
+        "nachname": _text(profile.get("nachname")),
+        "name": _name(profile),
+        "strasse": _text(profile.get("strasse")),
+        "plz": _text(profile.get("plz")),
+        "wohnort": place,
+        "telefon": _text(profile.get("telefon")),
+        "email": _text(profile.get("email")),
+        "firma": _text(company),
+        "firma_strasse": _text(street),
+        "firma_plz_ort": " ".join(
+            part for part in (_text(zip_code), _text(city)) if part
+        ),
+        "ort": _text(city),
+        "titel": _text(job_title),
+        "betreff": subject,
+        "datum": stamp,
+        "ort_datum": f"{place}, {stamp}" if place else stamp,
+        "verfuegbar": _text(profile.get("verfuegbar")),
+        "erfahrung": _text(profile.get("erfahrung_jahre")),
+        "erfahrung_spedition": _text(profile.get("erfahrung_spedition")),
+        "text": letter,
+    }
+
+
+def _fill(line: str, values: dict[str, str]) -> str:
+    """Bekannte Platzhalter ersetzen, unbekannte stehen lassen."""
+    return _PLACEHOLDER.sub(
+        lambda match: values.get(match.group(1).strip().lower(), match.group(0)), line
+    )
+
+
+def _body_paragraphs(letter: str) -> list[str]:
+    body, _closing = split_signature(letter)
+    return [" ".join(block.split()) for block in body if block.strip()]
+
+
+def missing_address_placeholders(template: str | Path | None = None) -> list[str]:
+    """Anschrift-Platzhalter, die in der gewaehlten Vorlage fehlen."""
+    try:
+        source = read_letter_template(resolve_letter_template(template))
+    except OSError as exc:
+        log.warning("Anschreiben-Vorlage nicht lesbar: %s", exc)
+        return []
+    lowered = source.lower()
+    missing: list[str] = []
+    if "{firma_strasse}" not in lowered:
+        missing.append("Strasse")
+    if "{firma_plz_ort}" not in lowered:
+        missing.append("PLZ und Ort")
+    return missing
+
+
+def template_flow(template: str, values: dict[str, str]) -> list[Text]:
+    """Vorlage Zeile fuer Zeile in den Satzablauf des PDF uebertragen."""
+    source = template or ""
+    flow: list[Text] = []
+    used_text = False
+    # Steckt der Ort schon in {firma_plz_ort}, waere eine eigene {ort}-Zeile
+    # doppelt; sie faellt weg, damit die Stadt nur einmal im Brief steht.
+    drop_plain_city = "{firma_plz_ort}" in source.lower()
+    for raw in source.splitlines():
+        line = raw.rstrip()
+        if line.lstrip().startswith("#"):
+            continue
+        bold = line.startswith(_MARK_BOLD)
+        if bold:
+            line = line[len(_MARK_BOLD) :].lstrip()
+        align = "left"
+        if line.startswith(_MARK_RIGHT):
+            align = "right"
+            line = line[len(_MARK_RIGHT) :].lstrip()
+        if not line.strip():
+            flow.append(Text("", FONT_SIZE))
+            continue
+        if drop_plain_city and re.fullmatch(r"\{ort\}\s*[.,]?", line.strip()):
+            continue
+        if "{text}" in line:
+            used_text = True
+            before, _, after = line.partition("{text}")
+            if before.strip():
+                flow.append(
+                    Text(_fill(before, values).strip(), FONT_SIZE, bold=bold, align=align)
+                )
+            for index, paragraph in enumerate(_body_paragraphs(values.get("text", ""))):
+                for position, wrapped in enumerate(_wrap(paragraph)):
+                    flow.append(
+                        Text(wrapped, FONT_SIZE, gap=12.0 if position == 0 and index else 0.0)
+                    )
+            if after.strip():
+                flow.append(
+                    Text(_fill(after, values).strip(), FONT_SIZE, bold=bold, align=align)
+                )
+            continue
+        for wrapped in _wrap(_fill(line, values), FONT_SIZE):
+            flow.append(Text(wrapped, FONT_SIZE, bold=bold, align=align))
+    if not used_text:
+        # Vorlage ohne {text}: den Brieftext trotzdem setzen, statt ihn zu verlieren.
+        log.warning("Anschreiben-Vorlage ohne Platzhalter {text}")
+        for index, paragraph in enumerate(_body_paragraphs(values.get("text", ""))):
+            for position, wrapped in enumerate(_wrap(paragraph)):
+                flow.append(
+                    Text(wrapped, FONT_SIZE, gap=12.0 if position == 0 and index else 0.0)
+                )
+    return flow
+
+
+def _flow_from_template(
+    profile: dict[str, Any],
+    job_title: str,
+    company: str,
+    letter: str,
+    *,
+    city: str = "",
+    street: str = "",
+    zip_code: str = "",
+    day: date | None = None,
+    template: str | Path | None = None,
+) -> list[Text]:
+    """Satzablauf aus der gewaehlten Vorlage; bei Lesefehler das Standardlayout."""
+    values = template_values(
+        profile,
+        job_title,
+        company,
+        letter,
+        city=city,
+        street=street,
+        zip_code=zip_code,
+        day=day,
+    )
+    try:
+        source = read_letter_template(resolve_letter_template(template))
+    except OSError as exc:
+        log.warning("Anschreiben-Vorlage nicht lesbar, Standardlayout: %s", exc)
+        return letter_flow(
+            profile,
+            job_title,
+            company,
+            letter,
+            city=city,
+            street=street,
+            zip_code=zip_code,
+            day=day,
+        )
+    return template_flow(source, values)
+
+
+def write_template_preview(
+    template: str | Path | None = None, folder: Path | None = None
+) -> Path:
+    """PDF, in dem die Platzhalter selbst an ihrem Platz stehen.
+
+    Damit laesst sich die Vorlage gestalten: Das PDF zeigt jeden Platzhalter
+    dort, wo beim echten Anschreiben der Wert steht.
+    """
+    source_path = resolve_letter_template(template)
+    keys = (
+        "vorname",
+        "nachname",
+        "name",
+        "strasse",
+        "plz",
+        "wohnort",
+        "telefon",
+        "email",
+        "firma",
+        "firma_strasse",
+        "firma_plz_ort",
+        "ort",
+        "titel",
+        "betreff",
+        "datum",
+        "ort_datum",
+        "verfuegbar",
+        "erfahrung",
+        "erfahrung_spedition",
+    )
+    values = {key: "{" + key + "}" for key in keys}
+    values["text"] = "{text}"
+    flow = template_flow(read_letter_template(source_path), values)
+    target = Path(folder) if folder else letter_template_folder()
+    target.mkdir(parents=True, exist_ok=True)
+    path = target / f"Vorschau {source_path.stem}.pdf"
+    path.write_bytes(build_pdf(_paginate(flow)))  # type: ignore[arg-type]
     return path

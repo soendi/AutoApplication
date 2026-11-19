@@ -28,7 +28,7 @@ from .ai import (
     local_digest,
 )
 from .config import Settings, templates_path, token_path
-from .documents import collect, write_cover_letter
+from .documents import collect, missing_address_placeholders, write_cover_letter
 from .imap_mail import GmailImapClient, ImapError
 from .models import Job
 from .ostjob import OstjobClient, OstjobError, search_jobs
@@ -74,6 +74,12 @@ SENT_LOOKBACK = 100
 PAGE_BYTES = 1_000_000
 # Technische Kennungen wie Sentry-IDs sehen wie Adressen aus.
 _HEX_LOCAL_RE = re.compile(r"[0-9a-f]{16,}")
+# Firmenadresse: Schweizer Postleitzahl mit Ort und Strasse mit Hausnummer.
+_ZIP_CITY_RE = re.compile(r"\b([1-9]\d{3})\s+([A-ZÄÖÜ][A-Za-zÄÖÜäöüß.\- ]{1,40})")
+_STREET_RE = re.compile(
+    r"\b([A-ZÄÖÜ][A-Za-zÄÖÜäöüß.\- ]{1,40}?"
+    r"(?:strasse|str\.|weg|platz|gasse|allee|ring|hof|rain)\s*\d+\s*[a-zA-Z]?)\b"
+)
 STATUS_ABSAGE = "absage"
 STATUS_ZUSAGE = "zusage"
 STATUS_EINLADUNG = "einladung"
@@ -176,6 +182,8 @@ class Pipeline:
         self._page_fetcher = page_fetcher or fetch_page
         # Einmal geholte Anzeigenseiten nicht erneut laden.
         self._page_texts: dict[str, str] = {}
+        # Firmenadressen je Domain nur einmal im Netz suchen.
+        self._address_cache: dict[str, tuple[str, str]] = {}
         # Zuletzt zusammengestellte Bewerbung je Stelle (fuer die Vorschau).
         self._previews: dict[str, dict[str, Any]] = {}
         # Dasselbe fuer Nachfragen, damit die Vorlage nicht doppelt laeuft.
@@ -368,6 +376,91 @@ class Pipeline:
         addresses = emails(text)
         return (addresses[0] if addresses else ""), contact_person(text)
 
+    # ------------------------------------------------------------------
+    # Firmenadresse (Strasse und Postleitzahl)
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _portal_address(job: Job) -> tuple[str, str]:
+        """Adresse aus den Portalangaben - ohne Netzzugriff."""
+        raw = job.raw if isinstance(job.raw, dict) else {}
+        company = raw.get("company") if isinstance(raw.get("company"), dict) else {}
+        street = str(job.street or company.get("street") or "").strip()
+        number = str(company.get("houseNumber") or "").strip()
+        if street and number and number not in street.split():
+            street = f"{street} {number}"
+        zip_code = str(
+            job.zip or company.get("zip") or raw.get("workplaceZip") or ""
+        ).strip()
+        return street, zip_code
+
+    @staticmethod
+    def _address_from_text(text: str, city: str = "") -> tuple[str, str]:
+        """Strasse und Postleitzahl aus einem geholten Seitentext lesen."""
+        plain = re.sub(r"[ \t]+", " ", strip_html(text or ""))
+        if not plain.strip():
+            return "", ""
+        zip_code = ""
+        for match in _ZIP_CITY_RE.finditer(plain):
+            place = match.group(2).strip()
+            if not city or normalize(place).startswith(normalize(city)):
+                zip_code = match.group(1)
+                break
+        street = ""
+        for match in _STREET_RE.finditer(plain):
+            street = re.sub(r"\s+", " ", match.group(1)).strip()
+            break
+        return street, zip_code
+
+    def _page_text_for(self, url: str) -> str:
+        """Seite einmal holen - gleicher Zwischenspeicher wie die Kontaktsuche."""
+        if url not in self._page_texts:
+            self._page_texts[url] = self._page_fetcher(url)
+        return self._page_texts[url]
+
+    def _lookup_address(self, job: Job) -> tuple[str, str]:
+        """Firmenadresse: Portalangaben, sonst Homepage und Impressum im Netz.
+
+        Gelesen wird nur, was im Portal steht oder klar im Seitentext zu
+        erkennen ist (Strasse mit Hausnummer, vierstellige PLZ). Die KI ist
+        hier bewusst nicht beteiligt, damit nie eine erfundene Adresse im
+        Brief landet; bleibt die Adresse unklar, bleibt sie leer.
+        """
+        street, zip_code = self._portal_address(job)
+        if street and zip_code:
+            return street, zip_code
+        raw = job.raw if isinstance(job.raw, dict) else {}
+        company = raw.get("company") if isinstance(raw.get("company"), dict) else {}
+        homepage = str(company.get("homepage") or "").strip()
+        if not homepage:
+            return street, zip_code
+        domain = domain_of(homepage) or homepage
+        cached = self._address_cache.get(domain)
+        if cached:
+            found_street, found_zip = cached
+            return street or found_street, zip_code or found_zip
+        base = homepage.rstrip("/")
+        for url in (homepage, f"{base}/impressum", f"{base}/kontakt"):
+            page = self._page_text_for(url)
+            if not page:
+                continue
+            found_street, found_zip = self._address_from_text(page, job.city)
+            street = street or found_street
+            zip_code = zip_code or found_zip
+            if street and zip_code:
+                break
+        self._address_cache[domain] = (street, zip_code)
+        return street, zip_code
+
+    @staticmethod
+    def _postal_address(job: Job) -> str:
+        """Anschrift der Firma für Vorschau und Anschreiben."""
+        lines = [
+            job.company.strip(),
+            job.street.strip(),
+            " ".join(part for part in (job.zip.strip(), job.city.strip()) if part),
+        ]
+        return "\n".join(line for line in lines if line)
+
     def contact_check(self, job_id: str) -> list[str]:
         """Vor dem Entwurf melden, welche Kontaktdaten noch fehlen.
 
@@ -487,7 +580,10 @@ class Pipeline:
                 job.company,
                 text,
                 city=job.city,
+                street=job.street,
+                zip_code=job.zip,
                 day=day,
+                template=self.settings.text("documents.letter_template"),
             )
         except OSError as exc:
             log.warning("Anschreiben konnte nicht gespeichert werden: %s", exc)
@@ -582,6 +678,14 @@ class Pipeline:
             # Entwuerfe entstehen nur noch auf Klick in der Stellenliste,
             # damit zuerst die gefundenen Stellen geprueft werden koennen.
             self.store.update_job(job.id, status="passend")
+            # Fuer die Tabelle: Firma, Strasse und Postleitzahl ergaenzen.
+            if not (job.street and job.zip):
+                street, zip_code = self._lookup_address(job)
+                if (street, zip_code) != (job.street, job.zip):
+                    job = replace(
+                        job, street=street or job.street, zip=zip_code or job.zip
+                    )
+                    self.store.update_job(job.id, street=job.street, zip=job.zip)
             self.store.log(
                 "stelle",
                 (
@@ -624,6 +728,15 @@ class Pipeline:
             contact_email=job.contact_email,
             contact_name=job.contact_name,
         )
+        # Adresse für den Empfängerblock nachschauen, damit Vorschau und PDF
+        # dasselbe zeigen.
+        if not (job.street and job.zip):
+            street, zip_code = self._lookup_address(job)
+            if (street, zip_code) != (job.street, job.zip):
+                job = replace(
+                    job, street=street or job.street, zip=zip_code or job.zip
+                )
+                self.store.update_job(job.id, street=job.street, zip=job.zip)
         templates = self.templates()
         keywords = self._ai.keywords(
             job,
@@ -640,6 +753,19 @@ class Pipeline:
                 "ergänzen Sie die Vorlagen."
             )
         subject, body = self._write_mail(template, job, digest)
+        # Fehlt der Anschrift-Platzhalter in der eigenen Vorlage, muss die
+        # Vorschau das sagen - sonst fehlt die Adresse still im PDF.
+        warnings: list[str] = []
+        missing = missing_address_placeholders(
+            self.settings.text("documents.letter_template")
+        )
+        if missing and (job.street or job.zip):
+            warnings.append(
+                "Die gewählte Anschreiben-Vorlage enthält keinen Platzhalter "
+                f"für {' und '.join(missing)} der Firma. Im PDF fehlen diese "
+                "Angaben deshalb – ergänzen Sie {firma_strasse} und "
+                "{firma_plz_ort} in der Vorlage."
+            )
         self._previews[job.id] = {
             "job": job,
             "digest": digest,
@@ -653,6 +779,8 @@ class Pipeline:
         return {
             "job_id": job.id,
             "email": job.contact_address(),
+            "address": self._postal_address(job),
+            "warnings": warnings,
             "salutation": salutation(digest.contact_name or job.contact_name),
             "subject": subject,
             "body": body,

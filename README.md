@@ -1,4 +1,4 @@
-# AutoApplication 1.0.16
+# AutoApplication 1.0.17
 
 Stellen von ostjob.ch suchen, Bewerbungen als Entwurf in Outlook oder Gmail
 vorbereiten und Antworten bis zur Zusage verfolgen – als Windows-Programm mit
@@ -11,7 +11,7 @@ stillen Updates.
    Umkreis, Pensum, Arbeitsweg, Kanton, Alter der Anzeige und
    Ausschluss-Stichworten. Bereits bekannte Stellen bleiben einmalig in der
    Ablage und werden nicht doppelt bearbeitet. Die Abfrage der Stellen-API ist
-   standardmässig **aus** und wird unter **Einstellungen → Suche** eingeschaltet.
+   standardmässig **aus** und wird unter **Einstellungen → Ostjob** eingeschaltet.
 2. **Anzeige auslesen.** Die KI liest Titel, Beschreibung und Bewerbungsadresse
    aus der Anzeige. Zusätze ohne Bezug zur Stelle – Gendermarken wie `(m/w/d)`
    oder `(gn*)`, Inserats-, Referenz- und Job-IDs – fallen weg; die
@@ -81,9 +81,28 @@ stillen Updates.
    Fünf-Minuten-Prüfung sie als verschickt; im Tab **Bewerbungen** stehen dann
    Versanddatum und Uhrzeit in der Spalte „Fällig“.
 
+## Stellenliste
+
+Der Tab **Stellen** zeigt je Anzeige: Datum, Titel, Ansprechperson, E-Mail,
+Firma, Ort, Adresse und PLZ sowie Pensum, Weg, Interesse, Fähigkeit und Status.
+Die Suchzeile darüber findet auch Adresse und Postleitzahl.
+
+- **Ansprechperson mit Anrede.** Nennt die Anzeige „Herr …“ oder „Frau …“, wird
+das übernommen. Steht dort nur ein Name, leitet die KI die Anrede aus dem
+Vornamen ab, wenn er eindeutig männlich oder weiblich ist (Sandra → Frau,
+Michael → Herr); bei unklaren Namen bleibt das Feld leer statt zu raten.
+- **E-Mail** ist die Bewerbungsadresse aus der Anzeige.
+- **Adresse und PLZ** kommen zuerst aus den Portalangaben (Strasse,
+Hausnummer, Postleitzahl der Firma). Fehlen sie dort, liest AutoApplication
+Homepage, Impressum und Kontaktseite der Firma und sucht Strasse und
+Postleitzahl im geholten Text. Findet sich dort nichts, bleibt die Zeile leer
+(„–“): Die KI ist an der Firmenadresse bewusst nicht beteiligt, damit im Brief
+nie eine erfundene Adresse steht. Je Firma wird nur einmal gesucht, und
+vorhandene Adressen werden bei späteren Läufen nachgetragen.
+
 ## Installation
 
-`AutoApplication-1.0.16-Setup.exe` von der
+`AutoApplication-1.0.17-Setup.exe` von der
 [Release-Seite](https://github.com/soendi/AutoApplication/releases/latest)
 herunterladen und ausführen. Windows 10 und 11, kein Administrator- und kein
 Python-Zubehör nötig.
@@ -98,7 +117,7 @@ AutoApplication wieder. Abschalten mit `--no-update` oder
 
 ### Suche
 
-Unter **Einstellungen → Suche** eintragen:
+Unter **Einstellungen → Ostjob** eintragen:
 
 | Feld | Bedeutung |
 | --- | --- |
@@ -114,7 +133,7 @@ Unter **Einstellungen → Suche** eintragen:
 
 ### Profil, Interessen und Fähigkeiten
 
-Unter **Einstellungen → Person** stehen neben den Kontaktdaten zwei Felder für
+Unter **Einstellungen → Persönliches** stehen neben den Kontaktdaten zwei Felder für
 Stichworte: **Interessen** (wofür Sie sich eher interessieren) und
 **Fähigkeiten** (was Sie können). Beide Listen sind unabhängig voneinander –
 sie müssen sich nicht decken. Die KI bekommt beides als Zusatz zur
@@ -130,7 +149,7 @@ Spedition/Export** (`{erfahrung_spedition}`, Standard `fast neunzehn`).
 
 ### E-Mail-Anbindung
 
-Unter **Einstellungen → E-Mail-Anbindung** wird gewählt, wohin der Entwurf
+Unter **Einstellungen → E-Mail und Anhänge** wird gewählt, wohin der Entwurf
 geht: Outlook, Gmail (IMAP/SMTP) oder „Keine – nur im Programm“. Ohne Anbindung
 bleibt der Text in der Bewerbungstabelle und lässt sich von dort kopieren.
 
@@ -146,7 +165,7 @@ AutoApplication meldet sich ohne Passwort im Programm an (Gerätecode):
    Redirect-URI wird für den Gerätecode nicht gebraucht.
 3. Unter **API-Berechtigungen** delegierte Berechtigungen `Mail.ReadWrite`,
    `Mail.Send`, `User.Read` hinzufügen und die Zustimmung erteilen.
-4. Die **Client-ID** unter **Einstellungen → Outlook** eintragen, Mandant
+4. Die **Client-ID** unter **Einstellungen → E-Mail und Anhänge → Outlook** eintragen, Mandant
    `common` lassen, „Anmelden“ wählen und den angezeigten Code auf der
    Microsoft-Seite bestätigen.
 
@@ -162,7 +181,7 @@ mit der Gmail-Adresse und einem App-Passwort an.
    (`myaccount.google.com/security`).
 2. Unter **Sicherheit → App-Passwörter** (`myaccount.google.com/apppasswords`)
    ein Passwort für „AutoApplication“ erzeugen und die 16 Zeichen notieren.
-3. Unter **Einstellungen → Gmail** Adresse und App-Passwort eintragen und
+3. Unter **Einstellungen → E-Mail und Anhänge → Gmail** Adresse und App-Passwort eintragen und
    **„Verbindung testen“** wählen.
 4. Unter **E-Mail-Anbindung** „Gmail (IMAP/SMTP, App-Passwort)“ auswählen.
 
@@ -176,7 +195,7 @@ Workspace-Administrator sie sperrt; dann bleibt nur die Google-OAuth-Anbindung.
 
 ### KI (optional) – OpenAI-kompatibel oder Groq
 
-Unter **Einstellungen → KI** den Anbieter wählen:
+Unter **Einstellungen → KI & Automatisierung** den Anbieter wählen:
 
 | Anbieter | Adresse | Modell (Vorschlag) |
 | --- | --- | --- |
@@ -200,7 +219,7 @@ Mit Schlüssel übernimmt die KI vier Aufgaben:
 Ohne KI bleibt alles nutzbar: Titel und Beschreibung werden lokal bereinigt,
 der Mailtext kommt aus der Vorlage und als Anschreiben wird derselbe Text als
 PDF verwendet. Abschalten lässt sich der PDF-Anhang unter
-**Einstellungen → Unterlagen**.
+**Einstellungen → E-Mail und Anhänge → Unterlagen**.
 
 Ohne KI bleibt alles nutzbar: die Stichworte kommen dann aus den
 Portalangaben und dem Stichwortverzeichnis der Vorlagen, die Antwortauswertung
@@ -208,11 +227,45 @@ arbeitet mit typischen Formulierungen.
 
 ### Unterlagen
 
-Unter **Einstellungen → Unterlagen** den Ordner mit Lebenslauf, Zeugnissen und
+Unter **Einstellungen → E-Mail und Anhänge → Unterlagen** den Ordner mit Lebenslauf, Zeugnissen und
 Diplomen wählen. Alle PDF-, Word- und Bilddateien darin werden angehängt –
 Dateien mit „Lebenslauf“, „Zeugnis“ oder „Diplom“ im Pfad zuerst. Die
 Gesamtgrösse ist begrenzt (Standard 20 MB); einzelne Anhänge über 3 MB lässt
 Microsoft Graph nicht als einfachen Anhang zu und werden ausgelassen.
+
+Die Einstellungen haben vier Reiter: **Persönliches**, **Ostjob**,
+**E-Mail und Anhänge (Unterlagen)** sowie **KI & Automatisierung**.
+
+### Anschreiben-Vorlage
+
+Das PDF-Anschreiben entsteht aus einer Textvorlage im Ordner `briefvorlagen`
+im Benutzerordner. Unter **Einstellungen → E-Mail und Anhänge → Anschreiben-Vorlage**
+steht jede `.txt`-Datei dieses Ordners zur Auswahl; „Ordner öffnen“ zeigt den
+Ordner, „Beispielvorlage anlegen“ schreibt die mitgelieferte `standard.txt`.
+
+Die Vorlage ist der ganze Brief – Absenderblock, Empfänger, Ort und Datum,
+Betreff, Text, Grussformel und Name. Leerzeilen bestimmen die Abstände,
+Zeilen mit `#` am Anfang sind nur Notizen. Platzhalter werden beim Erzeugen
+ersetzt: `{vorname}`, `{nachname}`, `{name}`, `{strasse}`, `{plz}`,
+`{wohnort}`, `{telefon}`, `{email}`, `{firma}`, `{firma_strasse}`,
+`{firma_plz_ort}` (z. B. „9436 Balgach“), `{ort}`, `{titel}`, `{betreff}`,
+`{datum}`, `{ort_datum}`, `{verfuegbar}`, `{erfahrung}`,
+`{erfahrung_spedition}` und `{text}` (der ganze Brieftext ab der Anrede, ohne
+Schlussformel). Mit `{fett}` am Zeilenanfang wird die Zeile fett, mit
+`{rechts}` rechtsbündig gesetzt – so steht das Datum rechts.
+
+Die Mail-Vorschau vor dem Entwurf zeigt unter **„Anschrift im Anschreiben“**
+den Empfängerblock so, wie er im PDF steht: Firma, Strasse, PLZ und Ort.
+Fehlt die Adresse, wird sie vorher noch gesucht (Portal, dann Firmenwebsite).
+Enthält die gewählte Vorlage `{firma_strasse}` oder `{firma_plz_ort}` nicht,
+warnt die Vorschau, dass diese Angaben im PDF fehlen. Steht der Ort schon in
+`{firma_plz_ort}`, fällt eine zusätzliche `{ort}`-Zeile weg – die Stadt steht
+nie doppelt im Brief.
+
+**„Vorschau als PDF“** erzeugt ein PDF, in dem jeder Platzhalter selbst an
+seinem Platz steht. Damit lässt sich die Vorlage gestalten, ohne ein
+Anschreiben abzuwarten; die Änderung an der `.txt`-Datei gilt ab dem nächsten
+Brief.
 
 ## Vorlagen
 

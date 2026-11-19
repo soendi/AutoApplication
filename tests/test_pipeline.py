@@ -125,6 +125,7 @@ def _pipeline(
     ai=None,
     imap=None,
     api_enabled=True,
+    page_fetcher=None,
 ):
     settings = Settings(tmp_path / "einstellungen.json")
     settings.set("search.api_enabled", api_enabled)
@@ -141,6 +142,8 @@ def _pipeline(
         imap_client=imap,
         ostjob_client=FakeOstjob(jobs if jobs is not None else [MATCHING, UNRELATED]),
         templates_file=tmp_path / "vorlagen.json",
+        # Kein echter Netzzugriff in Tests: Seiten nur, wenn ausdruecklich geliefert.
+        page_fetcher=page_fetcher or (lambda url: ""),
     )
     return pipeline, store, outlook, settings
 
@@ -179,6 +182,48 @@ def test_run_search_marks_jobs_without_draft(tmp_path) -> None:
     assert applications[0]["template_id"] == "spedition"
     assert applications[0]["status"] == "entwurf"
     assert store.get_job("ostjob:1")["status"] == "beworben"
+
+
+def test_run_search_fills_address_from_company_website(tmp_path) -> None:
+    pages = {
+        "https://muster-logistik.ch": (
+            "<html><body><p>Muster Logistik AG</p>"
+            "<p>Bahnhofstrasse 12</p><p>9436 Balgach</p></body></html>"
+        )
+    }
+    pipeline, store, _, _ = _pipeline(
+        tmp_path, page_fetcher=lambda url: pages.get(url.rstrip("/"), "")
+    )
+    pipeline.run_search(datetime(2026, 11, 18, 7, 30, tzinfo=timezone.utc))
+    job = store.get_job("ostjob:1")
+    assert job["street"] == "Bahnhofstrasse 12"
+    assert job["zip"] == "9436"
+
+
+def test_portal_address_needs_no_web_lookup(tmp_path) -> None:
+    from dataclasses import replace
+
+    def boom(url: str) -> str:
+        raise AssertionError(f"Portalangaben genuegen, kein Abruf noetig: {url}")
+
+    job = replace(
+        MATCHING,
+        id="ostjob:3",
+        source_id="3",
+        raw={
+            "company": {
+                "homepage": "https://muster-logistik.ch",
+                "street": "Industriestrasse",
+                "houseNumber": "35",
+                "zip": "9101",
+            }
+        },
+    )
+    pipeline, store, _, _ = _pipeline(tmp_path, jobs=[job], page_fetcher=boom)
+    pipeline.run_search(datetime(2026, 11, 18, 7, 30, tzinfo=timezone.utc))
+    row = store.get_job("ostjob:3")
+    assert row["street"] == "Industriestrasse 35"
+    assert row["zip"] == "9101"
 
 
 def test_ai_writes_mail_and_cover_letter(tmp_path) -> None:
@@ -806,3 +851,64 @@ def test_check_drafts_ignores_follow_up_shortly_after_preparation(tmp_path) -> N
     # Gerade eben angelegt - Karenzzeit gilt auch fuer Nachfragen.
     assert pipeline.check_drafts() == 0
     assert not store.get_application(application_id)["follow_up_sent_at"]
+
+
+def test_draft_preview_shows_letter_address(tmp_path) -> None:
+    pages = {
+        "https://muster-logistik.ch": (
+            "<html><body><p>Muster Logistik AG</p>"
+            "<p>Bahnhofstrasse 12</p><p>9436 Balgach</p></body></html>"
+        )
+    }
+    pipeline, _, _, _ = _pipeline(
+        tmp_path, page_fetcher=lambda url: pages.get(url.rstrip("/"), "")
+    )
+    pipeline.run_search()
+    preview = pipeline.draft_preview(MATCHING.id)
+    assert preview["address"] == (
+        "Muster Logistik AG\nBahnhofstrasse 12\n9436 Balgach"
+    )
+
+
+def test_draft_preview_warns_about_template_without_address(tmp_path) -> None:
+    pages = {
+        "https://muster-logistik.ch": (
+            "<p>Muster Logistik AG</p><p>Bahnhofstrasse 12</p><p>9436 Balgach</p>"
+        )
+    }
+    template = tmp_path / "alt.txt"
+    template.write_text("{firma}\n{ort}\n\n{text}\n\nFreundliche Grüsse\n", encoding="utf-8")
+    pipeline, _, _, settings = _pipeline(
+        tmp_path, page_fetcher=lambda url: pages.get(url.rstrip("/"), "")
+    )
+    settings.set("documents.letter_template", str(template))
+    pipeline.run_search()
+    preview = pipeline.draft_preview(MATCHING.id)
+    assert preview["warnings"], "Vorlage ohne Adress-Platzhalter muss gemeldet werden"
+    assert "Strasse" in preview["warnings"][0]
+
+    # Mit der eingebauten Standardvorlage gibt es nichts zu melden.
+    settings.set("documents.letter_template", "")
+    assert pipeline.draft_preview(MATCHING.id)["warnings"] == []
+
+
+class NoAddressAI(FakeAI):
+    """KI, die keine Firmenadresse liefern darf."""
+
+    def company_address(self, *args, **kwargs):
+        raise AssertionError("Die KI darf keine Firmenadresse liefern")
+
+
+def test_address_never_comes_from_the_ai(tmp_path) -> None:
+    pipeline, store, _, _ = _pipeline(
+        tmp_path,
+        ai=NoAddressAI(),
+        page_fetcher=lambda url: "<p>Muster Logistik AG</p><p>Willkommen</p>",
+    )
+    pipeline.run_search()
+    row = store.get_job("ostjob:1")
+    # Ohne klare Angabe im Portal oder Seitentext bleibt die Adresse leer.
+    assert row["street"] == ""
+    assert row["zip"] == ""
+    preview = pipeline.draft_preview("ostjob:1")
+    assert preview["address"] == "Muster Logistik AG\nBalgach"

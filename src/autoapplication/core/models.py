@@ -20,6 +20,7 @@ class Job:
     company: str
     city: str = ""
     zip: str = ""
+    street: str = ""
     canton: str = ""
     workload: str = ""
     workload_min: int = 0
@@ -92,12 +93,14 @@ class Job:
             "company": self.company,
             "city": self.city,
             "zip": self.zip,
+            "street": self.street,
             "canton": self.canton,
             "workload": self.workload,
             "url": self.url,
             "published": self.published_date(),
             "description": self.description,
             "contact_name": self.contact_name,
+            "contact_email": self.contact_email,
             "keywords": json.dumps(self.keywords, ensure_ascii=False),
             "distance_km": self.distance_km,
             "raw": json.dumps(self.raw, ensure_ascii=False),
@@ -121,6 +124,7 @@ class Job:
             company=str(row.get("company") or ""),
             city=str(row.get("city") or ""),
             zip=str(row.get("zip") or ""),
+            street=str(row.get("street") or ""),
             canton=str(row.get("canton") or ""),
             workload=str(row.get("workload") or ""),
             url=str(row.get("url") or ""),

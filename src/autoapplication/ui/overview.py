@@ -24,7 +24,7 @@ CARDS = (
     ("passend", "Passende Stellen", "jobs"),
     ("entwurf", "Entwürfe", "applications"),
     ("wartet", "Wartet auf Antwort", "applications"),
-    ("antwort", "Antworten", "applications"),
+    ("antwort", "Ungelesene Antworten", "applications"),
 )
 
 
@@ -77,18 +77,30 @@ class OverviewPage(QWidget):
             cards.addWidget(frame, 1)
         layout.addLayout(cards)
 
+        # Grosse Knoepfe; die Zahl der ungelesenen Antworten steht im Knopf.
         buttons = QHBoxLayout()
-        buttons.setSpacing(8)
+        buttons.setSpacing(10)
+        self.answers_button = QPushButton("Ungelesene Antworten: 0")
+        self.answers_button.setObjectName("BigPrimary")
+        self.answers_button.clicked.connect(
+            lambda: self.window.show_page("applications")
+        )
         self.search_button = QPushButton("Jetzt Stellen suchen")
-        self.search_button.setObjectName("Primary")
+        self.search_button.setObjectName("BigButton")
         self.search_button.clicked.connect(self.window.run_search)
         self.mail_button = QPushButton("Postfach prüfen")
+        self.mail_button.setObjectName("BigButton")
         self.mail_button.clicked.connect(self.window.check_mail)
         self.follow_button = QPushButton("Nachfragen vorbereiten")
+        self.follow_button.setObjectName("BigButton")
         self.follow_button.clicked.connect(self.window.prepare_follow_ups)
-        for button in (self.search_button, self.mail_button, self.follow_button):
-            buttons.addWidget(button)
-        buttons.addStretch(1)
+        for button in (
+            self.answers_button,
+            self.search_button,
+            self.mail_button,
+            self.follow_button,
+        ):
+            buttons.addWidget(button, 1)
         layout.addLayout(buttons)
 
         self.next_label = QLabel("")
@@ -113,16 +125,14 @@ class OverviewPage(QWidget):
             + applications.get("nachgefasst", 0)
             + applications.get("info", 0)
         )
-        answers = (
-            applications.get("zusage", 0)
-            + applications.get("einladung", 0)
-            + applications.get("absage", 0)
-        )
+        # Nur ungelesene Antworten zaehlen - gelesene fallen aus der Zahl.
+        unread = store.unseen_total()
         self.values["neu"].setText(str(jobs.get("neu", 0)))
         self.values["passend"].setText(str(jobs.get("passend", 0)))
         self.values["entwurf"].setText(str(applications.get("entwurf", 0)))
         self.values["wartet"].setText(str(waiting))
-        self.values["antwort"].setText(str(answers))
+        self.values["antwort"].setText(str(unread))
+        self.answers_button.setText(f"Ungelesene Antworten: {unread}")
 
         daily = self.window.settings.text("automation.daily_time", "07:30")
         upcoming = next_run_at(daily)

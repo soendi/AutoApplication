@@ -250,13 +250,15 @@ class ContactDialog(QDialog):
 
 
 class DraftPreviewDialog(QDialog):
-    """Zeigt Empfänger, Anrede, Betreff und Text vor dem Anlegen des Entwurfs."""
+    """Zeigt Anschrift, Empfänger, Anrede, Betreff und Text vor dem Entwurf."""
 
     def __init__(
         self,
         parent: Any,
         *,
         email: str = "",
+        address: str = "",
+        warnings: list[str] | None = None,
         salutation: str = "",
         subject: str = "",
         body: str = "",
@@ -282,8 +284,9 @@ class DraftPreviewDialog(QDialog):
 
         info = QLabel(
             intro
-            or "Empfänger, Anrede, Betreff und Text lassen sich hier noch ändern. "
-            "Erst mit „Entwurf erstellen“ entsteht die Mail im Mailkonto."
+            or "Anschrift, Empfänger, Anrede, Betreff und Text lassen sich hier "
+            "noch ändern. Erst mit „Entwurf erstellen“ entsteht die Mail im "
+            "Mailkonto."
         )
         info.setWordWrap(True)
         info.setObjectName("Hint")
@@ -293,6 +296,29 @@ class DraftPreviewDialog(QDialog):
             job = QLabel(" – ".join(part for part in (title, company) if part))
             job.setWordWrap(True)
             layout.addWidget(job)
+
+        if address.strip():
+            # Nur zeigen, wenn es auch ein PDF-Anschreiben gibt: der
+            # Empfängerblock steht so da, wie er gedruckt wird.
+            layout.addWidget(QLabel("Anschrift im Anschreiben"))
+            self.anschrift = QPlainTextEdit()
+            self.anschrift.setPlainText(address.strip())
+            self.anschrift.setReadOnly(True)
+            self.anschrift.setFixedHeight(76)
+            self.anschrift.setToolTip(
+                "Empfängerblock im PDF: Firma, Strasse, PLZ und Ort. Die "
+                "Anschrift stammt aus dem Portal oder von der Firmenwebsite."
+            )
+            layout.addWidget(self.anschrift)
+
+        # Hinweise zum Anschreiben (z. B. Vorlage ohne Adress-Platzhalter)
+        # stehen direkt beim Empfängerblock, damit nichts still fehlt.
+        for message in warnings or []:
+            warning = QLabel(f"⚠ {message}")
+            warning.setObjectName("Danger")
+            warning.setWordWrap(True)
+            warning.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            layout.addWidget(warning)
 
         layout.addWidget(QLabel("Empfänger"))
         self.email = QLineEdit(email)

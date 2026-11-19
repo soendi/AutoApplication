@@ -20,6 +20,7 @@ JOB_FIELDS = {
     "company",
     "city",
     "zip",
+    "street",
     "canton",
     "workload",
     "url",
@@ -69,6 +70,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     company TEXT NOT NULL DEFAULT '',
     city TEXT NOT NULL DEFAULT '',
     zip TEXT NOT NULL DEFAULT '',
+    street TEXT NOT NULL DEFAULT '',
     canton TEXT NOT NULL DEFAULT '',
     workload TEXT NOT NULL DEFAULT '',
     url TEXT NOT NULL DEFAULT '',
@@ -154,6 +156,8 @@ class Store:
             db.execute(
                 "ALTER TABLE jobs ADD COLUMN contact_name TEXT NOT NULL DEFAULT ''"
             )
+        if "street" not in columns:
+            db.execute("ALTER TABLE jobs ADD COLUMN street TEXT NOT NULL DEFAULT ''")
         app_columns = {
             row["name"] for row in db.execute("PRAGMA table_info(applications)")
         }
@@ -212,19 +216,32 @@ class Store:
             ).fetchone()
             if existing is not None:
                 # Bekannte Stelle: nur der letzte Sichtkontakt wird nachgefuehrt.
+                # Adresse nachtragen: das Portal liefert sie erst spaeter oder
+                # eine neue Fassung der Anzeige bringt sie mit.
                 db.execute(
-                    "UPDATE jobs SET last_seen = ?, published = ?, distance_km = ? "
-                    "WHERE id = ?",
-                    (stamp, row["published"], row["distance_km"], row["id"]),
+                    "UPDATE jobs SET last_seen = ?, published = ?, distance_km = ?, "
+                    "street = CASE WHEN ? <> '' THEN ? ELSE street END, "
+                    "zip = CASE WHEN ? <> '' THEN ? ELSE zip END WHERE id = ?",
+                    (
+                        stamp,
+                        row["published"],
+                        row["distance_km"],
+                        row["street"],
+                        row["street"],
+                        row["zip"],
+                        row["zip"],
+                        row["id"],
+                    ),
                 )
                 return False
             db.execute(
                 """
                 INSERT INTO jobs (
-                    id, source, source_id, title, company, city, zip, canton,
-                    workload, url, published, description, keywords, distance_km,
-                    first_seen, last_seen, contact_email, contact_name, raw
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    id, source, source_id, title, company, city, zip, street,
+                    canton, workload, url, published, description, keywords,
+                    distance_km, first_seen, last_seen, contact_email,
+                    contact_name, raw
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     row["id"],
@@ -234,6 +251,7 @@ class Store:
                     row["company"],
                     row["city"],
                     row["zip"],
+                    row["street"],
                     row["canton"],
                     row["workload"],
                     row["url"],
@@ -292,10 +310,11 @@ class Store:
             values.append(status)
         if search.strip():
             conditions.append(
-                "(title LIKE ? OR company LIKE ? OR city LIKE ? OR keywords LIKE ?)"
+                "(title LIKE ? OR company LIKE ? OR city LIKE ? "
+                "OR street LIKE ? OR zip LIKE ? OR keywords LIKE ?)"
             )
             needle = f"%{search.strip()}%"
-            values.extend([needle] * 4)
+            values.extend([needle] * 6)
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
         query += " ORDER BY score DESC, published DESC, first_seen DESC LIMIT ?"
@@ -504,6 +523,14 @@ class Store:
                 "WHERE seen = 0 GROUP BY application_id"
             ).fetchall()
         return {int(row["application_id"]): int(row["number"]) for row in rows}
+
+    def unseen_total(self) -> int:
+        """Alle noch nicht geöffneten Antworten - gelesene zählen nicht mit."""
+        with self._db() as db:
+            row = db.execute(
+                "SELECT COUNT(*) AS number FROM replies WHERE seen = 0"
+            ).fetchone()
+        return int(row["number"]) if row is not None else 0
 
     def reply_counts(self) -> dict[int, int]:
         """Anzahl Antworten je Bewerbung (gesehen und ungelesen)."""

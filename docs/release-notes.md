@@ -1,3 +1,40 @@
+## AutoApplication 1.0.17
+
+Eigene Anschreiben-Vorlage, eine Stellenliste mit Ansprechperson und Adresse,
+übersichtlichere Einstellungen und ein Zähler für ungelesene Antworten.
+
+### Neu
+
+- **Eigene Anschreiben-Vorlage.** Das Anschreiben entsteht aus einer
+  Textvorlage im Ordner `briefvorlagen`. Platzhalter wie `{firma}`, `{titel}`,
+  `{ansprechperson}` oder `{firma_strasse}` werden beim Erstellen ersetzt;
+  geschweifte Marker `{fett}` und `{rechts}` setzen Fettdruck und Ausrichtung.
+  Die Vorlage lässt sich frei bearbeiten und mit Platzhaltern als PDF
+  ansehen. Liegen mehrere Vorlagen im Ordner, wählt man die gewünschte unter
+  **Einstellungen → E-Mail und Anhänge** aus. Fehlt in der Vorlage ein
+  Adress-Platzhalter, warnt die Mail-Vorschau, bevor der Entwurf entsteht.
+- **Stellenliste mit Ansprechperson, Adresse und PLZ.** Der Tab **Stellen**
+  zeigt Datum, Titel, Ansprechperson (mit Anrede), E-Mail, Firma, Ort, Adresse
+  und Postleitzahl sowie Pensum, Weg, Interesse, Fähigkeit und Status. Die
+  Suche findet auch Adresse und Postleitzahl.
+- **Einstellungen in vier Reitern.** Persönliches, Ostjob, E-Mail und Anhänge
+  (Unterlagen) sowie KI & Automatisierung – jeder Reiter scrollt für sich,
+  statt alles in einer langen Liste zu stapeln.
+- **Ungelesene Antworten im Blick.** Die Übersicht zeigt eine Kachel und einen
+  grossen Knopf «Ungelesene Antworten: N». Gezählt wird nur, was noch nicht
+  geöffnet wurde; eine gelesene Antwort fällt sofort aus der Zahl.
+
+### Geändert
+
+- **Adresse in der Mail-Vorschau.** Das Prüffenster zeigt die
+  Empfängeranschrift, damit vor dem Entwurf sichtbar ist, was im Brief steht.
+  Eine Stadt erscheint dabei nie doppelt, auch wenn die Vorlage Ort und
+  Postleitzahl getrennt aufführt.
+- **Firmenadressen ohne KI.** Strasse und Postleitzahl stammen nur noch aus
+  den Portalangaben oder aus klar gelesenem Text von Homepage, Impressum und
+  Kontaktseite. Die KI ist daran nicht mehr beteiligt; findet sich nichts,
+  bleibt das Feld leer, statt eine Adresse zu erfinden.
+
 ## AutoApplication 1.0.16
 
 Das Fenster öffnet auf Windows 10 zuverlässig, und der Versand folgt nur noch

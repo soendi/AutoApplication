@@ -92,6 +92,7 @@ DEFAULTS: dict[str, Any] = {
         "folder": "",
         "attach": True,
         "cover_letter": True,
+        "letter_template": "",
         "max_mb": 20,
     },
     "automation": {
