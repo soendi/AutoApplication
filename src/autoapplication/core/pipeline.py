@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import re
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta, timezone
@@ -146,6 +147,81 @@ _FORM_WORDS_RE = re.compile(
     r"bewerb|application|lebenslauf|anschreiben|curriculum|upload|dokument",
     re.IGNORECASE,
 )
+
+# Viele Portale zeigen das Formular nicht selbst, sondern betten die Seite des
+# Arbeitgebers ein oder verlinken sie. Diese Verweise werden mitverfolgt.
+_IFRAME_RE = re.compile(r"<iframe\b[^>]*\bsrc\s*=\s*[\"']([^\"']+)", re.IGNORECASE)
+_LINK_RE = re.compile(
+    r"<a\b[^>]*\bhref\s*=\s*[\"']([^\"']+)[\"'][^>]*>(.*?)</a>",
+    re.IGNORECASE | re.DOTALL,
+)
+_APPLY_TEXT_RE = re.compile(
+    r"(?:jetzt|online|hier|direkt)\s+bewerben|\bbewerben\b|\bapply\b|\bapplication\b",
+    re.IGNORECASE,
+)
+_APPLY_HREF_RE = re.compile(
+    r"/(?:apply|ats|application|bewerbung)(?:[/?#]|$)", re.IGNORECASE
+)
+# Ratgeber- und Blogseiten sind keine Bewerbungsseiten.
+_CONTENT_HREF_RE = re.compile(
+    r"/(?:ratgeber|artikel|blog|magazin|news|tipps?)/", re.IGNORECASE
+)
+# Werbung, Zaehler und Teilen-Knoepfe fuehren nie zu einem Formular.
+_IGNORED_LINK_HOSTS = (
+    "googletagmanager.com",
+    "google.com",
+    "googletagservices.com",
+    "doubleclick.net",
+    "adform.net",
+    "facebook.com",
+    "linkedin.com",
+    "twitter.com",
+    "x.com",
+    "xing.com",
+    "whatsapp.com",
+)
+
+
+def _link_target(url: str, base: str) -> str:
+    """Verweis in eine vollstaendige, pruefbare Adresse aufloesen."""
+    target = (url or "").strip()
+    if not target or target.startswith("#"):
+        return ""
+    if target.lower().startswith(("mailto:", "tel:", "javascript:")):
+        return ""
+    absolute = urllib.parse.urljoin(base or "", target)
+    if not absolute.lower().startswith(("http://", "https://")):
+        return ""
+    host = urllib.parse.urlsplit(absolute).netloc.lower().split(":", 1)[0]
+    if any(host == item or host.endswith("." + item) for item in _IGNORED_LINK_HOSTS):
+        return ""
+    return absolute
+
+
+def application_form_links(html: str, base: str = "") -> list[str]:
+    """Seiten, auf denen ein Bewerbungsformular liegen kann.
+
+    Gesucht wird nach eingebetteten Seiten (``<iframe>``) und nach Verweisen
+    zum Bewerben - dort liegt das Formular, wenn das Portal nur einen Rahmen
+    um die Seite des Arbeitgebers legt.
+    """
+    value = html or ""
+    if not value:
+        return []
+    found: list[str] = []
+    for raw in _IFRAME_RE.findall(value):
+        target = _link_target(raw, base)
+        if target and target not in found:
+            found.append(target)
+    for href, text in _LINK_RE.findall(value):
+        if _CONTENT_HREF_RE.search(href):
+            continue
+        if not (_APPLY_TEXT_RE.search(strip_html(text)) or _APPLY_HREF_RE.search(href)):
+            continue
+        target = _link_target(href, base)
+        if target and target not in found:
+            found.append(target)
+    return found
 
 
 def has_application_form(html: str) -> bool:
@@ -717,22 +793,48 @@ class Pipeline:
         return ""
 
     def _detect_form(self, job: Job) -> bool | None:
-        """Formular auf der Bewerbungsseite suchen (None = nicht erreichbar)."""
+        """Formular auf der Bewerbungsseite suchen (None = nicht erreichbar).
+
+        Geprueft werden die Bewerbungsseite und die Anzeige selbst. Fuehrt
+        keiner der beiden Seiten ein Formular, wird den eingebetteten Seiten
+        und den Bewerben-Verweisen nachgegangen - ostjob.ch etwa zeigt das
+        Formular im iframe des Arbeitgebersystems. Hoechstens vier Seiten je
+        Stelle und zwei Schritte tief, damit fremde Seiten den Lauf nicht
+        aufhalten.
+        """
         apply_url = (job.apply_url or "").strip()
         if apply_url.lower().startswith("mailto:"):
             # Bewerbung per E-Mail - dort gibt es kein Formular.
             return False
-        page = self._page_texts.get((job.url or "").strip(), "")
-        if page and has_application_form(page):
-            return True
         job_url = (job.url or "").strip()
-        source = self._form_source(job) or job_url
-        if not source.lower().startswith(("http://", "https://")):
+        queue: list[tuple[str, int]] = []
+        for candidate in (self._form_source(job), job_url):
+            if candidate and candidate.lower().startswith(("http://", "https://")):
+                if candidate not in (entry for entry, _depth in queue):
+                    queue.append((candidate, 0))
+        if not queue:
             return False
-        page = self._page_text(job) if source == job_url else self._page_text_for(source)
-        if not page:
-            return None
-        return has_application_form(page)
+        checked: set[str] = set()
+        pages = 0
+        reached = False
+        while queue and pages < 4:
+            url, depth = queue.pop(0)
+            if url in checked:
+                continue
+            checked.add(url)
+            page = self._page_text(job) if url == job_url else self._page_text_for(url)
+            pages += 1
+            if not page:
+                continue
+            reached = True
+            if has_application_form(page):
+                return True
+            if depth >= 2:
+                continue
+            for link in application_form_links(page, url):
+                if link not in checked:
+                    queue.append((link, depth + 1))
+        return False if reached else None
 
     def _mark_form(self, job: Job) -> bool:
         """Ergebnis der Formularpruefung an der Stelle vermerken."""
@@ -748,7 +850,7 @@ class Pipeline:
         job.form_checked = True
         return True
 
-    def _check_stored_forms(self, seen: set[str], limit: int = 5) -> int:
+    def _check_stored_forms(self, seen: set[str], limit: int = 15) -> int:
         """Aeltere Stellen nach und nach auf ein Formular pruefen."""
         done = 0
         attempts = 0
@@ -1364,15 +1466,18 @@ class Pipeline:
     # ------------------------------------------------------------------
     # Versand erkennen
     # ------------------------------------------------------------------
-    def check_drafts(self) -> int:
+    def check_drafts(self, report: Callable[[str], None] | None = None) -> int:
         """Versand prüfen: nur eine Mail im Ordner «Gesendet» zählt.
 
         Gelesen werden die letzten 100 Mails aus «Gesendet». Fehlt der Entwurf,
         ohne dass die Mail dort auftaucht, bleibt die Bewerbung ein Entwurf.
+        ``report`` meldet die Schritte an die Statusleiste.
         """
         if not self.outlook_ready():
             return 0
         client = self.outlook()
+        if report is not None:
+            report("Prüfe gesendete E-Mails …")
         try:
             sent = self._sent_messages(client)
         except (OutlookError, ImapError) as exc:
@@ -1385,6 +1490,8 @@ class Pipeline:
                 "Versandprüfung: Das Mailkonto liefert keinen Sent-Abruf.",
             )
             return 0
+        if report is not None:
+            report("Prüfe Entwürfe …")
         count = 0
         for application in self.store.list_applications(status=STATUS_ENTWURF):
             code = str(application.get("tracking") or "")
@@ -1510,9 +1617,13 @@ class Pipeline:
     # ------------------------------------------------------------------
     # Antworten auswerten
     # ------------------------------------------------------------------
-    def check_replies(self) -> list[dict[str, Any]]:
+    def check_replies(
+        self, report: Callable[[str], None] | None = None
+    ) -> list[dict[str, Any]]:
         if not self.outlook_ready():
             return []
+        if report is not None:
+            report("Prüfe Posteingang …")
         client = self.outlook()
         since = self.store.meta_get("posteingang_seit", "")
         if not since:

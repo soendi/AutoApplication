@@ -1,4 +1,4 @@
-# AutoApplication 1.0.25
+# AutoApplication 1.0.26
 
 Stellen von ostjob.ch suchen, Bewerbungen als Entwurf in Outlook oder Gmail
 vorbereiten und Antworten bis zur Zusage verfolgen – als Windows-Programm mit
@@ -85,8 +85,10 @@ stillen Updates.
 
 Der Tab **Stellen** zeigt je Anzeige: ein **F** für ein Bewerbungsformular,
 Datum, Titel, Ansprechperson, E-Mail, Firma, Ort, Adresse und PLZ sowie Pensum,
-Weg, Interesse, Fähigkeit und Status. Die Suchzeile darüber findet auch Adresse
-und Postleitzahl. Die Checkbox **ohne Jobvermittler** blendet alle Firmen aus
+Weg, Interesse, Fähigkeit und Status. Das **F** steht auch dann, wenn das
+Formular nicht auf der Anzeige selbst liegt, sondern auf einer eingebetteten
+Seite des Arbeitgebers oder hinter «Jetzt bewerben». Die Suchzeile darüber
+findet auch Adresse und Postleitzahl. Die Checkbox **ohne Jobvermittler** blendet alle Firmen aus
 der Liste **Einstellungen → Ostjob → Jobvermittler** aus; der Knopf
 **Als Jobvermittler eintragen** nimmt die Firma der markierten oder angehakten
 Zeilen in diese Liste auf. Doppelte Einträge werden übersprungen, und der
@@ -107,7 +109,7 @@ vorhandene Adressen werden bei späteren Läufen nachgetragen.
 
 ## Installation
 
-`AutoApplication-1.0.25-Setup.exe` von der
+`AutoApplication-1.0.26-Setup.exe` von der
 [Release-Seite](https://github.com/soendi/AutoApplication/releases/latest)
 herunterladen und ausführen. Windows 10 und 11, kein Administrator- und kein
 Python-Zubehör nötig.
@@ -325,7 +327,9 @@ Platzhalter in Betreff und Text:
 - **Täglicher Lauf** zur eingestellten Uhrzeit: Stellen suchen, Versand
   prüfen, Antworten auswerten. Entwürfe und Nachfragen entstehen nur auf Klick.
 - **Beim Start** läuft der Tageslauf einmal, wenn er heute noch nicht lief.
-- **Postfach prüfen** und **Nachfragen vorbereiten** gehen auch von Hand.
+- **Postfach prüfen** und **Nachfragen vorbereiten** gehen auch von Hand. Die
+  Statusleiste nennt dabei die Schritte: «Prüfe gesendete E-Mails …», «Prüfe
+  Entwürfe …» und «Prüfe Posteingang …».
 
 Der Tageslauf lässt sich ohne Fenster starten – etwa aus der
 Windows-Aufgabenplanung:

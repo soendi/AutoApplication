@@ -65,6 +65,10 @@ APPLICATION_FIELDS = {
     "follow_up_web_link",
 }
 
+# Wird die Formularerkennung erweitert, steigt diese Nummer und bereits
+# gepruefte Stellen ohne Formular werden noch einmal nachgesehen.
+FORM_CHECK_VERSION = "2"
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS jobs (
     id TEXT PRIMARY KEY,
@@ -185,6 +189,21 @@ class Store:
             # 1 = Seite wurde geprueft; 0 = beim naechsten Lauf nachsehen.
             db.execute(
                 "ALTER TABLE jobs ADD COLUMN form_checked INTEGER NOT NULL DEFAULT 0"
+            )
+        # Fuer Stellen ohne gefundenes Formular das Ergebnis der alten
+        # Pruefung verwerfen, damit Formulare in eingebetteten Seiten und
+        # hinter Bewerben-Verweisen nachtraeglich erkannt werden.
+        known = db.execute(
+            "SELECT value FROM meta WHERE key = 'form_check_version'"
+        ).fetchone()
+        if str(known["value"] if known else "") != FORM_CHECK_VERSION:
+            db.execute("UPDATE jobs SET form_checked = 0 WHERE has_form = 0")
+            db.execute(
+                """
+                INSERT INTO meta (key, value) VALUES ('form_check_version', ?)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value
+                """,
+                (FORM_CHECK_VERSION,),
             )
         app_columns = {
             row["name"] for row in db.execute("PRAGMA table_info(applications)")

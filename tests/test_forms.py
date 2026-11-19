@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from autoapplication.core.config import Settings
 from autoapplication.core.models import Job
-from autoapplication.core.pipeline import Pipeline, has_application_form
+from autoapplication.core.pipeline import (
+    Pipeline,
+    application_form_links,
+    has_application_form,
+)
 from autoapplication.core.store import Store
 
 
@@ -118,6 +122,47 @@ def test_mailto_application_needs_no_page(tmp_path) -> None:
     assert row["has_form"] == 0
     assert row["form_checked"] == 1
     assert calls == []
+
+
+def test_embedded_pages_and_apply_buttons_are_found() -> None:
+    html = """
+    <iframe title="vacancyDetailIFrame"
+            src="https://ohws.example/public/v1/jobs/abc"></iframe>
+    <iframe src="https://www.googletagmanager.com/ns.html?id=1"></iframe>
+    <a class="guide" href="/ratgeber/6/Bewerbung/">Tipps</a>
+    <a class="button apply" href="/redirect/abc/ats/">Jetzt bewerben</a>
+    """
+    assert application_form_links(html, "https://www.ostjob.ch/job/x/1") == [
+        "https://ohws.example/public/v1/jobs/abc",
+        "https://www.ostjob.ch/redirect/abc/ats/",
+    ]
+
+
+def test_form_behind_embedded_page_is_detected(tmp_path) -> None:
+    job = _job(raw={})
+    pages = {
+        job.url: (
+            '<form><input type="text" name="q"></form>'
+            '<iframe src="https://ats.example/jobs/abc"></iframe>'
+        ),
+        "https://ats.example/jobs/abc": (
+            '<a class="button apply" href="/redirect/abc/ats/">'
+            "Jetzt bewerben</a>"
+        ),
+        "https://ats.example/redirect/abc/ats/": (
+            '<form enctype="multipart/form-data">'
+            '<input type="text" name="name">'
+            '<input type="file" name="cv">'
+            "<p>Bewerbung</p></form>"
+        ),
+    }
+    pipeline, store, calls = _pipeline(tmp_path, pages)
+    store.upsert_job(job)
+
+    assert pipeline._mark_form(Job.from_row(store.get_job(job.id)))
+    row = store.get_job(job.id)
+    assert row["has_form"] == 1
+    assert "https://ats.example/redirect/abc/ats/" in calls
 
 
 def test_unreachable_application_page_is_checked_later(tmp_path) -> None:

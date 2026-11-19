@@ -640,6 +640,20 @@ def test_sent_folder_marks_application_sent(tmp_path) -> None:
     assert any("Gesendet" in event["message"] for event in store.events())
 
 
+def test_mailbox_check_reports_each_step(tmp_path) -> None:
+    pipeline, _store, _outlook, _ = _pipeline(tmp_path)
+    seen: list[str] = []
+
+    assert pipeline.check_drafts(report=seen.append) == 0
+    pipeline.check_replies(report=seen.append)
+
+    assert seen == [
+        "Prüfe gesendete E-Mails …",
+        "Prüfe Entwürfe …",
+        "Prüfe Posteingang …",
+    ]
+
+
 def test_draft_check_needs_a_tracking_code(tmp_path) -> None:
     pipeline, store, outlook, _ = _pipeline(tmp_path, jobs=[])
     store.upsert_job(MATCHING)

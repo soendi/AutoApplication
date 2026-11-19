@@ -1,3 +1,32 @@
+## AutoApplication 1.0.26
+
+Zwei Korrekturen: Formulare in eingebetteten Bewerbungsseiten werden erkannt,
+und die Statusleiste sagt beim Postfach-Pruefen, welcher Schritt gerade laeuft.
+
+### Behoben
+
+- **Kein F bei eingebettetem Bewerbungsformular.** Bei ostjob.ch steht das
+  Formular oft nicht auf der Anzeige selbst: Die Seite bettet die Anzeige des
+  Arbeitgebers in einem iframe ein, und erst der Knopf «Jetzt bewerben» fuehrt
+  zum Bewerbungsformular (etwa im Bewerbungssystem des Arbeitgebers). Die
+  Pruefung sah nur die Anzeige und die hinterlegte Bewerbungsadresse an und
+  setzte deshalb kein F. Jetzt folgt sie eingebetteten Seiten und
+  Bewerben-Verweisen - hoechstens vier Seiten je Stelle und zwei Schritte
+  tief, damit fremde Seiten den Lauf nicht aufhalten. Werbe-, Zaehler- und
+  Teilen-Verweise sowie Ratgeberseiten bleiben aussen vor.
+- **Alte Fehlschlaege werden nachgeholt.** Stellen, bei denen die fruehere
+  Pruefung kein Formular fand, werden nach dem Update einmal neu geprueft -
+  je Suchlauf 15 Stueck, bis alle durch sind.
+
+### Neu
+
+- **Statusleiste nennt die Schritte.** Statt «Postfach wird geprueft …» steht
+  dort jetzt nacheinander «Pruefe gesendete E-Mails …», «Pruefe Entwuerfe …»
+  und «Pruefe Posteingang …». Die Reihenfolge entspricht der Arbeit: zuerst
+  der Ordner «Gesendet», dann der Abgleich der offenen Entwuerfe, zuletzt der
+  Posteingang. Der Ordner «Entwuerfe» selbst wird weiterhin nicht gelesen, ein
+  Entwurf gilt erst als verschickt, wenn seine Kennung in «Gesendet» steht.
+
 ## AutoApplication 1.0.25
 
 Jobvermittler lassen sich ausblenden, und Stellen mit Bewerbungsformular sind

@@ -22,6 +22,19 @@ def _job(identifier: str = "1") -> Job:
     )
 
 
+def test_old_form_results_are_checked_again(tmp_path) -> None:
+    path = tmp_path / "daten.db"
+    store = Store(path)
+    job = _job()
+    store.upsert_job(job, now=now_iso())
+    store.update_job(job.id, has_form=0, form_checked=1)
+    store.meta_set("form_check_version", "1")
+
+    again = Store(path)
+    assert again.get_job(job.id)["form_checked"] == 0
+    assert again.meta_get("form_check_version") == "2"
+
+
 def test_upsert_job_only_new_once(tmp_path) -> None:
     store = Store(tmp_path / "daten.db")
     assert store.upsert_job(_job(), now=now_iso()) is True

@@ -258,14 +258,17 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
     def run_task(
         self,
-        function: Callable[[], Any],
+        function: Callable[..., Any],
         done: Callable[[Any], None] | None = None,
         busy: str = "",
         refresh: bool = True,
+        passes_status: bool = False,
     ) -> None:
         if busy:
             self.statusBar().showMessage(busy)
-        task = Task(function, self)
+        task = Task(function, self, passes_status=passes_status)
+        # Zwischenmeldungen der Aufgabe landen direkt in der Statusleiste.
+        task.status.connect(self.statusBar().showMessage)
         self._tasks.add(task)
 
         def finished(result: Any) -> None:
@@ -324,9 +327,9 @@ class MainWindow(QMainWindow):
             self.show_page("settings")
             return
 
-        def work() -> tuple[int, int]:
-            sent = self.pipeline.check_drafts()
-            replies = self.pipeline.check_replies()
+        def work(report: Callable[[str], None]) -> tuple[int, int]:
+            sent = self.pipeline.check_drafts(report=report)
+            replies = self.pipeline.check_replies(report=report)
             return sent, len(replies)
 
         def done(result: tuple[int, int]) -> None:
@@ -336,7 +339,12 @@ class MainWindow(QMainWindow):
                 15_000,
             )
 
-        self.run_task(work, done=done, busy="Postfach wird geprüft …")
+        self.run_task(
+            work,
+            done=done,
+            busy="Prüfe gesendete E-Mails …",
+            passes_status=True,
+        )
 
     def check_drafts(self) -> None:
         """Verschickte Entwürfe erkennen (alle fünf Minuten, still)."""

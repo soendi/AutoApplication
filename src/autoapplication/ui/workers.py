@@ -16,14 +16,26 @@ class Task(QThread):
 
     done = Signal(object)
     failed = Signal(str)
+    # Zwischenmeldungen fuer die Statusleiste (z. B. «Pruefe Posteingang ...»).
+    status = Signal(str)
 
-    def __init__(self, function: Callable[[], Any], parent: Any = None) -> None:
+    def __init__(
+        self,
+        function: Callable[..., Any],
+        parent: Any = None,
+        *,
+        passes_status: bool = False,
+    ) -> None:
         super().__init__(parent)
         self.function = function
+        self.passes_status = passes_status
 
     def run(self) -> None:  # pragma: no cover - laeuft im Thread
         try:
-            result = self.function()
+            if self.passes_status:
+                result = self.function(self.status.emit)
+            else:
+                result = self.function()
         except Exception as exc:  # noqa: BLE001 - Fehler an die Oberflaeche
             log.error("Hintergrundaufgabe fehlgeschlagen: %s\n%s", exc, traceback.format_exc())
             self.failed.emit(str(exc) or exc.__class__.__name__)
