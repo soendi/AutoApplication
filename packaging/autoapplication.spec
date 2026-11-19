@@ -15,6 +15,15 @@ datas = [
         str(SRC / "autoapplication" / "data" / "ocr-test.png"),
         "autoapplication/data",
     ),
+    # Namenslisten (BFS) fuer die Anrede aus einem Namen ohne Herr/Frau.
+    (
+        str(SRC / "autoapplication" / "data" / "vornamen.csv"),
+        "autoapplication/data",
+    ),
+    (
+        str(SRC / "autoapplication" / "data" / "nachnamen.csv"),
+        "autoapplication/data",
+    ),
 ]
 
 OCR_MODULES = (

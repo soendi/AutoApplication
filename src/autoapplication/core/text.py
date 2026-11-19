@@ -8,6 +8,8 @@ import re
 from datetime import date, datetime, timedelta, timezone
 from urllib.parse import urlparse
 
+from .names import split_person_name
+
 _TAG_RE = re.compile(r"<[^>]+>")
 _EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
 _OBFUSCATED_AT = re.compile(r"\s*[\[\(\{]\s*(?:at|ät)\s*[\]\)\}]\s*", re.IGNORECASE)
@@ -332,13 +334,23 @@ def person_name(value: str | None) -> str:
 
 
 def salutation(contact: str | None) -> str:
-    """Anrede aus "Herr Müller"/"Frau Meier"; sonst allgemein."""
+    """Anrede aus "Herr Müller"/"Frau Meier"; sonst allgemein.
+
+    Steht im Kontakt nur ein Name ("Steven Müller"), wird der Vorname in der
+    amtlichen Namensliste nachgeschlagen und daraus Herr oder Frau abgeleitet.
+    Bleibt der Vorname unklar (etwa Andrea oder Simone), gilt die allgemeine
+    Anrede - geraten wird nicht.
+    """
     text = (contact or "").strip()
     lowered = text.lower()
     if lowered.startswith("herr "):
         return f"Sehr geehrter {text}"
     if lowered.startswith("frau "):
         return f"Sehr geehrte {text}"
+    person = split_person_name(text)
+    if person.gender and person.last and person.first:
+        title = "Herr" if person.gender == "m" else "Frau"
+        return f"Sehr geehrte{'r' if title == 'Herr' else ''} {title} {person.last}"
     return "Sehr geehrte Damen und Herren"
 
 

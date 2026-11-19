@@ -1,3 +1,29 @@
+## AutoApplication 1.0.33
+
+Die Anrede entsteht jetzt auch ohne KI aus amtlichen Namenslisten, und die
+Stichwortlisten lassen sich mit einem Klick um verwandte Begriffe erweitern.
+
+### Neu
+
+- **Anrede aus dem Namen.** Nennt die Anzeige nur «Steven Müller» ohne
+  Herr/Frau, leitet AutoApplication daraus «Sehr geehrter Herr Müller» ab –
+  auch ohne eingerichtete KI. Die mitgelieferten Listen des Bundesamts für
+  Statistik (BFS) ordnen Vor- und Nachnamen und kennen die Verteilung der
+  Vornamen nach Geschlecht. Eine Anrede entsteht nur, wenn mindestens 95 % der
+  Namensträger eines Geschlechts sind; gemischt gebrauchte Namen wie Andrea
+  oder Simone bleiben bei «Sehr geehrte Damen und Herren». Namen mit
+  ausdrücklicher Anrede bleiben unverändert. Quellen: «Vornamen der
+  Bevölkerung nach Geschlecht» und «Nachnamen der ständigen Wohnbevölkerung»,
+  Schweiz 2025 (OPEN-BY, Quellenangabe Pflicht); neu erzeugen mit
+  `python packaging/make_names.py`.
+- **Mit KI Synonyme einfügen.** Neben den Feldern «Interessen» und
+  «Fähigkeiten» steht je ein Knopf. Er lässt die eingerichtete KI verwandte
+  Begriffe ergänzen, die in Anzeigen dasselbe meinen (etwa Lager →
+  Kommissionierung, Warenannahme), damit Stellen mit anderer Wortwahl als
+  Treffer zählen. Vorhandene Stichworte bleiben stehen, Doppelte werden
+  übersprungen; die Ergänzung wird erst mit «Speichern» übernommen. Ohne
+  API-Schlüssel erscheint ein Hinweis, Fehler nennen den Grund.
+
 ## AutoApplication 1.0.32
 
 Die Stellenliste zeigt die Trefferquote auf einen Blick: der beste Wert grün,

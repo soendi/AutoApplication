@@ -478,6 +478,59 @@ class AiClient:
         message = choices[0].get("message") or {}
         return str(message.get("content") or "")
 
+    def synonyms(self, terms: list[str], kind: str = "Interessen") -> list[str]:
+        """Verwandte Begriffe zu einer Stichwortliste vorschlagen.
+
+        Gedacht fuer den Knopf neben «Interessen» und «Faehigkeiten»: Die KI
+        ergaenzt Begriffe, die in Stellenanzeigen dasselbe meinen (etwa
+        «Lager» -> «Kommissionierung», «Warenannahme»). Zurueck kommen nur
+        neue, kurze Stichworte ohne Wiederholungen; die vorhandene Liste
+        bleibt unveraendert. Ohne eingerichtete KI bleibt das Ergebnis leer.
+        """
+        clean: list[str] = []
+        for term in terms:
+            value = re.sub(r"\s+", " ", str(term or "")).strip(" .,;:–-")
+            if value and value.casefold() not in {item.casefold() for item in clean}:
+                clean.append(value)
+        if not clean or not self.available():
+            return []
+        system = (
+            "Du erweiterst eine Stichwortliste fuer die Stellensuche um verwandte "
+            "Begriffe. Antworte nur mit einem JSON-Objekt der Form "
+            '{"synonyme": ["...", "..."]}. Nimm je Stichwort drei bis fuenf '
+            "deutsche Begriffe auf, die in Stellenanzeigen dieselbe Taetigkeit "
+            "oder dasselbe Thema bezeichnen (etwa Lager -> Kommissionierung, "
+            "Warenannahme; IT -> Helpdesk, Anwenderbetreuung). Nur Substantive "
+            "oder kurze Wendungen, keine Saetze, keine Erklaerungen, keine "
+            "Firmen- oder Personennamen. Nichts erfinden, was eine Ausbildung, "
+            "ein Zertifikat oder Berufserfahrung behauptet. Keine Wiederholung "
+            "der bereits genannten Stichworte."
+        )
+        content = f"Liste: {kind}\nStichworte: {', '.join(clean)}"
+        try:
+            data = _json_object(self._chat(system, content, temperature=0.3))
+        except (urllib.error.URLError, OSError, ValueError, KeyError) as exc:
+            log.info("KI-Synonyme fehlgeschlagen (%s)", exc)
+            return []
+        values = data.get("synonyme") or data.get("synonyms") or []
+        if not isinstance(values, list):
+            return []
+        known = {item.casefold() for item in clean}
+        result: list[str] = []
+        for raw in values:
+            # Mehrere Begriffe in einem Eintrag ("Kommissionierung, Versand")
+            # werden einzeln uebernommen, statt den ganzen Eintrag zu verwerfen.
+            for part in re.split(r"[,;\n]", str(raw or "")):
+                value = re.sub(r"\s+", " ", part).strip(" .,;:–-•\"'")
+                if not value or len(value) > 60 or len(value.split()) > 5:
+                    continue
+                key = value.casefold()
+                if key in known:
+                    continue
+                known.add(key)
+                result.append(value)
+        return result[:30]
+
     # ------------------------------------------------------------------
     def job_digest(self, job: Job) -> JobDigest:
         """Titel, Beschreibung und Empfaengeradresse aus der Anzeige lesen.

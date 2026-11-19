@@ -1,4 +1,4 @@
-# AutoApplication 1.0.32
+# AutoApplication 1.0.33
 
 Stellen von ostjob.ch suchen, Bewerbungen als Entwurf in Outlook oder Gmail
 vorbereiten und Antworten bis zur Zusage verfolgen – als Windows-Programm mit
@@ -119,9 +119,15 @@ Anzeigen, auch bereits geprüfte. Doppelte Einträge werden übersprungen, und d
 Zustand der Checkbox bleibt für den nächsten Start erhalten.
 
 - **Ansprechperson mit Anrede.** Nennt die Anzeige „Herr …“ oder „Frau …“, wird
-das übernommen. Steht dort nur ein Name, leitet die KI die Anrede aus dem
-Vornamen ab, wenn er eindeutig männlich oder weiblich ist (Sandra → Frau,
-Michael → Herr); bei unklaren Namen bleibt das Feld leer statt zu raten.
+das übernommen. Steht dort nur ein Name, leitet AutoApplication die Anrede aus
+dem Vornamen ab: Die mitgelieferten Namenslisten des Bundesamts für Statistik
+(BFS) ordnen Vornamen und Nachnamen und kennen die Verteilung nach Geschlecht.
+Eindeutige Vornamen ergeben „Sehr geehrter Herr Müller“ oder „Sehr geehrte
+Frau Meier“ – auch ohne eingerichtete KI. Bei gemischt gebrauchten Namen wie
+Andrea oder Simone bleibt die Anrede allgemein, statt zu raten. Die Daten
+stammen aus «Vornamen der Bevölkerung nach Geschlecht» und «Nachnamen der
+ständigen Wohnbevölkerung» (Schweiz 2025, OPEN-BY, Quellenangabe Pflicht);
+neu erzeugen mit `python packaging/make_names.py`.
 - **E-Mail** ist die Bewerbungsadresse aus der Anzeige.
 - **Adresse und PLZ** kommen zuerst aus den Portalangaben (Strasse,
 Hausnummer, Postleitzahl der Firma). Fehlen sie dort, liest AutoApplication
@@ -133,7 +139,7 @@ vorhandene Adressen werden bei späteren Läufen nachgetragen.
 
 ## Installation
 
-`AutoApplication-1.0.32-Setup.exe` von der
+`AutoApplication-1.0.33-Setup.exe` von der
 [Release-Seite](https://github.com/soendi/AutoApplication/releases/latest)
 herunterladen und ausführen. Windows 10 und 11, kein Administrator- und kein
 Python-Zubehör nötig.
@@ -170,6 +176,13 @@ Stichworte: **Interessen** (wofür Sie sich eher interessieren) und
 sie müssen sich nicht decken. Die KI bekommt beides als Zusatz zur
 Stellenbeschreibung; in Vorlagen stehen sie als `{interessen}` und
 `{faehigkeiten}` bereit.
+
+Neben jedem der beiden Felder steht **Mit KI Synonyme einfügen**. Der Knopf
+lässt die eingerichtete KI verwandte Begriffe ergänzen, die in Anzeigen
+dasselbe meinen – etwa `Lager` → `Kommissionierung`, `Warenannahme`. So zählen
+Stellen mit anderer Wortwahl ebenfalls als Treffer. Vorhandene Stichworte
+bleiben unverändert, Doppelte werden übersprungen; übernommen wird die Liste
+erst mit **Speichern**. Ohne KI-Schlüssel erscheint ein Hinweis.
 
 Das Feld **Werdegang** nimmt die Stationen auf, eine pro Zeile im Muster
 `Zeitraum: Funktion, Firma – Aufgaben`. Die KI erhält den Werdegang für den

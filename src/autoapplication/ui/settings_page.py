@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from PySide6.QtCore import QUrl
+from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -131,22 +131,51 @@ class SettingsPage(QWidget):
         self.werdegang.setPlaceholderText(
             "Eine Station pro Zeile: Zeitraum: Funktion, Firma – Aufgaben"
         )
-        for label, field in (
-            ("Vorname", self.vorname),
-            ("Nachname", self.nachname),
-            ("Strasse", self.strasse),
-            ("PLZ", self.plz),
-            ("Ort", self.wohnort),
-            ("Telefon", self.telefon),
-            ("E-Mail", self.email),
-            ("Jahre Erfahrung gesamt (Wort)", self.erfahrung),
-            ("Jahre in Spedition/Export (Wort)", self.erfahrung_spedition),
-            ("Verfügbar", self.verfuegbar),
-            ("Interessen (Stichworte)", self.interessen),
-            ("Fähigkeiten (Stichworte)", self.faehigkeiten),
-            ("Werdegang (Stationen)", self.werdegang),
+        self.interessen_button = QPushButton("Mit KI Synonyme einfügen")
+        self.faehigkeiten_button = QPushButton("Mit KI Synonyme einfügen")
+        for button, kind in (
+            (self.interessen_button, "Interessen"),
+            (self.faehigkeiten_button, "Fähigkeiten"),
         ):
-            person_form.addRow(label, field)
+            button.setToolTip(
+                "Ergänzt die Liste mit verwandten Begriffen aus der KI, damit "
+                "Stellenanzeigen mit anderer Wortwahl ebenfalls als Treffer zählen."
+            )
+        self.interessen_button.clicked.connect(
+            lambda: self._add_synonyms(
+                self.interessen, self.interessen_button, "Interessen"
+            )
+        )
+        self.faehigkeiten_button.clicked.connect(
+            lambda: self._add_synonyms(
+                self.faehigkeiten, self.faehigkeiten_button, "Fähigkeiten"
+            )
+        )
+        for label, field, button in (
+            ("Vorname", self.vorname, None),
+            ("Nachname", self.nachname, None),
+            ("Strasse", self.strasse, None),
+            ("PLZ", self.plz, None),
+            ("Ort", self.wohnort, None),
+            ("Telefon", self.telefon, None),
+            ("E-Mail", self.email, None),
+            ("Jahre Erfahrung gesamt (Wort)", self.erfahrung, None),
+            ("Jahre in Spedition/Export (Wort)", self.erfahrung_spedition, None),
+            ("Verfügbar", self.verfuegbar, None),
+            ("Interessen (Stichworte)", self.interessen, self.interessen_button),
+            ("Fähigkeiten (Stichworte)", self.faehigkeiten, self.faehigkeiten_button),
+            ("Werdegang (Stationen)", self.werdegang, None),
+        ):
+            if button is None:
+                person_form.addRow(label, field)
+                continue
+            row = QWidget()
+            row_layout = QHBoxLayout(row)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            row_layout.setSpacing(6)
+            row_layout.addWidget(field, 1)
+            row_layout.addWidget(button, 0, Qt.AlignmentFlag.AlignTop)
+            person_form.addRow(label, row)
         person_hint = QLabel(
             "Interessen und Fähigkeiten werden getrennt gespeichert und müssen "
             "sich nicht decken: Sie können etwas, interessieren sich aber eher "
@@ -813,6 +842,79 @@ class SettingsPage(QWidget):
         probe.set("ai.model", self.ai_model.currentText().strip())
         probe.set("ai.api_key", self.ai_key.text().strip())
         return AiClient(probe)
+
+    def _add_synonyms(
+        self, field: QPlainTextEdit, button: QPushButton, kind: str
+    ) -> None:
+        """Die Stichwortliste per KI um verwandte Begriffe ergaenzen."""
+        terms = _split_terms(field.toPlainText())
+        if not terms:
+            QMessageBox.information(
+                self,
+                kind,
+                f"Bitte zuerst {kind.lower()} als Stichworte eintragen.",
+            )
+            return
+        client = self._ai_probe()
+        if not client.settings.ai_key():
+            QMessageBox.warning(
+                self,
+                "KI",
+                "Bitte zuerst im Reiter «KI & Automatisierung» den API-Schlüssel "
+                "des Anbieters eintragen.",
+            )
+            return
+        label = button.text()
+        button.setEnabled(False)
+        button.setText("Frage KI …")
+        task = Task(lambda: client.synonyms(terms, kind), self)
+        self._tasks.append(task)
+        task.done.connect(
+            lambda result: self._synonyms_done(result, field, button, label)
+        )
+        task.failed.connect(
+            lambda message: self._synonyms_failed(message, button, label)
+        )
+        task.finished.connect(
+            lambda: self._tasks.remove(task) if task in self._tasks else None
+        )
+        task.start()
+
+    def _synonyms_done(
+        self,
+        result: Any,
+        field: QPlainTextEdit,
+        button: QPushButton,
+        label: str,
+    ) -> None:
+        button.setEnabled(True)
+        button.setText(label)
+        found = result if isinstance(result, list) else []
+        existing = _split_terms(field.toPlainText())
+        known = {term.casefold() for term in existing}
+        added: list[str] = []
+        for value in found:
+            term = str(value).strip()
+            if not term or term.casefold() in known:
+                continue
+            known.add(term.casefold())
+            added.append(term)
+        if not added:
+            self.window.statusBar().showMessage(
+                "Die KI lieferte keine neuen Synonyme.", 6000
+            )
+            return
+        field.setPlainText(", ".join(existing + added))
+        self.window.statusBar().showMessage(
+            f"{len(added)} Synonyme ergänzt – mit «Speichern» übernehmen.", 8000
+        )
+
+    def _synonyms_failed(self, message: str, button: QPushButton, label: str) -> None:
+        button.setEnabled(True)
+        button.setText(label)
+        QMessageBox.warning(
+            self, "KI", f"Synonyme konnten nicht ergänzt werden: {message}"
+        )
 
     def test_ai(self) -> None:
         client = self._ai_probe()

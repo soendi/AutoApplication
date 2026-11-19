@@ -428,3 +428,37 @@ def test_contact_excerpt_keeps_the_contact_section(tmp_path) -> None:
         portal="ostjob.ch",
     )
     assert "verling@avoris.li" in seen["user"]
+
+
+def test_synonyms_are_cleaned_and_deduplicated(tmp_path) -> None:
+    seen: dict = {}
+
+    def send(url, payload, headers, timeout):
+        seen["user"] = payload["messages"][1]["content"]
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": (
+                            '{"synonyme": ["Kommissionierung", "kommissionierung", '
+                            '"Lager", "Warenannahme, Stapeln", "", "Versand"]}'
+                        )
+                    }
+                }
+            ]
+        }
+
+    client = AiClient(_settings(tmp_path), transport=send)
+    result = client.synonyms(["Lager", "Disposition"], "Fähigkeiten")
+    # Doppelte und leere Einträge fallen weg, Komma-Einträge werden geteilt.
+    assert result == ["Kommissionierung", "Warenannahme", "Stapeln", "Versand"]
+    assert "Fähigkeiten" in seen["user"]
+    assert "Lager" in seen["user"]
+
+
+def test_synonyms_without_ai_make_no_request(tmp_path) -> None:
+    def fail(*args, **kwargs):
+        raise AssertionError("ohne KI darf nicht gefragt werden")
+
+    client = AiClient(_settings(tmp_path, enabled=False), transport=fail)
+    assert client.synonyms(["Lager"]) == []
