@@ -35,7 +35,23 @@ log = logging.getLogger(__name__)
 OPENAI_BASE = "https://api.openai.com/v1"
 OPENAI_MODEL = "gpt-4o-mini"
 GROQ_BASE = "https://api.groq.com/openai/v1"
-GROQ_MODEL = "llama-3.3-70b-versatile"
+GROQ_MODEL = "openai/gpt-oss-120b"
+
+# Nicht als Sprachmodell fuer Stichworte und Texte geeignet.
+_MODEL_SKIP = (
+    "embed",
+    "whisper",
+    "tts",
+    "dall-e",
+    "moderation",
+    "transcrib",
+    "realtime",
+    "audio",
+    "image",
+    "rerank",
+    "guard",
+    "safety",
+)
 
 ABSAGE = "absage"
 ZUSAGE = "zusage"
@@ -295,9 +311,11 @@ class AiClient:
         self,
         settings: Settings,
         transport: Callable[..., Any] | None = None,
+        lister: Callable[..., Any] | None = None,
     ) -> None:
         self.settings = settings
         self.transport = transport or _post_json
+        self.lister = lister or _get_json
 
     # ------------------------------------------------------------------
     def provider(self) -> str:
@@ -316,6 +334,59 @@ class AiClient:
         if stored:
             return stored
         return GROQ_MODEL if self.provider() == "groq" else OPENAI_MODEL
+
+    def models(self) -> list[str]:
+        """Modelle, die der Anbieter mit diesem Schluessel anbietet.
+
+        Gefragt wird die OpenAI-kompatible Modellliste (``GET /models``). Sie
+        zeigt, welche Sprachmodelle das Konto wirklich nutzen kann - ein
+        eingetragenes Modell, das dort fehlt, laesst sich nicht verwenden.
+        Einbettungs-, Bild- und Sprachmodelle bleiben aussen vor; das zuletzt
+        eingestellte Modell steht oben, danach folgt die alphabetische Liste.
+        """
+        url = f"{self.base_url()}/models"
+        headers = {"Authorization": f"Bearer {self.settings.ai_key()}"}
+        timeout = min(float(self.settings.number("ai.timeout", 45) or 45), 30)
+        try:
+            data = self.lister(url, headers, timeout)
+        except urllib.error.HTTPError as exc:
+            if exc.code == 401:
+                raise ValueError(
+                    "Der Schluessel wurde abgelehnt (401). Bitte den Schluessel "
+                    "des Anbieters pruefen."
+                ) from exc
+            if exc.code == 403:
+                raise ValueError(
+                    "Der Schluessel hat keinen Zugriff (403). Bitte beim Anbieter "
+                    "die Rechte pruefen."
+                ) from exc
+            if exc.code == 404:
+                raise ValueError(
+                    f"Unter {url} gibt es keine Modellliste (404). Bitte die "
+                    "Adresse der Schnittstelle pruefen."
+                ) from exc
+            raise
+        entries = data.get("data") if isinstance(data, dict) else data
+        found: list[str] = []
+        for entry in entries or []:
+            if isinstance(entry, dict):
+                name = str(entry.get("id") or "").strip()
+            else:
+                name = str(entry or "").strip()
+            if not name or name.lower() in {item.lower() for item in found}:
+                continue
+            lowered = name.lower()
+            if any(skip in lowered for skip in _MODEL_SKIP):
+                continue
+            found.append(name)
+        if not found:
+            return []
+        current = self.model()
+        ordered = sorted(found)
+        if current in ordered:
+            ordered.remove(current)
+            ordered.insert(0, current)
+        return ordered
 
     def available(self) -> bool:
         return bool(
@@ -339,12 +410,16 @@ class AiClient:
             "Authorization": f"Bearer {self.settings.ai_key()}",
             "Content-Type": "application/json",
         }
-        data = self.transport(
-            url,
-            payload,
-            headers,
-            float(self.settings.number("ai.timeout", 45) or 45),
-        )
+        timeout = float(self.settings.number("ai.timeout", 45) or 45)
+        try:
+            data = self.transport(url, payload, headers, timeout)
+        except urllib.error.HTTPError as exc:
+            if exc.code != 400:
+                raise
+            # Neuere Modelle mit festem Reasoning lehnen temperature ab.
+            # Ohne diese Angabe geht derselbe Aufruf durch.
+            without = {key: value for key, value in payload.items() if key != "temperature"}
+            data = self.transport(url, without, headers, timeout)
         choices = data.get("choices") or []
         if not choices:
             raise ValueError("Die KI lieferte keine Antwort.")
@@ -729,6 +804,14 @@ def _json_object(raw: str) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise ValueError("JSON ist kein Objekt")
     return data
+
+
+def _get_json(
+    url: str, headers: dict[str, str], timeout: float
+) -> dict[str, Any]:
+    request = urllib.request.Request(url, headers=headers, method="GET")
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        return json.loads(response.read().decode("utf-8"))
 
 
 def _post_json(

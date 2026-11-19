@@ -1,3 +1,32 @@
+## AutoApplication 1.0.23
+
+Das Sprachmodell laesst sich aus dem waehlen, was der eigene Schluessel kann -
+und die Verbindung zur KI zeigt sich auf einen Klick.
+
+### Neu
+
+- **«Verbindung prüfen» neben dem Modell.** Der Knopf fragt mit Adresse und
+  Schluessel aus den Feldern beim Anbieter nach und traegt die Modelle in die
+  Auswahlliste ein, die dieser Schluessel wirklich nutzen kann. Das gewuenschte
+  Modell wird dort ausgewaehlt; ein eigener Name laesst sich weiterhin
+  eintippen. Die Statuszeile nennt das Ergebnis und sagt es deutlich, wenn das
+  bisherige Modell nicht dabei ist - die Einstellung wird dabei nicht
+  ueberschrieben. Abgelehnter Schluessel (401), fehlender Zugriff (403) und
+  falsche Adresse (404) erscheinen als Klartext.
+- **Modell als Auswahlliste.** Statt Freitext steht ein Feld mit den Modellen
+  des Anbieters bereit; Einbettungs-, Bild- und Sprachmodelle sind
+  ausgefiltert, das eingestellte Modell steht oben. Ein Wechsel des Anbieters
+  leert die Liste des anderen.
+
+### Behoben
+
+- **Groq-Vorschlag war abgeschaltet.** `llama-3.3-70b-versatile` hat Groq am
+  16. August 2026 fuer Free- und Developer-Konten abgeschaltet. Vorschlag ist
+  jetzt `openai/gpt-oss-120b`.
+- **Modelle mit festem Reasoning.** Diese lehnen die Angabe `temperature` mit
+  einem Fehler ab. Der Aufruf wird in diesem Fall einmal ohne die Angabe
+  wiederholt, statt abzubrechen.
+
 ## AutoApplication 1.0.22
 
 Ansprechperson und E-Mail werden zuverlaessiger gelesen - notfalls liest die

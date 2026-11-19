@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import urllib.error
 
+import pytest
+
 from autoapplication.core.ai import (
     ABSAGE,
     EINLADUNG,
@@ -59,10 +61,62 @@ def test_groq_defaults_and_profile_hints(tmp_path) -> None:
     assert client.keywords(_job(), []) == ["Spedition"]
     url, payload = calls[0]
     assert url == "https://api.groq.com/openai/v1/chat/completions"
-    assert payload["model"] == "llama-3.3-70b-versatile"
+    assert payload["model"] == "openai/gpt-oss-120b"
     user = payload["messages"][1]["content"]
     assert "Nachhaltigkeit" in user
     assert "Disposition" in user
+
+
+def test_models_lists_only_chat_models(tmp_path) -> None:
+    settings = _settings(tmp_path)
+    settings.set("ai.model", "zeta-model")
+    seen: dict = {}
+
+    def lister(url, headers, timeout):
+        seen["url"] = url
+        seen["auth"] = headers.get("Authorization")
+        return {
+            "data": [
+                {"id": "alpha-model"},
+                {"id": "zeta-model"},
+                {"id": "text-embedding-3-small"},
+                {"id": "whisper-1"},
+                {"id": "gpt-4o-mini-tts"},
+                {"id": "tts-1"},
+            ]
+        }
+
+    client = AiClient(settings, lister=lister)
+    # Das eingestellte Modell steht oben, Einbettungs- und Sprachmodelle fehlen.
+    assert client.models() == ["zeta-model", "alpha-model"]
+    assert seen["url"] == "https://api.example/v1/models"
+    assert seen["auth"] == "Bearer key"
+
+
+def test_models_reports_rejected_key(tmp_path) -> None:
+    def lister(url, headers, timeout):
+        raise urllib.error.HTTPError(url, 401, "Unauthorized", None, None)
+
+    client = AiClient(_settings(tmp_path), lister=lister)
+    with pytest.raises(ValueError) as info:
+        client.models()
+    assert "abgelehnt" in str(info.value)
+
+
+def test_chat_retries_without_temperature(tmp_path) -> None:
+    calls: list = []
+
+    def send(url, payload, headers, timeout):
+        calls.append(payload)
+        if len(calls) == 1:
+            # Modelle mit festem Reasoning lehnen temperature ab.
+            raise urllib.error.HTTPError(url, 400, "Bad Request", None, None)
+        return {"choices": [{"message": {"content": '{"stichworte": ["Spedition"]}'}}]}
+
+    client = AiClient(_settings(tmp_path), transport=send)
+    assert client.keywords(_job(), []) == ["Spedition"]
+    assert "temperature" in calls[0]
+    assert "temperature" not in calls[1]
 
 
 def test_openai_keeps_stored_base_url(tmp_path) -> None:

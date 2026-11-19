@@ -1,4 +1,4 @@
-# AutoApplication 1.0.22
+# AutoApplication 1.0.23
 
 Stellen von ostjob.ch suchen, Bewerbungen als Entwurf in Outlook oder Gmail
 vorbereiten und Antworten bis zur Zusage verfolgen – als Windows-Programm mit
@@ -102,7 +102,7 @@ vorhandene Adressen werden bei späteren Läufen nachgetragen.
 
 ## Installation
 
-`AutoApplication-1.0.22-Setup.exe` von der
+`AutoApplication-1.0.23-Setup.exe` von der
 [Release-Seite](https://github.com/soendi/AutoApplication/releases/latest)
 herunterladen und ausführen. Windows 10 und 11, kein Administrator- und kein
 Python-Zubehör nötig.
@@ -200,9 +200,14 @@ Unter **Einstellungen → KI & Automatisierung** den Anbieter wählen:
 | Anbieter | Adresse | Modell (Vorschlag) |
 | --- | --- | --- |
 | OpenAI oder kompatibel | `https://api.openai.com/v1` | `gpt-4o-mini` |
-| Groq | `https://api.groq.com/openai/v1` | `llama-3.3-70b-versatile` |
+| Groq | `https://api.groq.com/openai/v1` | `openai/gpt-oss-120b` |
 
-Adresse und Modell füllt die Auswahl automatisch, beides bleibt änderbar.
+Adresse und Modell füllt die Auswahl automatisch. **«Verbindung prüfen»**
+fragt den Anbieter mit dem eingetragenen Schlüssel und trägt die Modelle in
+die Auswahlliste ein, die dieser Schlüssel wirklich nutzen kann; das gewünschte
+Modell wird dort ausgewählt. Steht das bisherige Modell nicht in der Liste,
+sagt das Programm es und lässt die Wahl offen. Ein eigener Modellname lässt
+sich weiterhin eintippen.
 Schlüssel von Groq unter [console.groq.com](https://console.groq.com/keys)
 erstellen. Der Schlüssel lässt sich auch über die Umgebungsvariablen
 `AUTOAPPLICATION_AI_KEY`, `OPENAI_API_KEY` oder `GROQ_API_KEY` bereitstellen.

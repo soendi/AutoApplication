@@ -26,7 +26,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..core.ai import GROQ_BASE, GROQ_MODEL, OPENAI_BASE, OPENAI_MODEL
+from ..core.ai import AiClient, GROQ_BASE, GROQ_MODEL, OPENAI_BASE, OPENAI_MODEL
+from ..core.config import Settings
 from ..core.documents import (
     ensure_default_letter_template,
     letter_template_folder,
@@ -234,8 +235,23 @@ class SettingsPage(QWidget):
         self.ai_provider.currentIndexChanged.connect(self._ai_provider_changed)
         self.ai_url = QLineEdit()
         self.ai_url.setPlaceholderText(OPENAI_BASE)
-        self.ai_model = QLineEdit()
-        self.ai_model.setPlaceholderText(OPENAI_MODEL)
+        # Auswahlliste statt Freitext: «Verbindung prüfen» holt die Modelle,
+        # die der Anbieter mit diesem Schlüssel wirklich anbietet. Ein eigenes
+        # Modell lässt sich weiterhin eintippen.
+        self.ai_model = QComboBox()
+        self.ai_model.setEditable(True)
+        self.ai_model.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        self.ai_model.lineEdit().setPlaceholderText(OPENAI_MODEL)
+        self.ai_check_button = QPushButton("Verbindung prüfen")
+        self.ai_check_button.clicked.connect(self.test_ai)
+        model_row = QWidget()
+        model_layout = QHBoxLayout(model_row)
+        model_layout.setContentsMargins(0, 0, 0, 0)
+        model_layout.addWidget(self.ai_model, 1)
+        model_layout.addWidget(self.ai_check_button)
+        self.ai_status = QLabel("")
+        self.ai_status.setObjectName("Hint")
+        self.ai_status.setWordWrap(True)
         self.ai_key = QLineEdit()
         self.ai_key.setEchoMode(QLineEdit.EchoMode.Password)
         self.ai_key.setPlaceholderText("API-Schlüssel")
@@ -243,16 +259,20 @@ class SettingsPage(QWidget):
             ("", self.ai_enabled),
             ("Anbieter", self.ai_provider),
             ("Adresse (OpenAI-kompatibel)", self.ai_url),
-            ("Modell", self.ai_model),
+            ("Modell", model_row),
+            ("", self.ai_status),
             ("Schlüssel", self.ai_key),
         ):
             ai_form.addRow(label, field)
         ai_hint = QLabel(
             "Groq ist OpenAI-kompatibel: Anbieter wählen, Schlüssel von Groq "
-            "eintragen, fertig. Ohne KI arbeitet AutoApplication mit den "
-            "Stichworten des Portals und den Stichworten der Vorlagen weiter. "
-            "Der Schlüssel lässt sich auch über die Umgebungsvariable "
-            "AUTOAPPLICATION_AI_KEY oder GROQ_API_KEY setzen."
+            "eintragen, fertig. «Verbindung prüfen» fragt beim Anbieter nach "
+            "und trägt die Modelle ein, die dieser Schlüssel nutzen kann – "
+            "daraus das gewünschte auswählen. Ohne KI arbeitet "
+            "AutoApplication mit den Stichworten des Portals und den "
+            "Stichworten der Vorlagen weiter. Der Schlüssel lässt sich auch "
+            "über die Umgebungsvariable AUTOAPPLICATION_AI_KEY oder "
+            "GROQ_API_KEY setzen."
         )
         ai_hint.setWordWrap(True)
         ai_hint.setObjectName("Hint")
@@ -554,7 +574,7 @@ class SettingsPage(QWidget):
         self.ai_provider.setCurrentIndex(ai_index if ai_index >= 0 else 0)
         self.ai_provider.blockSignals(False)
         self.ai_url.setText(settings.text("ai.base_url"))
-        self.ai_model.setText(settings.text("ai.model"))
+        self._set_ai_model(settings.text("ai.model"))
         self.ai_key.setText(settings.text("ai.api_key"))
 
         provider = settings.mail_provider()
@@ -633,7 +653,7 @@ class SettingsPage(QWidget):
         settings.set("ai.enabled", self.ai_enabled.isChecked())
         settings.set("ai.provider", self.ai_provider.currentData() or "openai")
         settings.set("ai.base_url", self.ai_url.text().strip())
-        settings.set("ai.model", self.ai_model.text().strip())
+        settings.set("ai.model", self.ai_model.currentText().strip())
         settings.set("ai.api_key", self.ai_key.text().strip())
 
         provider = self.mail_provider.currentData() or "outlook"
@@ -681,9 +701,108 @@ class SettingsPage(QWidget):
         current = self.ai_url.text().strip().rstrip("/")
         if not current or current in {GROQ_BASE, OPENAI_BASE}:
             self.ai_url.setText(base)
-        current_model = self.ai_model.text().strip()
-        if not current_model or current_model in {GROQ_MODEL, OPENAI_MODEL}:
-            self.ai_model.setText(model)
+        self.ai_model.lineEdit().setPlaceholderText(model)
+        current_model = self.ai_model.currentText().strip()
+        # Modelle des anderen Anbieters gelten hier nicht: Liste leeren und den
+        # Vorschlag des gewählten Anbieters einsetzen. Eigene Namen bleiben.
+        self.ai_model.blockSignals(True)
+        self.ai_model.clear()
+        keep = current_model if current_model not in {"", GROQ_MODEL, OPENAI_MODEL} else model
+        self.ai_model.addItem(keep)
+        self.ai_model.setCurrentIndex(0)
+        self.ai_model.blockSignals(False)
+        self._set_ai_status("", ok=False)
+
+    def _set_ai_model(self, value: str) -> None:
+        value = (value or "").strip()
+        self.ai_model.blockSignals(True)
+        self.ai_model.clear()
+        if value:
+            self.ai_model.addItem(value)
+            self.ai_model.setCurrentIndex(0)
+        else:
+            self.ai_model.setCurrentIndex(-1)
+            self.ai_model.setEditText("")
+        self.ai_model.blockSignals(False)
+
+    def _ai_probe(self) -> AiClient:
+        """Client mit den Werten aus den Feldern - auch ungespeichert."""
+        probe = Settings()
+        probe.set("ai.enabled", True)
+        probe.set("ai.provider", self.ai_provider.currentData() or "openai")
+        probe.set("ai.base_url", self.ai_url.text().strip())
+        probe.set("ai.model", self.ai_model.currentText().strip())
+        probe.set("ai.api_key", self.ai_key.text().strip())
+        return AiClient(probe)
+
+    def test_ai(self) -> None:
+        client = self._ai_probe()
+        if not client.settings.ai_key():
+            QMessageBox.warning(
+                self, "KI", "Bitte zuerst den API-Schlüssel des Anbieters eintragen."
+            )
+            return
+        self.ai_check_button.setEnabled(False)
+        self._set_ai_status("Prüfe Verbindung …", ok=False)
+        task = Task(client.models, self)
+        self._tasks.append(task)
+        task.done.connect(self._ai_models_loaded)
+        task.failed.connect(self._ai_check_failed)
+        task.finished.connect(
+            lambda: self._tasks.remove(task) if task in self._tasks else None
+        )
+        task.start()
+
+    def _ai_models_loaded(self, models: Any) -> None:
+        self.ai_check_button.setEnabled(True)
+        names = [str(name).strip() for name in (models or []) if str(name).strip()]
+        current = self.ai_model.currentText().strip()
+        if not names:
+            self._set_ai_status(
+                "○ Verbindung steht, aber der Anbieter nennt kein Sprachmodell.", ok=False
+            )
+            return
+        self.ai_model.blockSignals(True)
+        self.ai_model.clear()
+        self.ai_model.addItems(names)
+        self.ai_model.blockSignals(False)
+        if current in names:
+            self.ai_model.setCurrentIndex(names.index(current))
+            self._set_ai_status(
+                f"● verbunden – {len(names)} Modelle zur Auswahl", ok=True
+            )
+            return
+        if current:
+            # Eigenes Modell behalten, aber offen sagen, dass es fehlt.
+            self.ai_model.insertItem(0, current)
+            self.ai_model.setCurrentIndex(0)
+            self._set_ai_status(
+                f"○ verbunden, aber «{current}» bietet dieser Schlüssel nicht an. "
+                f"Bitte eines der {len(names)} Modelle aus der Liste wählen.",
+                ok=False,
+            )
+            return
+        self.ai_model.setCurrentIndex(0)
+        self._set_ai_status(
+            f"● verbunden – {len(names)} Modelle, das erste ist eingetragen", ok=True
+        )
+
+    def _ai_check_failed(self, message: str) -> None:
+        self.ai_check_button.setEnabled(True)
+        self._set_ai_status("○ keine Verbindung", ok=False)
+        QMessageBox.warning(
+            self,
+            "KI",
+            "Die Verbindung liess sich nicht prüfen:\n\n"
+            f"{message}\n\n"
+            "Bitte Adresse, Schlüssel und Internetverbindung prüfen.",
+        )
+
+    def _set_ai_status(self, message: str, ok: bool) -> None:
+        self.ai_status.setText(message)
+        self.ai_status.setObjectName("Ok" if ok else "Hint")
+        self.ai_status.style().unpolish(self.ai_status)
+        self.ai_status.style().polish(self.ai_status)
 
     def _refresh_outlook_status(self) -> None:
         try:
