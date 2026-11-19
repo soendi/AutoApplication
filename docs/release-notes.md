@@ -1,3 +1,32 @@
+## AutoApplication 1.0.24
+
+Die KI-Pruefung sagt jetzt, was wirklich los ist - und die Anfragen an Groq
+werden nicht mehr vorab abgewiesen.
+
+### Behoben
+
+- **403 trotz gueltigem Schluessel.** Die Anfragen gingen ohne Programmnamen
+  (`Python-urllib`) hinaus; Cloudflare, das vor Groq sitzt, weist solche
+  Anfragen mit 403 ab. Alle Anfragen an die KI nennen jetzt
+  `AutoApplication/<Version>` als Programm und verlangen JSON. Das betrifft
+  auch die normalen Textaufrufe, nicht nur die Pruefung.
+- **Fehlermeldung ohne Grund.** Bei 403 stand nur «Schluessel hat keinen
+  Zugriff». Jetzt wird die Antwort des Anbieters mitgelesen (z. B.
+  `error code: 1010` fuer einen Filter, `Forbidden` fuer Rechte), und die
+  Meldung nennt die moeglichen Ursachen: Rechte des Schluessels, im Konto
+  gesperrte Modelle oder ein Filter dazwischen (Firmennetz, VPN, Cloudflare).
+
+### Neu
+
+- **Die Pruefung fragt das Modell selbst an.** «Verbindung pruefen» schickt
+  neben der Modellliste eine winzige Anfrage an das eingestellte Modell. Damit
+  ist belegt, ob die KI mit genau diesem Modell antwortet. Die Statuszeile
+  unterscheidet drei Faelle: Modell antwortet und steht in der Liste, Modell
+  antwortet aber fehlt in der Liste, Modell antwortet nicht (dann nennt die
+  Meldung den Grund, etwa «Das Modell gibt es bei diesem Anbieter nicht» fuer
+  das bei Groq abgeschaltete `llama-3.3-70b-versatile`). Laesst sich nur die
+  Modellliste nicht abrufen, gilt die Verbindung trotzdem als in Ordnung.
+
 ## AutoApplication 1.0.23
 
 Das Sprachmodell laesst sich aus dem waehlen, was der eigene Schluessel kann -

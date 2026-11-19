@@ -51,6 +51,35 @@ AI_PROVIDERS = (
 )
 
 
+def _model_count(count: int) -> str:
+    return f"{count} Modell" if count == 1 else f"{count} Modelle"
+
+
+def _ai_check(client: AiClient) -> dict[str, Any]:
+    """Beide Wege getrennt pruefen: Modellliste und echte Anfrage.
+
+    Scheitert die Liste (z. B. an einem Filter dazwischen), kann das Modell
+    trotzdem antworten - und umgekehrt. Deshalb wird jeder Weg fuer sich
+    gemeldet, statt den ersten Fehler zu zeigen.
+    """
+    result: dict[str, Any] = {
+        "models": [],
+        "models_error": "",
+        "answered": False,
+        "answer_error": "",
+    }
+    try:
+        result["models"] = client.models()
+    except Exception as exc:  # noqa: BLE001 - Oberflaeche meldet beide Wege
+        result["models_error"] = str(exc) or exc.__class__.__name__
+    try:
+        client.probe_model()
+        result["answered"] = True
+    except Exception as exc:  # noqa: BLE001
+        result["answer_error"] = str(exc) or exc.__class__.__name__
+    return result
+
+
 def _split_terms(value: str) -> list[str]:
     parts = [part.strip() for part in re.split(r"[\n,;]", value)]
     return [part for part in parts if part]
@@ -744,48 +773,81 @@ class SettingsPage(QWidget):
             return
         self.ai_check_button.setEnabled(False)
         self._set_ai_status("Prüfe Verbindung …", ok=False)
-        task = Task(client.models, self)
+        task = Task(lambda: _ai_check(client), self)
         self._tasks.append(task)
-        task.done.connect(self._ai_models_loaded)
+        task.done.connect(self._ai_check_done)
         task.failed.connect(self._ai_check_failed)
         task.finished.connect(
             lambda: self._tasks.remove(task) if task in self._tasks else None
         )
         task.start()
 
-    def _ai_models_loaded(self, models: Any) -> None:
+    def _ai_check_done(self, result: Any) -> None:
         self.ai_check_button.setEnabled(True)
-        names = [str(name).strip() for name in (models or []) if str(name).strip()]
-        current = self.ai_model.currentText().strip()
-        if not names:
+        data = result if isinstance(result, dict) else {}
+        names = [str(name).strip() for name in data.get("models") or [] if str(name).strip()]
+        models_error = str(data.get("models_error") or "")
+        answer_error = str(data.get("answer_error") or "")
+        answered = bool(data.get("answered"))
+        model = self.ai_model.currentText().strip()
+        listed = bool(names) and model in names
+        if names:
+            self._fill_ai_models(names)
+        if answered and listed:
             self._set_ai_status(
-                "○ Verbindung steht, aber der Anbieter nennt kein Sprachmodell.", ok=False
+                f"● verbunden – «{model}» antwortet, {_model_count(len(names))} "
+                "zur Auswahl",
+                ok=True,
             )
             return
+        if answered and not names:
+            self._set_ai_status(
+                f"● verbunden – «{model}» antwortet; die Modellliste liess sich "
+                "nicht abrufen",
+                ok=True,
+            )
+            return
+        if answered and model and not listed:
+            self._set_ai_status(
+                f"● verbunden – «{model}» antwortet, steht aber nicht in der "
+                f"Modellliste ({_model_count(len(names))}). Bitte ein anderes "
+                "Modell wählen.",
+                ok=False,
+            )
+            return
+        if answered:
+            self._set_ai_status(
+                f"● verbunden – {len(names)} Modelle, das erste ist eingetragen",
+                ok=True,
+            )
+            return
+        # Das Modell antwortet nicht: das ist der entscheidende Fehler.
+        self._set_ai_status(f"○ keine Verbindung – {answer_error}", ok=False)
+        parts = [answer_error]
+        if models_error and models_error != answer_error:
+            parts.append(f"Modellliste nicht abrufbar: {models_error}")
+        if names:
+            parts.append(
+                f"Der Anbieter nennt {_model_count(len(names))} – bitte eines aus "
+                "der Liste wählen."
+            )
+        QMessageBox.warning(self, "KI", "\n\n".join(parts))
+
+    def _fill_ai_models(self, names: list[str]) -> None:
+        """Modellliste eintragen und das bisherige Modell behalten."""
+        current = self.ai_model.currentText().strip()
         self.ai_model.blockSignals(True)
         self.ai_model.clear()
         self.ai_model.addItems(names)
         self.ai_model.blockSignals(False)
         if current in names:
             self.ai_model.setCurrentIndex(names.index(current))
-            self._set_ai_status(
-                f"● verbunden – {len(names)} Modelle zur Auswahl", ok=True
-            )
-            return
-        if current:
-            # Eigenes Modell behalten, aber offen sagen, dass es fehlt.
+        elif current:
+            # Eigenes Modell behalten; die Statuszeile sagt, dass es fehlt.
             self.ai_model.insertItem(0, current)
             self.ai_model.setCurrentIndex(0)
-            self._set_ai_status(
-                f"○ verbunden, aber «{current}» bietet dieser Schlüssel nicht an. "
-                f"Bitte eines der {len(names)} Modelle aus der Liste wählen.",
-                ok=False,
-            )
-            return
-        self.ai_model.setCurrentIndex(0)
-        self._set_ai_status(
-            f"● verbunden – {len(names)} Modelle, das erste ist eingetragen", ok=True
-        )
+        else:
+            self.ai_model.setCurrentIndex(0)
 
     def _ai_check_failed(self, message: str) -> None:
         self.ai_check_button.setEnabled(True)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import urllib.error
 
 import pytest
@@ -91,6 +92,62 @@ def test_models_lists_only_chat_models(tmp_path) -> None:
     assert client.models() == ["zeta-model", "alpha-model"]
     assert seen["url"] == "https://api.example/v1/models"
     assert seen["auth"] == "Bearer key"
+
+
+def test_models_sends_user_agent(tmp_path) -> None:
+    seen: dict = {}
+
+    def lister(url, headers, timeout):
+        seen.update(headers)
+        return {"data": [{"id": "test-model"}]}
+
+    AiClient(_settings(tmp_path), lister=lister).models()
+    # Ohne eigenen Programm-Namen weist Cloudflare die Anfrage mit 403 ab.
+    assert seen["User-Agent"].startswith("AutoApplication/")
+
+
+def test_models_reports_forbidden_with_detail(tmp_path) -> None:
+    def lister(url, headers, timeout):
+        raise urllib.error.HTTPError(
+            url, 403, "Forbidden", {}, io.BytesIO(b'{"error": {"message": "No access"}}')
+        )
+
+    client = AiClient(_settings(tmp_path), lister=lister)
+    with pytest.raises(ValueError) as info:
+        client.models()
+    assert "403" in str(info.value)
+    assert "No access" in str(info.value)
+
+
+def test_probe_model_answers_with_the_chosen_model(tmp_path) -> None:
+    seen: dict = {}
+
+    def send(url, payload, headers, timeout):
+        seen["url"] = url
+        seen["model"] = payload["model"]
+        return {"choices": [{"message": {"content": "ok"}}]}
+
+    client = AiClient(_settings(tmp_path), transport=send)
+    assert client.probe_model() == "ok"
+    assert seen["url"] == "https://api.example/v1/chat/completions"
+    assert seen["model"] == "test-model"
+
+
+def test_probe_model_reports_missing_model(tmp_path) -> None:
+    def send(url, payload, headers, timeout):
+        raise urllib.error.HTTPError(
+            url,
+            404,
+            "Not Found",
+            {},
+            io.BytesIO(b'{"error": {"message": "The model test-model does not exist"}}'),
+        )
+
+    client = AiClient(_settings(tmp_path), transport=send)
+    with pytest.raises(ValueError) as info:
+        client.probe_model()
+    assert "test-model" in str(info.value)
+    assert "does not exist" in str(info.value)
 
 
 def test_models_reports_rejected_key(tmp_path) -> None:

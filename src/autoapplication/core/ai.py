@@ -14,6 +14,7 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Any, Callable
 
+from .. import APP_VERSION
 from .config import Settings
 from .models import Job
 from .templates import Template
@@ -31,6 +32,10 @@ from .text import (
 )
 
 log = logging.getLogger(__name__)
+
+# Ohne eigenen Programm-Namen weist Cloudflare (vor Groq) die Anfrage mit
+# 403 ab - die KI waere dann nicht erreichbar, obwohl der Schluessel stimmt.
+USER_AGENT = f"AutoApplication/{APP_VERSION}"
 
 OPENAI_BASE = "https://api.openai.com/v1"
 OPENAI_MODEL = "gpt-4o-mini"
@@ -345,7 +350,11 @@ class AiClient:
         eingestellte Modell steht oben, danach folgt die alphabetische Liste.
         """
         url = f"{self.base_url()}/models"
-        headers = {"Authorization": f"Bearer {self.settings.ai_key()}"}
+        headers = {
+            "Authorization": f"Bearer {self.settings.ai_key()}",
+            "Accept": "application/json",
+            "User-Agent": USER_AGENT,
+        }
         timeout = min(float(self.settings.number("ai.timeout", 45) or 45), 30)
         try:
             data = self.lister(url, headers, timeout)
@@ -356,9 +365,13 @@ class AiClient:
                     "des Anbieters pruefen."
                 ) from exc
             if exc.code == 403:
+                detail = _http_detail(exc)
                 raise ValueError(
-                    "Der Schluessel hat keinen Zugriff (403). Bitte beim Anbieter "
-                    "die Rechte pruefen."
+                    "Der Anbieter hat die Anfrage abgewiesen (403). Haeufige "
+                    "Ursachen: dem Schluessel fehlen die Rechte, im Konto sind "
+                    "Modelle gesperrt, oder ein Filter dazwischen (Firmennetz, "
+                    "VPN, Cloudflare) blockt die Anfrage"
+                    + (f". Antwort: {detail}" if detail else ".")
                 ) from exc
             if exc.code == 404:
                 raise ValueError(
@@ -388,6 +401,43 @@ class AiClient:
             ordered.insert(0, current)
         return ordered
 
+    def probe_model(self) -> str:
+        """Das eingestellte Modell wirklich anfragen - der sicherste Test.
+
+        Die Modellliste allein sagt nicht, ob eine Anfrage durchgeht (Rechte,
+        abgeschaltetes Modell, Filter dazwischen). Hier geht eine winzige
+        Anfrage an genau dieses Modell.
+        """
+        try:
+            return self._chat(
+                "Antworte nur mit dem Wort ok.", "Verbindungstest.", 0.0
+            ).strip()
+        except urllib.error.HTTPError as exc:
+            detail = _http_detail(exc)
+            suffix = f" Antwort: {detail}" if detail else ""
+            if exc.code == 401:
+                raise ValueError(
+                    "Der Schluessel wurde abgelehnt (401). Bitte den Schluessel "
+                    "des Anbieters pruefen."
+                ) from exc
+            if exc.code == 403:
+                raise ValueError(
+                    "Der Anbieter hat die Anfrage abgewiesen (403). Haeufige "
+                    "Ursachen: dem Schluessel fehlen die Rechte, im Konto sind "
+                    "Modelle gesperrt, oder ein Filter dazwischen (Firmennetz, "
+                    f"VPN, Cloudflare) blockt die Anfrage.{suffix}"
+                ) from exc
+            if exc.code == 404:
+                raise ValueError(
+                    f"Das Modell «{self.model()}» gibt es bei diesem Anbieter "
+                    f"nicht oder der Schluessel hat keinen Zugriff (404).{suffix}"
+                ) from exc
+            raise ValueError(
+                f"Der Anbieter antwortet mit einem Fehler ({exc.code}).{suffix}"
+            ) from exc
+        except (urllib.error.URLError, OSError) as exc:
+            raise ValueError(f"Keine Verbindung zum Anbieter: {exc}") from exc
+
     def available(self) -> bool:
         return bool(
             self.settings.flag("ai.enabled")
@@ -409,6 +459,8 @@ class AiClient:
         headers = {
             "Authorization": f"Bearer {self.settings.ai_key()}",
             "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": USER_AGENT,
         }
         timeout = float(self.settings.number("ai.timeout", 45) or 45)
         try:
@@ -806,10 +858,30 @@ def _json_object(raw: str) -> dict[str, Any]:
     return data
 
 
+def _http_detail(exc: urllib.error.HTTPError) -> str:
+    """Antworttext einer Fehlermeldung lesen - kurz und ohne Zeilenumbrueche."""
+    try:
+        raw = exc.read().decode("utf-8", "replace")
+    except Exception:  # noqa: BLE001 - die Meldung darf daran nicht scheitern
+        return ""
+    text = re.sub(r"\s+", " ", raw).strip()
+    return text[:300]
+
+
+def _json_headers(headers: dict[str, str]) -> dict[str, str]:
+    """Kopfzeilen ergaenzen, die Cloudflare sonst mit 403 quittiert."""
+    result = dict(headers)
+    result.setdefault("Accept", "application/json")
+    result.setdefault("User-Agent", USER_AGENT)
+    return result
+
+
 def _get_json(
     url: str, headers: dict[str, str], timeout: float
 ) -> dict[str, Any]:
-    request = urllib.request.Request(url, headers=headers, method="GET")
+    request = urllib.request.Request(
+        url, headers=_json_headers(headers), method="GET"
+    )
     with urllib.request.urlopen(request, timeout=timeout) as response:
         return json.loads(response.read().decode("utf-8"))
 
@@ -818,6 +890,8 @@ def _post_json(
     url: str, payload: dict[str, Any], headers: dict[str, str], timeout: float
 ) -> dict[str, Any]:
     body = json.dumps(payload).encode("utf-8")
-    request = urllib.request.Request(url, data=body, headers=headers, method="POST")
+    request = urllib.request.Request(
+        url, data=body, headers=_json_headers(headers), method="POST"
+    )
     with urllib.request.urlopen(request, timeout=timeout) as response:
         return json.loads(response.read().decode("utf-8"))
