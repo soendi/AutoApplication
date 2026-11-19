@@ -462,3 +462,34 @@ def test_synonyms_without_ai_make_no_request(tmp_path) -> None:
 
     client = AiClient(_settings(tmp_path, enabled=False), transport=fail)
     assert client.synonyms(["Lager"]) == []
+
+
+def test_synonyms_accepts_a_comma_string(tmp_path) -> None:
+    def send(url, payload, headers, timeout):
+        return {
+            "choices": [
+                {"message": {"content": '{"synonyme": "Kommissionierung, Warenannahme"}'}}
+            ]
+        }
+
+    client = AiClient(_settings(tmp_path), transport=send)
+    assert client.synonyms(["Lager"]) == ["Kommissionierung", "Warenannahme"]
+
+
+def test_synonyms_reports_connection_errors(tmp_path) -> None:
+    def send(url, payload, headers, timeout):
+        raise urllib.error.URLError("offline")
+
+    client = AiClient(_settings(tmp_path), transport=send)
+    with pytest.raises(ValueError) as error:
+        client.synonyms(["Lager"])
+    assert "Keine Verbindung" in str(error.value)
+
+
+def test_synonyms_reports_unusable_answers(tmp_path) -> None:
+    def send(url, payload, headers, timeout):
+        return {"choices": [{"message": {"content": "keine Liste"}}]}
+
+    client = AiClient(_settings(tmp_path), transport=send)
+    with pytest.raises(ValueError):
+        client.synonyms(["Lager"])

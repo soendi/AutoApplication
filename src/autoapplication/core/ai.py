@@ -509,10 +509,23 @@ class AiClient:
         content = f"Liste: {kind}\nStichworte: {', '.join(clean)}"
         try:
             data = _json_object(self._chat(system, content, temperature=0.3))
-        except (urllib.error.URLError, OSError, ValueError, KeyError) as exc:
-            log.info("KI-Synonyme fehlgeschlagen (%s)", exc)
-            return []
+        except urllib.error.HTTPError as exc:
+            detail = _http_detail(exc)
+            suffix = f" Antwort: {detail}" if detail else ""
+            raise ValueError(
+                f"Der Anbieter antwortet mit einem Fehler ({exc.code}).{suffix}"
+            ) from exc
+        except (urllib.error.URLError, OSError) as exc:
+            raise ValueError(f"Keine Verbindung zum Anbieter: {exc}") from exc
+        except ValueError as exc:
+            raise ValueError(
+                "Die KI antwortete nicht wie erwartet - bitte nochmals versuchen."
+            ) from exc
         values = data.get("synonyme") or data.get("synonyms") or []
+        # Manche Modelle liefern die Liste als einen Satz mit Kommas statt als
+        # JSON-Liste. Auch das wird uebernommen, statt die Antwort zu verwerfen.
+        if isinstance(values, str):
+            values = re.split(r"[,;\n]", values)
         if not isinstance(values, list):
             return []
         known = {item.casefold() for item in clean}

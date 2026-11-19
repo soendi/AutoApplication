@@ -131,15 +131,17 @@ class SettingsPage(QWidget):
         self.werdegang.setPlaceholderText(
             "Eine Station pro Zeile: Zeitraum: Funktion, Firma – Aufgaben"
         )
-        self.interessen_button = QPushButton("Mit KI Synonyme einfügen")
-        self.faehigkeiten_button = QPushButton("Mit KI Synonyme einfügen")
+        # Kurze Beschriftung: Ein langer Knopf wuerde die Felder schmal druecken.
+        self.interessen_button = QPushButton("KI-Synonyme")
+        self.faehigkeiten_button = QPushButton("KI-Synonyme")
         for button, kind in (
             (self.interessen_button, "Interessen"),
             (self.faehigkeiten_button, "Fähigkeiten"),
         ):
             button.setToolTip(
-                "Ergänzt die Liste mit verwandten Begriffen aus der KI, damit "
-                "Stellenanzeigen mit anderer Wortwahl ebenfalls als Treffer zählen."
+                "Mit KI Synonyme einfügen: ergänzt die Liste um verwandte "
+                "Begriffe, damit Stellenanzeigen mit anderer Wortwahl ebenfalls "
+                "als Treffer zählen."
             )
         self.interessen_button.clicked.connect(
             lambda: self._add_synonyms(
@@ -851,44 +853,40 @@ class SettingsPage(QWidget):
         if not terms:
             QMessageBox.information(
                 self,
-                kind,
-                f"Bitte zuerst {kind.lower()} als Stichworte eintragen.",
+                "KI-Synonyme",
+                f"Bitte zuerst {kind} als Stichworte eintragen.",
             )
             return
-        client = self._ai_probe()
+        try:
+            client = self._ai_probe()
+        except Exception as exc:  # noqa: BLE001 - Fehler sichtbar machen
+            QMessageBox.warning(
+                self, "KI-Synonyme", f"Die KI ist nicht bereit: {exc}"
+            )
+            return
         if not client.settings.ai_key():
             QMessageBox.warning(
                 self,
-                "KI",
+                "KI-Synonyme",
                 "Bitte zuerst im Reiter «KI & Automatisierung» den API-Schlüssel "
                 "des Anbieters eintragen.",
             )
             return
-        label = button.text()
         button.setEnabled(False)
-        button.setText("Frage KI …")
+        self.window.statusBar().showMessage("KI ergänzt Synonyme …")
         task = Task(lambda: client.synonyms(terms, kind), self)
         self._tasks.append(task)
-        task.done.connect(
-            lambda result: self._synonyms_done(result, field, button, label)
-        )
-        task.failed.connect(
-            lambda message: self._synonyms_failed(message, button, label)
-        )
+        task.done.connect(lambda result: self._synonyms_done(result, field, button))
+        task.failed.connect(lambda message: self._synonyms_failed(message, button))
         task.finished.connect(
             lambda: self._tasks.remove(task) if task in self._tasks else None
         )
         task.start()
 
     def _synonyms_done(
-        self,
-        result: Any,
-        field: QPlainTextEdit,
-        button: QPushButton,
-        label: str,
+        self, result: Any, field: QPlainTextEdit, button: QPushButton
     ) -> None:
         button.setEnabled(True)
-        button.setText(label)
         found = result if isinstance(result, list) else []
         existing = _split_terms(field.toPlainText())
         known = {term.casefold() for term in existing}
@@ -901,19 +899,30 @@ class SettingsPage(QWidget):
             added.append(term)
         if not added:
             self.window.statusBar().showMessage(
-                "Die KI lieferte keine neuen Synonyme.", 6000
+                "Die KI hat keine neuen Synonyme geliefert.", 6000
+            )
+            QMessageBox.information(
+                self,
+                "KI-Synonyme",
+                "Die KI hat keine neuen Synonyme geliefert. Bitte die Stichworte "
+                "prüfen oder die Anfrage wiederholen.",
             )
             return
         field.setPlainText(", ".join(existing + added))
         self.window.statusBar().showMessage(
             f"{len(added)} Synonyme ergänzt – mit «Speichern» übernehmen.", 8000
         )
+        QMessageBox.information(
+            self,
+            "KI-Synonyme",
+            f"{len(added)} Synonyme ergänzt. Mit «Speichern» übernehmen.",
+        )
 
-    def _synonyms_failed(self, message: str, button: QPushButton, label: str) -> None:
+    def _synonyms_failed(self, message: str, button: QPushButton) -> None:
         button.setEnabled(True)
-        button.setText(label)
+        self.window.statusBar().showMessage("Synonyme nicht ergänzt.", 6000)
         QMessageBox.warning(
-            self, "KI", f"Synonyme konnten nicht ergänzt werden: {message}"
+            self, "KI-Synonyme", f"Synonyme konnten nicht ergänzt werden: {message}"
         )
 
     def test_ai(self) -> None:

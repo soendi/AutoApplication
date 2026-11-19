@@ -1,9 +1,9 @@
 ; Inno-Setup-Skript fuer den Windows-Installer von AutoApplication.
-; Build: ISCC.exe /DAppVersion=1.0.33 packaging\installer.iss
+; Build: ISCC.exe /DAppVersion=1.0.34 packaging\installer.iss
 ; Erwartet das PyInstaller-Ergebnis in dist\AutoApplication (build_windows.ps1).
 
 #ifndef AppVersion
-  #define AppVersion "1.0.33"
+  #define AppVersion "1.0.34"
 #endif
 
 #define AppName "AutoApplication"

@@ -1,4 +1,4 @@
-# AutoApplication 1.0.33
+# AutoApplication 1.0.34
 
 Stellen von ostjob.ch suchen, Bewerbungen als Entwurf in Outlook oder Gmail
 vorbereiten und Antworten bis zur Zusage verfolgen – als Windows-Programm mit
@@ -139,7 +139,7 @@ vorhandene Adressen werden bei späteren Läufen nachgetragen.
 
 ## Installation
 
-`AutoApplication-1.0.33-Setup.exe` von der
+`AutoApplication-1.0.34-Setup.exe` von der
 [Release-Seite](https://github.com/soendi/AutoApplication/releases/latest)
 herunterladen und ausführen. Windows 10 und 11, kein Administrator- und kein
 Python-Zubehör nötig.
@@ -177,12 +177,14 @@ sie müssen sich nicht decken. Die KI bekommt beides als Zusatz zur
 Stellenbeschreibung; in Vorlagen stehen sie als `{interessen}` und
 `{faehigkeiten}` bereit.
 
-Neben jedem der beiden Felder steht **Mit KI Synonyme einfügen**. Der Knopf
-lässt die eingerichtete KI verwandte Begriffe ergänzen, die in Anzeigen
-dasselbe meinen – etwa `Lager` → `Kommissionierung`, `Warenannahme`. So zählen
-Stellen mit anderer Wortwahl ebenfalls als Treffer. Vorhandene Stichworte
-bleiben unverändert, Doppelte werden übersprungen; übernommen wird die Liste
-erst mit **Speichern**. Ohne KI-Schlüssel erscheint ein Hinweis.
+Rechts neben jedem der beiden Felder steht der Knopf **KI-Synonyme**
+(Mauszeiger: «Mit KI Synonyme einfügen»). Er lässt die eingerichtete KI
+verwandte Begriffe ergänzen, die in Anzeigen dasselbe meinen – etwa `Lager` →
+`Kommissionierung`, `Warenannahme`. So zählen Stellen mit anderer Wortwahl
+ebenfalls als Treffer. Vorhandene Stichworte bleiben unverändert, Doppelte
+werden übersprungen; ein Fenster bestätigt die Anzahl, übernommen wird die
+Liste erst mit **Speichern**. Ohne KI-Schlüssel oder bei einem Fehler erscheint
+ein Hinweis mit dem Grund.
 
 Das Feld **Werdegang** nimmt die Stationen auf, eine pro Zeile im Muster
 `Zeitraum: Funktion, Firma – Aufgaben`. Die KI erhält den Werdegang für den

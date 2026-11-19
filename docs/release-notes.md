@@ -1,3 +1,27 @@
+## AutoApplication 1.0.34
+
+Der Knopf für KI-Synonyme meldet jetzt, was passiert – und das Formular
+bleibt in Form.
+
+### Behoben
+
+- **«KI-Synonyme» tat scheinbar nichts.** Verbindungsfehler, abgelehnter
+  Schlüssel (401/403) und unbrauchbare Antworten wurden verschluckt; sichtbar
+  war nur eine kurze Statuszeile. Jetzt erscheint ein Fenster mit dem Grund,
+  und während der Anfrage steht «KI ergänzt Synonyme …» in der Statusleiste.
+- **Komma-Antworten wurden verworfen.** Lieferte das Modell die Begriffe als
+  einen Text mit Kommas statt als JSON-Liste, blieb die Liste leer. Jetzt
+  werden die Begriffe einzeln übernommen.
+
+### Geändert
+
+- **Kompakter Knopf.** «KI-Synonyme» statt des langen Textes: Der Knopf nimmt
+  rechts nur noch wenig Platz ein, die Felder «Interessen» und «Fähigkeiten»
+  bleiben breit und an ihrem Platz. Der Mauszeiger nennt weiterhin «Mit KI
+  Synonyme einfügen».
+- **Rückmeldung als Fenster.** Erfolg («N Synonyme ergänzt»), leere Antworten
+  und Fehler erscheinen als Meldung statt nur in der Statusleiste.
+
 ## AutoApplication 1.0.33
 
 Die Anrede entsteht jetzt auch ohne KI aus amtlichen Namenslisten, und die
