@@ -1,3 +1,36 @@
+## AutoApplication 1.0.29
+
+Mehr Vorlagen fuer fast jede Branche, und die Stellenliste zeigt, welche Vorlage
+gilt und wie gut eine Stelle zum eigenen Profil passt.
+
+### Neu
+
+- **Bewerbungsvorlagen fuer viele Berufe.** Statt sieben sind jetzt 29
+  Bewerbungsvorlagen dabei: Produktion und Fertigung, Montage, Maschinen- und
+  Anlagenbedienung, Qualitaetssicherung, Einkauf, Buchhaltung, Personal,
+  Empfang, Kundenservice am Telefon, Fahrdienst, Handwerk und Gebaeudetechnik,
+  Bau, Reinigung, Sicherheit, Gastronomie, Hotel, Landwirtschaft, Gesundheit,
+  Soziales, Bildung, Ausbildung und Lehrstelle, Marketing und Kommunikation.
+  Die Texte sind hoeflich und sachlich, nennen konkrete Aufgaben und bieten an,
+  eine geforderte Ausbildung zu machen - ohne Abschluesse zu erfinden.
+- **Allgemeine Vorlage als Auffangnetz.** Passt keine oder passen zu wenige
+  Stichworte, entsteht das Anschreiben mit der Allgemeinen Vorlage. Sie hat
+  keine Stichworte, verfaelscht die uebrige Zuordnung also nicht. Beim Update
+  kommen die neuen Vorlagen dazu; eigene und bearbeitete bleiben unveraendert.
+- **Eigener Status «Allgemein».** Stellen, die nur mit der Allgemeinen Vorlage
+  passen, heissen nicht mehr «Passend». Der Filter «Passend» zeigt damit wieder
+  nur echte Treffer; «Allgemein» oder «Alle Status» zeigen die uebrigen.
+  Bereits gespeicherte Stellen werden beim Start einmal nachgezogen.
+- **Spalte «Treffer».** Sie zeigt in Prozent, wie viele der hinterlegten
+  Interessen und Faehigkeiten in der Anzeige vorkommen: 100 % heisst, dass
+  jedes Stichwort vorkommt, 0 %, dass keines passt. Ohne Eintraege im Profil
+  steht dort ein Strich. Der Mauszeiger nennt die gefundenen Stichworte.
+- **Spalte «Briefvorlage».** Statt des Status steht dort der Name der Vorlage,
+  die fuer das Anschreiben verwendet wird, zum Beispiel «Spedition und
+  Logistik» oder «Allgemeine Bewerbung». Der Mauszeiger nennt zusaetzlich den
+  Status. In der Spalte «Vorlage» bleibt «allgemein» markiert, wenn keine
+  besondere Vorlage passt.
+
 ## AutoApplication 1.0.28
 
 Abgelaufene Anzeigen raeumen sich beim Suchlauf selbst aus, und ein Doppelklick

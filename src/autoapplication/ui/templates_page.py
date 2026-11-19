@@ -46,7 +46,8 @@ class TemplatesPage(QWidget):
         hint = QLabel(
             "Eine Stelle gilt als passend, wenn ein Stichwort der Vorlage im "
             "Titel steht oder deutlich mehr Stichworte in der Anzeige "
-            "vorkommen. Platzhalter: {anrede} (Herr/Frau mit Nachname, sonst "
+            "vorkommen. Passt keine Vorlage, greift die als allgemein "
+            "markierte Auffangvorlage. Platzhalter: {anrede} (Herr/Frau mit Nachname, sonst "
             "allgemein), {ansprechperson}, {titel}, {firma}, {ort}, {pensum}, "
             "{stellen_id}, {vorname}, {nachname}, {erfahrung}, "
             "{erfahrung_spedition}, {verfuegbar}."
@@ -71,12 +72,22 @@ class TemplatesPage(QWidget):
         self.subject = QLineEdit()
         self.body = QPlainTextEdit()
         self.follow_up = QCheckBox("Diese Vorlage ist für Nachfragen")
+        self.fallback = QCheckBox(
+            "Allgemeine Vorlage (wenn keine oder zu wenige Stichworte passen)"
+        )
+        self.follow_up.toggled.connect(
+            lambda checked: checked and self.fallback.setChecked(False)
+        )
+        self.fallback.toggled.connect(
+            lambda checked: checked and self.follow_up.setChecked(False)
+        )
         form.addRow("Name", self.name)
         form.addRow("Beschreibung", self.description)
         form.addRow("Stichworte", self.keywords)
         form.addRow("Betreff", self.subject)
         form.addRow("Text", self.body)
         form.addRow("", self.follow_up)
+        form.addRow("", self.fallback)
         splitter.addWidget(editor)
         splitter.setSizes([240, 640])
         layout.addWidget(splitter, 1)
@@ -109,8 +120,13 @@ class TemplatesPage(QWidget):
         self.templates = load_templates(self.window.pipeline.templates_file)
         self.listing.clear()
         for template in self.templates:
-            label = template.name + (" (Nachfrage)" if template.follow_up else "")
-            item = QListWidgetItem(label)
+            if template.follow_up:
+                suffix = " (Nachfrage)"
+            elif template.fallback:
+                suffix = " (allgemein)"
+            else:
+                suffix = ""
+            item = QListWidgetItem(template.name + suffix)
             item.setData(Qt.UserRole, template.id)
             self.listing.addItem(item)
         index = 0
@@ -140,6 +156,7 @@ class TemplatesPage(QWidget):
         self.subject.clear()
         self.body.clear()
         self.follow_up.setChecked(False)
+        self.fallback.setChecked(False)
 
     def _load_selected(self, row: int) -> None:
         if not self.templates:
@@ -155,6 +172,7 @@ class TemplatesPage(QWidget):
         self.subject.setText(template.subject)
         self.body.setPlainText(template.body)
         self.follow_up.setChecked(template.follow_up)
+        self.fallback.setChecked(template.fallback)
 
     # ------------------------------------------------------------------
     def _from_fields(self, identifier: str, revision: int = 0) -> Template:
@@ -171,6 +189,7 @@ class TemplatesPage(QWidget):
             subject=self.subject.text().strip(),
             body=self.body.toPlainText().strip(),
             follow_up=self.follow_up.isChecked(),
+            fallback=self.fallback.isChecked(),
             revision=revision,
         )
 
@@ -184,6 +203,11 @@ class TemplatesPage(QWidget):
             if existing.id == template.id:
                 self.templates[index] = updated
                 break
+        # Nur eine Auffangvorlage: die zuletzt markierte gilt.
+        if updated.fallback:
+            for existing in self.templates:
+                if existing.id != updated.id:
+                    existing.fallback = False
         self._store()
 
     def new_template(self) -> None:

@@ -32,7 +32,8 @@ def _job(identifier: str, title: str, description: str, keywords: list[str]) -> 
 
 
 MATCHING = _job("1", "Speditionskaufmann", "Disposition, Transport und Zoll", ["Spedition"])
-UNRELATED = _job("2", "Buchhalter Treuhand", "Belege und Jahresabschluss", ["Buchhaltung"])
+# Kein Stichwort einer besonderen Vorlage: dafuer greift die Allgemeine Vorlage.
+UNRELATED = _job("2", "Augenoptiker", "Brillen, Sehtests und Kontaktlinsen", ["Optik"])
 
 
 class FakeOstjob:
@@ -164,12 +165,17 @@ def test_run_search_marks_jobs_without_draft(tmp_path) -> None:
     summary = pipeline.run_search(datetime(2026, 11, 18, 7, 30, tzinfo=timezone.utc))
     assert summary.found == 2
     assert summary.new == 2
+    # Auch die Stelle ohne passende Stichworte bekommt die Allgemeine Vorlage,
+    # aber einen eigenen Status - «passend» bleibt echten Treffern vorbehalten.
     assert summary.matched == 1
+    assert summary.general == 1
     assert summary.drafts == 0
     assert outlook.drafts == []
     assert store.list_applications() == []
     assert store.get_job("ostjob:1")["status"] == "passend"
-    assert store.get_job("ostjob:2")["status"] == "ohne_passung"
+    assert store.get_job("ostjob:2")["status"] == "allgemein"
+    assert store.get_job("ostjob:1")["template_id"] == "spedition"
+    assert store.get_job("ostjob:2")["template_id"] == "allgemein"
 
     application_id = pipeline.prepare_application(MATCHING.id)
     assert application_id > 0
@@ -182,6 +188,29 @@ def test_run_search_marks_jobs_without_draft(tmp_path) -> None:
     assert applications[0]["template_id"] == "spedition"
     assert applications[0]["status"] == "entwurf"
     assert store.get_job("ostjob:1")["status"] == "beworben"
+
+
+def test_general_jobs_are_reclassified_on_start(tmp_path) -> None:
+    store = Store(tmp_path / "daten.db")
+    job = Job(
+        id="ostjob:3",
+        source="ostjob",
+        source_id="3",
+        title="Augenoptiker",
+        company="Optik AG",
+        description="Brillen und Sehtests",
+    )
+    store.upsert_job(job, now="2026-11-18T08:00:00")
+    # So lag die Stelle in der Fassung davor: allgemein, aber als «passend».
+    store.update_job(job.id, status="passend", template_id="allgemein")
+
+    Pipeline(
+        Settings(tmp_path / "einstellungen.json"),
+        store,
+        ai_client=FakeAI(),
+        templates_file=tmp_path / "vorlagen.json",
+    )
+    assert store.get_job(job.id)["status"] == "allgemein"
 
 
 def test_run_search_fills_address_from_company_website(tmp_path) -> None:
@@ -380,8 +409,10 @@ def test_manual_prepare_application(tmp_path) -> None:
     application_id = pipeline.prepare_application(MATCHING.id)
     assert application_id > 0
     assert len(outlook.drafts) == 1
-    with pytest.raises(ValueError):
-        pipeline.prepare_application(UNRELATED.id)
+    # Ohne passende Stichworte entsteht ein Entwurf mit der Allgemeinen Vorlage.
+    general_id = pipeline.prepare_application(UNRELATED.id)
+    assert general_id > 0
+    assert store.get_application(general_id)["template_id"] == "allgemein"
     with pytest.raises(ValueError):
         pipeline.prepare_application("gibt-es-nicht")
 

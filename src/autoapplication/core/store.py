@@ -422,6 +422,18 @@ class Store:
         with self._db() as db:
             return self._rows(db.execute(query, values))
 
+    def reclassify_general_jobs(self, template_id: str) -> int:
+        """Stellen der Allgemeinen Vorlage aus «passend» herausziehen."""
+        if not template_id:
+            return 0
+        with self._db() as db:
+            cursor = db.execute(
+                "UPDATE jobs SET status = 'allgemein' "
+                "WHERE status = 'passend' AND template_id = ?",
+                (template_id,),
+            )
+            return int(cursor.rowcount or 0)
+
     def job_counts(self) -> dict[str, int]:
         with self._db() as db:
             rows = self._rows(

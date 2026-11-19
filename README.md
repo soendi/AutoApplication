@@ -1,4 +1,4 @@
-# AutoApplication 1.0.28
+# AutoApplication 1.0.29
 
 Stellen von ostjob.ch suchen, Bewerbungen als Entwurf in Outlook oder Gmail
 vorbereiten und Antworten bis zur Zusage verfolgen – als Windows-Programm mit
@@ -23,8 +23,10 @@ stillen Updates.
    Vorlage im Titel steht oder deutlich mehr Stichworte in der Anzeige
    vorkommen.    Beispiel: „Spedition“ und „Disposition“ ergeben die
    Speditionsvorlage; „Sachbearbeitung“ und „Kundendienst“ die Vorlage
-   „Administration und Sachbearbeitung“. Reicht die Passung nicht, bleibt die
-   Stelle ohne Bewerbung. Passende Stellen werden nur vorgemerkt.
+   „Administration und Sachbearbeitung“. Reicht die Passung nicht, greift die
+   **Allgemeine Vorlage**; so entsteht für jede Stelle ein Anschreiben. Solche
+   Stellen erhalten den Status **Allgemein**, damit **Passend** nur echte
+   Treffer zeigt. Passende Stellen werden nur vorgemerkt.
 4. **Entwurf auf Klick.** Erst wenn du eine Stelle in der Liste auswählst und
    **„E-Mail vorbereiten“** wählst, schreibt die KI Betreff und Mailtext sowie
    ein Anschreiben, das als PDF angehängt wird. Das PDF sieht aus wie ein
@@ -84,8 +86,19 @@ stillen Updates.
 ## Stellenliste
 
 Der Tab **Stellen** zeigt je Anzeige: ein **F** für ein Bewerbungsformular,
-Datum, Titel, Ansprechperson, E-Mail, Firma, Ort, Adresse und PLZ sowie Pensum,
-Weg, Interesse, Fähigkeit und Status. Das **F** steht auch dann, wenn das
+ein **Vorlage**-Feld, Datum, Titel, Ansprechperson, E-Mail, Firma, Ort, Adresse
+und PLZ sowie Pensum, Weg, Interesse, Fähigkeit, Treffer und Briefvorlage.
+Die Spalte **Briefvorlage** nennt die Vorlage, mit der das Anschreiben
+entstehen wird – zum Beispiel «Spedition und Logistik» oder «Allgemeine
+Bewerbung»; der Mauszeiger darüber nennt zusätzlich den Status. Die Spalte
+**Treffer** zeigt in Prozent, wie viele Ihrer Interessen und Fähigkeiten in der
+Anzeige vorkommen: 100 % heisst, dass jedes hinterlegte Stichwort vorkommt,
+0 %, dass keines passt; ohne Einträge im Profil steht dort «–». Steht in der
+Spalte **Vorlage** «allgemein», passt keine besondere Vorlage – dann wird die
+Allgemeine Bewerbung verwendet und der Status ist **Allgemein** statt
+**Passend**. Der Statusfilter **Passend** zeigt damit nur Stellen mit mindestens
+einem passenden Stichwort; **Allgemein** oder **Alle Status** zeigen die
+übrigen. Das **F** steht auch dann, wenn das
 Formular nicht auf der Anzeige selbst liegt, sondern auf einer eingebetteten
 Seite des Arbeitgebers oder hinter «Jetzt bewerben». Die Suchzeile darüber
 findet auch Adresse und Postleitzahl. Die Checkbox **ohne Bewerbungsformulare**
@@ -114,7 +127,7 @@ vorhandene Adressen werden bei späteren Läufen nachgetragen.
 
 ## Installation
 
-`AutoApplication-1.0.28-Setup.exe` von der
+`AutoApplication-1.0.29-Setup.exe` von der
 [Release-Seite](https://github.com/soendi/AutoApplication/releases/latest)
 herunterladen und ausführen. Windows 10 und 11, kein Administrator- und kein
 Python-Zubehör nötig.
@@ -292,9 +305,12 @@ Brief.
 
 Unter **Vorlagen** lassen sich Name, Stichworte, Betreff und Text bearbeiten,
 neue Vorlagen anlegen und die Standardvorlagen wiederherstellen. Eine Vorlage
-gilt für Nachfragen, wenn das Häkchen gesetzt ist.
+gilt für Nachfragen, wenn das Häkchen gesetzt ist. Das Häkchen **Allgemeine
+Vorlage** bestimmt die Auffangvorlage: Sie wird gewählt, wenn keine oder zu
+wenige Stichworte einer anderen Vorlage passen. Es gilt immer nur eine.
 
-Mitgeliefert sind sieben Bewerbungsvorlagen und eine Nachfrage-Vorlage:
+Mitgeliefert sind 29 Bewerbungsvorlagen, eine allgemeine Auffangvorlage und
+eine Nachfrage-Vorlage:
 
 | Vorlage | Stichworte (Auszug) |
 | --- | --- |
@@ -305,12 +321,37 @@ Mitgeliefert sind sieben Bewerbungsvorlagen und eine Nachfrage-Vorlage:
 | IT-Support und Anwenderbetreuung | Helpdesk, First Level, Ticketsystem, Anwenderbetreuung, Microsoft 365, Netzwerk |
 | Kundenberatung und Verkaufsinnendienst | Kundenberatung, Verkaufsinnendienst, Auftragsbearbeitung, Offerte, CRM |
 | Administration und Sachbearbeitung | Sachbearbeitung, Administration, Verwaltung, Büro, Backoffice, Kundendienst |
+| Produktion und Fertigung | Produktion, Fertigung, Serienfertigung, Fliessband, Schicht, Werkstatt |
+| Montage und Anlagenbau | Montage, Monteur, Anlagenbau, Baugruppen, Montageanleitung, Demontage |
+| Maschinen- und Anlagenbedienung | Maschinenbediener, Anlagenbediener, Maschinenführer, Einrichten, Rüsten |
+| Qualitätssicherung und Prüfung | Qualitätssicherung, Endkontrolle, Messmittel, Audit, Prüfprotokoll |
+| Einkauf und Beschaffung | Einkauf, Beschaffung, Lieferant, Bestellwesen, Offertvergleich |
+| Buchhaltung und Finanzen | Buchhaltung, Debitoren, Kreditoren, Rechnungswesen, Jahresabschluss |
+| Personal und HR-Administration | Personalwesen, Rekrutierung, Personaldossier, Lohnadministration |
+| Empfang, Sekretariat und Telefon | Empfang, Rezeption, Sekretariat, Telefondienst, Terminplanung |
+| Kundenservice und Beratung am Telefon | Kundenservice, Callcenter, Kundenanfragen, Reklamation, Beratung |
+| Fahrdienst und Kurier | Chauffeur, Fahrer, Kurier, Lieferfahrer, Zustellung, Touren |
+| Handwerk und Gebäudetechnik | Handwerk, Gebäudetechnik, Instandhaltung, Reparatur, Hauswart |
+| Bau und Baunebengewerbe | Baustelle, Bauarbeiter, Tiefbau, Hochbau, Ausbau, Schalung |
+| Reinigung und Hausdienst | Reinigung, Unterhaltsreinigung, Hausdienst, Hygiene, Grundreinigung |
+| Sicherheit und Pfortendienst | Sicherheitsdienst, Pforte, Wachdienst, Zutrittskontrolle, Überwachung |
+| Gastronomie und Service | Gastronomie, Restaurant, Servicemitarbeiter, Küche, Bankett |
+| Hotel und Rezeption | Hotel, Hotellerie, Rezeption, Housekeeping, Reservation |
+| Landwirtschaft und Gartenbau | Landwirtschaft, Gartenbau, Gärtner, Pflanzen, Grünpflege |
+| Gesundheit und Pflege | Pflege, Pflegehelfer, Senioren, Spital, Arztpraxis, Patienten |
+| Soziales und Betreuung | Sozialbegleitung, Betreuung, Integration, Kinder, Wohnheim |
+| Bildung und Lernbegleitung | Bildung, Schule, Lernbegleitung, Unterricht, Kursleitung |
+| Ausbildung und Lehrstelle | Lehrstelle, Lehrling, Berufslehre, Ausbildungsplatz, Umschulung |
+| Marketing und Kommunikation | Marketing, Kommunikation, Social Media, Kampagne, Newsletter |
+| Allgemeine Bewerbung | keine – greift, wenn keine andere Vorlage passt |
 
 Die Texte sind auf den bisherigen Werdegang zugeschnitten (Spedition und
 Export, Kassensysteme und Technik, Kundenkontakt, Administration) und nennen
-konkrete Aufgaben statt allgemeiner Sätze. Beim ersten Start nach einem Update
-werden mitgelieferte Vorlagen nachgezogen und neue ergänzt; eigene Vorlagen und
-selbst bearbeitete Standardvorlagen bleiben unverändert.
+konkrete Aufgaben statt allgemeiner Sätze. Wo eine Branche neu ist, sagt die
+Vorlage offen, was vorhanden ist, und bietet an, eine geforderte Ausbildung zu
+machen. Beim ersten Start nach einem Update werden mitgelieferte Vorlagen
+nachgezogen und neue ergänzt; eigene Vorlagen und selbst bearbeitete
+Standardvorlagen bleiben unverändert.
 
 Platzhalter in Betreff und Text:
 

@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 FOLLOW_UP_ID = "nachfassen"
 # Fassung der Standardvorlagen. Steht in der Datei eine aeltere Fassung,
 # werden die mitgelieferten Vorlagen nachgezogen (Revision je Vorlage).
-TEMPLATES_VERSION = 4
+TEMPLATES_VERSION = 5
 
 
 @dataclass
@@ -31,6 +31,8 @@ class Template:
     subject: str = ""
     body: str = ""
     follow_up: bool = False
+    # Auffangvorlage: greift, wenn keine andere Vorlage genug Stichworte hat.
+    fallback: bool = False
     revision: int = 0
 
     def to_dict(self) -> dict[str, Any]:
@@ -42,6 +44,7 @@ class Template:
             "subject": self.subject,
             "body": self.body,
             "follow_up": self.follow_up,
+            "fallback": self.fallback,
             "revision": self.revision,
         }
 
@@ -90,6 +93,7 @@ def _parse(payload: Any) -> list[Template]:
                 subject=str(entry.get("subject") or ""),
                 body=str(entry.get("body") or ""),
                 follow_up=bool(entry.get("follow_up")),
+                fallback=bool(entry.get("fallback")),
                 revision=_revision(entry.get("revision")),
             )
         )
@@ -201,7 +205,7 @@ def vocabulary(templates: list[Template]) -> list[str]:
     terms: list[str] = []
     seen: set[str] = set()
     for template in templates:
-        if template.follow_up:
+        if template.follow_up or template.fallback:
             continue
         for keyword in template.keywords:
             key = normalize(keyword)
@@ -227,10 +231,12 @@ def choose_template(
     keywords: list[str],
     min_score: int = 2,
 ) -> tuple[Template | None, int, list[str]]:
-    """Beste Vorlage waehlen; ohne ausreichende Passung (None, ...).
+    """Beste Vorlage waehlen; sonst die Allgemeine Vorlage.
 
-    Verlangt mindestens ``min_score`` passende Stichworte - so entsteht keine
-    Bewerbung fuer eine Stelle, die nur zufaellig ein Wort enthaelt.
+    Verlangt mindestens ``min_score`` passende Stichworte, damit nicht eine
+    fremde Branche zufaellig bedient wird. Gibt es keine ausreichende Passung,
+    greift die Auffangvorlage (falls vorhanden) - so entsteht fuer jede Stelle
+    ein Anschreiben.
     """
     best: Template | None = None
     best_rank = 0
@@ -238,7 +244,7 @@ def choose_template(
     best_matches: list[str] = []
     best_title_hits: list[str] = []
     for template in templates:
-        if template.follow_up:
+        if template.follow_up or template.fallback:
             continue
         score, matched = score_template(template, job, keywords)
         title_hits = [item for item in matched if has_term(job.title, item)]
@@ -252,13 +258,25 @@ def choose_template(
             )
             best_title_hits = title_hits
     needed = max(1, int(min_score))
-    if best is None or best_score < needed:
-        return None, best_score, best_matches
     # Ohne Treffer im Titel nur bei deutlich mehr Stichworten im Text: so
     # entstehen keine Bewerbungen fuer fremde Branchen.
-    if not best_title_hits and best_score < needed + 1:
+    enough = best is not None and best_score >= needed
+    if enough and not best_title_hits and best_score < needed + 1:
+        enough = False
+    if not enough:
+        general = fallback_template(templates)
+        if general is not None:
+            return general, 0, []
         return None, best_score, best_matches
     return best, best_score, best_matches
+
+
+def fallback_template(templates: list[Template]) -> Template | None:
+    """Allgemeine Vorlage, die ohne passende Stichworte greift."""
+    for template in templates:
+        if template.fallback and not template.follow_up:
+            return template
+    return None
 
 
 def follow_up_template(templates: list[Template]) -> Template | None:

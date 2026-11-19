@@ -39,6 +39,7 @@ from .store import Store
 from .templates import (
     Template,
     choose_template,
+    fallback_template,
     follow_up_template,
     load_templates,
     render_mail,
@@ -103,6 +104,7 @@ class RunSummary:
     found: int = 0
     new: int = 0
     matched: int = 0
+    general: int = 0
     drafts: int = 0
     skipped: int = 0
     errors: list[str] = field(default_factory=list)
@@ -113,6 +115,8 @@ class RunSummary:
             f"{self.new} neu",
             f"{self.matched} passend",
         ]
+        if self.general:
+            parts.append(f"{self.general} allgemein")
         if self.skipped:
             parts.append(f"{self.skipped} ohne Passung")
         text = ", ".join(parts)
@@ -343,6 +347,11 @@ class Pipeline:
         self._previews: dict[str, dict[str, Any]] = {}
         # Dasselbe fuer Nachfragen, damit die Vorlage nicht doppelt laeuft.
         self._follow_up_previews: dict[int, dict[str, Any]] = {}
+        # Frueher als «passend» abgelegte Stellen der Allgemeinen Vorlage
+        # bekommen den eigenen Status «allgemein» - einmal beim Start.
+        general = fallback_template(load_templates(self.templates_file))
+        if general is not None:
+            store.reclassify_general_jobs(general.id)
 
     # ------------------------------------------------------------------
     # Vorlagen und Verbindungen
@@ -1258,18 +1267,28 @@ class Pipeline:
                     self.store.update_job(job.id, status="ohne_passung")
                 continue
 
-            summary.matched += 1
+            # Ohne ein einziges passendes Stichwort bleibt die Stelle getrennt
+            # von den echten Treffern: Status «allgemein» statt «passend».
+            if matches:
+                summary.matched += 1
+                status = "passend"
+                detail = f"{template.name}, {score} Stichworte: {', '.join(matches[:4])}"
+                label = "Passend"
+            else:
+                summary.general += 1
+                status = "allgemein"
+                detail = f"{template.name}, keine passenden Stichworte"
+                label = "Allgemein"
             # Entwuerfe entstehen nur noch auf Klick in der Stellenliste,
             # damit zuerst die gefundenen Stellen geprueft werden koennen.
-            self.store.update_job(job.id, status="passend")
+            self.store.update_job(job.id, status=status)
             self.store.log(
                 "stelle",
-                (
-                    f"Passend: {job.title} bei {job.company} "
-                    f"({template.name}, {score} Stichworte: {', '.join(matches[:4])})"
-                ),
+                f"{label}: {job.title} bei {job.company} ({detail})",
             )
-            if is_new:
+            # Die Allgemeine Vorlage greift fast immer; dafuer nicht bei jeder
+            # neuen Stelle melden, sonst wird der Hinweis wertlos.
+            if is_new and matches:
                 self.notify(
                     "Neue passende Stelle",
                     f"{job.company}: {job.title} – unter Stellen ansehen.",

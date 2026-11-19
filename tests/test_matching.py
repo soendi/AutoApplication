@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from autoapplication.core.matching import (
     matching_terms,
+    personal_fit,
     personal_match,
     priority_key,
 )
@@ -43,6 +44,17 @@ def test_priority_prefers_interests_over_skills() -> None:
     assert with_interests > with_skills
     # Bei gleichen Interessen entscheiden die Faehigkeiten, dann die Passung.
     assert priority_key(["Zoll"], ["SAP"], 2) > priority_key(["Zoll"], [], 9)
+
+
+def test_personal_fit_counts_all_profile_terms() -> None:
+    job = _job()
+    # Zwei von vier Stichworten kommen vor.
+    assert personal_fit(job, ["Zoll", "Technik"], ["Disposition", "SAP"]) == 50
+    # Alles kommt vor -> 100 %, nichts -> 0 %.
+    assert personal_fit(job, ["Zoll"], ["Disposition"]) == 100
+    assert personal_fit(job, ["Technik"], ["SAP"]) == 0
+    # Ohne Stichworte im Profil gibt es keinen Wert.
+    assert personal_fit(job, [], []) is None
 
 
 def test_matching_terms_ignores_case() -> None:

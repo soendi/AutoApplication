@@ -36,6 +36,26 @@ def personal_match(
     return matching_terms(text, interests), matching_terms(text, skills)
 
 
+def personal_fit(
+    job: dict[str, Any],
+    interests: Iterable[str],
+    skills: Iterable[str],
+) -> int | None:
+    """Anteil der Profil-Stichworte in der Anzeige, in Prozent (0 bis 100).
+
+    100 % heisst: Jedes hinterlegte Interesse und jede Faehigkeit kommt vor.
+    Ohne Stichworte im Profil gibt es keinen Wert (``None``) - 0 % waere dort
+    eine falsche Aussage.
+    """
+    interests = list(interests)
+    skills = list(skills)
+    total = len(interests) + len(skills)
+    if total == 0:
+        return None
+    found_interests, found_skills = personal_match(job, interests, skills)
+    return round(100 * (len(found_interests) + len(found_skills)) / total)
+
+
 def priority_key(
     interests: list[str],
     skills: list[str],

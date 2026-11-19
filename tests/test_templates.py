@@ -7,6 +7,7 @@ from autoapplication.core.models import Job
 from autoapplication.core.templates import (
     Template,
     choose_template,
+    fallback_template,
     follow_up_template,
     load_defaults,
     load_templates,
@@ -42,7 +43,36 @@ def test_defaults_contain_spedition_and_follow_up() -> None:
         "kundenbetreuung",
         "tapetenwechsel",
         "nachfassen",
+        "produktion",
+        "montage",
+        "maschinenbedienung",
+        "qualitaet",
+        "einkauf",
+        "buchhaltung",
+        "personal",
+        "empfang",
+        "kundenservice",
+        "chauffeur",
+        "handwerk",
+        "bau",
+        "reinigung",
+        "sicherheit",
+        "gastronomie",
+        "hotellerie",
+        "landwirtschaft",
+        "gesundheit",
+        "soziales",
+        "bildung",
+        "ausbildung",
+        "marketing",
+        "allgemein",
     } <= ids
+    application_templates = [
+        template for template in templates if not template.follow_up and not template.fallback
+    ]
+    assert len(application_templates) >= 20
+    assert fallback_template(templates) is not None
+    assert fallback_template(templates).keywords == []
     assert all(template.revision > 0 for template in templates)
     assert follow_up_template(templates) is not None
     assert "Spedition" in vocabulary(templates)
@@ -59,19 +89,36 @@ def test_choose_template_needs_two_keywords() -> None:
     assert "Spedition" in matches
 
 
-def test_no_template_when_too_few_keywords() -> None:
+def test_no_matching_keywords_uses_general_template() -> None:
     templates = load_defaults()
     job = Job(
         id="ostjob:9",
         source="ostjob",
         source_id="9",
-        title="Buchhalter",
-        company="Treuhand AG",
-        description="Zahlen und Belege",
+        title="Augenoptiker",
+        company="Optik AG",
+        description="Brillen, Sehtests und Kontaktlinsen",
     )
     template, score, _ = choose_template(templates, job, [], 2)
-    assert template is None
+    assert template is not None and template.id == "allgemein"
     assert score == 0
+
+
+def test_general_template_only_when_nothing_else_fits() -> None:
+    templates = load_defaults()
+    template, score, matches = choose_template(templates, _job(), ["Spedition"], 2)
+    assert template is not None and template.id == "spedition"
+    assert score >= 2 and matches
+    lager_job = Job(
+        id="ostjob:10",
+        source="ostjob",
+        source_id="10",
+        title="Lagermitarbeiter",
+        company="Muster AG",
+        description="Kommissionierung und Warenannahme",
+    )
+    template, _score, _ = choose_template(templates, lager_job, [], 2)
+    assert template is not None and template.id == "lager"
 
 
 def test_choice_between_templates() -> None:
@@ -119,7 +166,7 @@ def test_save_and_load_roundtrip(tmp_path) -> None:
     save_templates(path, templates)
     loaded = load_templates(path)
     assert [item.id for item in loaded] == ["a", "b"]
-    assert loaded[1].follow_up is True
+    assert loaded[1].follow_up is True and loaded[1].fallback is False
 
 
 def test_first_load_seeds_file(tmp_path) -> None:
@@ -129,7 +176,7 @@ def test_first_load_seeds_file(tmp_path) -> None:
     assert path.exists()
     assert loaded
     payload = json.loads(path.read_text(encoding="utf-8"))
-    assert payload["version"] == 4
+    assert payload["version"] == 5
 
 
 def test_broken_file_uses_defaults(tmp_path) -> None:
