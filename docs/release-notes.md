@@ -1,3 +1,26 @@
+## AutoApplication 1.0.15
+
+Kontakt aus der Anzeige selbst und eine Bildauslese, die nur nutzbare Bilder
+liest.
+
+### Neu
+
+- **Adresse und Ansprechperson aus dem Anzeigetext.** Steht im Kontaktfeld nur
+  ein Bewerbungslink, liest AutoApplication den Fliesstext der Anzeige und die
+  verlinkte Anzeigenseite und sucht dort nach E-Mail-Adresse und
+  Ansprechperson – erst danach wird von Hand gefragt. Portaladressen wie
+  `info@ostjob.ch` und technische Kennungen (z. B. Sentry-IDs) werden dabei
+  übersprungen; die Arbeitgeberdomain hat Vorrang.
+
+### Geändert
+
+- **Bildauslese überspringt Unnützes.** SVG-Dateien, Icons, Logos, Favicons und
+  Social-Media-Symbole werden nicht mehr durch die Texterkennung geschickt.
+  Hinweise aus `alt`, `title` und `class` genügen, um ein Bild als Icon zu
+  erkennen.
+- **Alle Bilder einer Anzeige.** Statt der ersten drei werden bis zu 60 Bilder
+  geprüft, damit ein Kontakt in einem späteren Bild nicht verloren geht.
+
 ## AutoApplication 1.0.14
 
 Übersicht im Tab Bewerbungen: Posteingang auf Klick prüfen, Kennungen
