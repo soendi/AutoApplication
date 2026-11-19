@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import re
+import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field, replace
@@ -77,6 +78,9 @@ PAGE_BYTES = 1_000_000
 # So meldet ostjob.ch eine Anzeige, die es nicht mehr gibt. Der Rest der
 # Meldung ("Unten findest du aehnliche Jobs ...") ist nicht Teil des Merkmals.
 EXPIRED_TEXT = "das gesuchte inserat ist abgelaufen oder wurde deaktiviert"
+# Antwortet die Anzeige gar nicht mehr (HTTP 404/410), gilt sie ebenfalls als
+# abgelaufen; dieser Text laeuft durch dieselbe Pruefung.
+EXPIRED_PAGE_HTML = f"<html><body><p>{EXPIRED_TEXT.capitalize()}.</p></body></html>"
 # Technische Kennungen wie Sentry-IDs sehen wie Adressen aus.
 _HEX_LOCAL_RE = re.compile(r"[0-9a-f]{16,}")
 # Firmenadresse: Schweizer Postleitzahl mit Ort und Strasse mit Hausnummer.
@@ -126,6 +130,14 @@ def fetch_page(url: str) -> str:
     try:
         with urllib.request.urlopen(request, timeout=ocr.TIMEOUT) as response:
             return response.read(PAGE_BYTES).decode("utf-8", "replace")
+    except urllib.error.HTTPError as exc:
+        if exc.code in (404, 410):
+            # Anzeige ist weg: wie die Meldung des Portals behandeln, damit
+            # die Stelle aus der Ablage verschwindet.
+            log.info("Anzeige nicht mehr verfuegbar (%s): HTTP %s", target, exc.code)
+            return EXPIRED_PAGE_HTML
+        log.info("Anzeigetext konnte nicht geladen werden (%s): %s", target, exc)
+        return ""
     except Exception as exc:  # noqa: BLE001 - Seite ist nur ein Zusatz
         log.info("Anzeigetext konnte nicht geladen werden (%s): %s", target, exc)
         return ""
@@ -849,9 +861,9 @@ class Pipeline:
                     queue.append((link, depth + 1))
         return False if reached else None
 
-    def _mark_form(self, job: Job) -> bool:
+    def _mark_form(self, job: Job, force: bool = False) -> bool:
         """Ergebnis der Formularpruefung an der Stelle vermerken."""
-        if job.form_checked:
+        if job.form_checked and not force:
             return True
         found = self._detect_form(job)
         if found is None:
@@ -863,22 +875,72 @@ class Pipeline:
         job.form_checked = True
         return True
 
-    def _check_stored_forms(self, seen: set[str], limit: int = 15) -> int:
-        """Aeltere Stellen nach und nach auf ein Formular pruefen."""
+    def _check_stored_forms(
+        self,
+        seen: set[str],
+        limit: int | None = 15,
+        force: bool = False,
+    ) -> int:
+        """Aeltere Stellen nach und nach auf ein Formular pruefen.
+
+        ``limit=None`` prueft alle (Doppelklick auf «neu suchen»), ``force``
+        sieht auch bereits gepruefte Stellen noch einmal an.
+        """
         done = 0
         attempts = 0
-        for row in self.store.list_jobs(limit=400):
-            if attempts >= limit:
+        for row in self.store.list_jobs(limit=100_000 if limit is None else 400):
+            if limit is not None and attempts >= limit:
                 break
             job = Job.from_row(row)
-            if not job.id or job.id in seen or job.form_checked:
+            if not job.id or job.id in seen:
+                continue
+            if job.form_checked and not force:
                 continue
             if str(row.get("status") or "") in {"archiviert"}:
                 continue
             attempts += 1
-            if self._mark_form(job):
+            if self._mark_form(job, force=force):
                 done += 1
         return done
+
+    def _check_expired_jobs(
+        self, seen: set[str], limit: int | None = 15
+    ) -> int:
+        """Gespeicherte Stellen auf «abgelaufen» pruefen und entfernen.
+
+        Je Suchlauf eine begrenzte Zahl, die aeltesten Anzeigen zuerst
+        (siehe ``Store.jobs_for_expiry_check``). Meldet die Seite die Anzeige
+        als abgelaufen oder antwortet sie mit HTTP 404/410, verschwindet die
+        Zeile; eine vorhandene Bewerbung haelt den Datensatz.
+        """
+        removed = 0
+        attempts = 0
+        batch = 100_000 if limit is None else limit + len(seen)
+        for row in self.store.jobs_for_expiry_check(limit=batch):
+            if limit is not None and attempts >= limit:
+                break
+            job = Job.from_row(row)
+            if not job.id or job.id in seen:
+                continue
+            url = (job.url or job.apply_url or "").strip()
+            if not url.lower().startswith(("http://", "https://")):
+                continue
+            attempts += 1
+            # Seite aus diesem Lauf wiederverwenden, sonst jetzt holen.
+            page = self._page_texts.get(url)
+            if page is None:
+                page = self._page_fetcher(url)
+                self._page_texts[url] = page
+            if not page:
+                # Kein Netz oder Fehler: beim naechsten Lauf nochmals.
+                continue
+            if EXPIRED_TEXT in normalize(strip_html(page)):
+                self._drop_expired_job(job)
+                if self.store.get_job(job.id) is None:
+                    removed += 1
+                    continue
+            self.store.update_job(job.id, expiry_checked_at=now_iso())
+        return removed
 
     @staticmethod
     def _missing_contact_fields(job: Job) -> list[str]:
@@ -893,6 +955,29 @@ class Pipeline:
             )
             if not value
         ]
+
+    def drop_if_expired(self, job_id: str) -> bool:
+        """Anzeige holen und entfernen, wenn sie nicht mehr verfuegbar ist.
+
+        Gedacht fuer den Klick auf «Stelle oeffnen»: Meldet die Seite die
+        Anzeige als abgelaufen oder antwortet sie mit HTTP 404/410, ist die
+        Zeile sofort weg. Eine vorhandene Bewerbung bleibt erhalten.
+        """
+        row = self.store.get_job(job_id)
+        if row is None:
+            return False
+        job = Job.from_row(row)
+        url = (job.url or job.apply_url or "").strip()
+        if not url.lower().startswith(("http://", "https://")):
+            return False
+        page = self._page_fetcher(url)
+        if not page or EXPIRED_TEXT not in normalize(strip_html(page)):
+            return False
+        if self.store.application_by_job(job_id) is not None:
+            # An der Stelle haengt die Bewerbung; der Datensatz bleibt.
+            return False
+        self._drop_expired_job(job)
+        return self.store.get_job(job_id) is None
 
     def _complete_job(self, job: Job) -> bool:
         """Name, E-Mail und Adresse nachschauen, solange sie fehlen.
@@ -957,15 +1042,18 @@ class Pipeline:
         )
         return True
 
-    def _complete_stored_jobs(self, seen: set[str], limit: int = 15) -> int:
+    def _complete_stored_jobs(
+        self, seen: set[str], limit: int | None = 15
+    ) -> int:
         """Gespeicherte Stellen mit Luecken nachziehen - begrenzt je Lauf.
 
         Vollstaendige Zeilen kosten nur einen Vergleich; unvollstaendige werden
         erneut gesucht, damit am Ende jede Zeile alle Angaben zeigt.
+        ``limit=None`` zieht alle nach (Doppelklick auf «neu suchen»).
         """
         done = 0
-        for row in self.store.list_jobs(limit=400):
-            if done >= limit:
+        for row in self.store.list_jobs(limit=100_000 if limit is None else 400):
+            if limit is not None and done >= limit:
                 break
             job_id = str(row.get("id") or "")
             if not job_id or job_id in seen:
@@ -1070,7 +1158,9 @@ class Pipeline:
     # ------------------------------------------------------------------
     # Stellen suchen und Bewerbungen vorbereiten
     # ------------------------------------------------------------------
-    def run_search(self, now: datetime | None = None) -> RunSummary:
+    def run_search(
+        self, now: datetime | None = None, full: bool = False
+    ) -> RunSummary:
         moment = now or datetime.now(timezone.utc)
         stamp = moment.isoformat(timespec="seconds")
         summary = RunSummary()
@@ -1097,7 +1187,8 @@ class Pipeline:
         summary.found = len(jobs)
         min_score = int(self.settings.number("matching.min_score", 2) or 2)
         # Formularpruefung kostet je Stelle eine Seite; je Lauf begrenzt.
-        form_checks = 15
+        # Beim vollen Lauf (Doppelklick auf «neu suchen») entfaellt die Grenze.
+        form_checks: int | None = None if full else 15
 
         for job in jobs:
             is_new = self.store.upsert_job(job, now=stamp)
@@ -1146,9 +1237,10 @@ class Pipeline:
                 summary.skipped += 1
                 continue
             job = Job.from_row(stored)
-            if not job.form_checked and form_checks > 0:
-                form_checks -= 1
-                self._mark_form(job)
+            if full or (not job.form_checked and (form_checks or 0) > 0):
+                if not full and form_checks is not None:
+                    form_checks -= 1
+                self._mark_form(job, force=full)
 
             if self.store.application_by_job(job.id) is not None:
                 continue
@@ -1183,14 +1275,22 @@ class Pipeline:
                     f"{job.company}: {job.title} – unter Stellen ansehen.",
                 )
 
-        # Aeltere Datensaetze mit Luecken ebenfalls nachziehen; begrenzt,
-        # damit ein Lauf nicht an vielen fremden Seiten haengt.
-        completed = self._complete_stored_jobs({job.id for job in jobs})
+        # Aeltere Datensaetze mit Luecken ebenfalls nachziehen; im normalen
+        # Lauf begrenzt, damit er nicht an vielen fremden Seiten haengt.
+        seen = {job.id for job in jobs}
+        completed = self._complete_stored_jobs(seen, limit=None if full else 15)
         if completed:
             self.store.log(
                 "stelle", f"Kontaktdaten ergänzt: {completed} Stellen"
             )
-        self._check_stored_forms({job.id for job in jobs})
+        self._check_stored_forms(
+            seen, limit=None if full else 15, force=full
+        )
+        gone = self._check_expired_jobs(seen, limit=None if full else 15)
+        if gone:
+            self.store.log(
+                "stelle", f"{gone} abgelaufene Anzeige(n) aus der Liste entfernt."
+            )
 
         self.store.meta_set("letzter_lauf", stamp)
         self.store.log("lauf", f"Stellensuche: {summary.as_text()}")

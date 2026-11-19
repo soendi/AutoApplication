@@ -1,3 +1,32 @@
+## AutoApplication 1.0.28
+
+Abgelaufene Anzeigen raeumen sich beim Suchlauf selbst aus, und ein Doppelklick
+auf «Jetzt Stellen neu suchen» prueft alle gespeicherten Stellen.
+
+### Behoben
+
+- **HTTP 410 galt nicht als «abgelaufen».** Antwortet die Anzeige nicht mehr
+  mit der Meldung des Portals, sondern mit HTTP 404/410, verwarf die Pruefung
+  die Antwort - die Stelle blieb in der Liste. Jetzt zaehlt beides als
+  abgelaufen, und der Datensatz verschwindet.
+
+### Neu
+
+- **Ablaufpruefung im Suchlauf.** Jeder Lauf sieht sich bis zu 15 gespeicherte
+  Stellen an und entfernt die, deren Seite abgelaufen ist oder 404/410
+  liefert. Datensaetze mit Bewerbung bleiben wie bisher erhalten; eine nicht
+  erreichbare Seite wird beim naechsten Lauf nochmals versucht. Geprueft wird
+  nach Datum - die aeltesten Anzeigen zuerst; bereits gepruefte wandern nach
+  hinten, damit jede Zeile einmal dran kommt.
+- **Klick auf «Stelle oeffnen» prueft sofort.** Ist die Anzeige abgelaufen,
+  verschwindet die Zeile gleich und die Statusleiste meldet es.
+- **Doppelklick auf «Jetzt Stellen neu suchen» prueft alles.** Dann gelten
+  keine Grenzen: Kontaktdaten nachziehen, Bewerbungsformular bestimmen (auch
+  bei bereits geprueften Stellen) und abgelaufene Anzeigen entfernen - alles
+  fuer den ganzen Bestand. Ein Einzelklick verhaelt sich wie bisher und wartet
+  nur die Doppelklick-Zeit ab, damit nicht zwei Laeufe starten. Je nach Anzahl
+  gespeicherter Stellen dauert der volle Lauf entsprechend laenger.
+
 ## AutoApplication 1.0.27
 
 Stellen mit Bewerbungsformular lassen sich ausblenden, Bewerberportale zaehlen

@@ -298,6 +298,14 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------------
     def run_search(self) -> None:
+        """Neue Anzeigen holen und die gespeicherten Stellen begrenzt prüfen."""
+        self._start_search(full=False)
+
+    def run_full_search(self) -> None:
+        """Doppelklick: alle gespeicherten Stellen ohne Begrenzung prüfen."""
+        self._start_search(full=True)
+
+    def _start_search(self, *, full: bool) -> None:
         if not self.settings.flag("search.api_enabled", False):
             QMessageBox.information(
                 self,
@@ -308,9 +316,15 @@ class MainWindow(QMainWindow):
             self.show_page("settings")
             return
         self.run_task(
-            self.pipeline.run_search,
+            (lambda: self.pipeline.run_search(full=True))
+            if full
+            else self.pipeline.run_search,
             done=lambda summary: self.statusBar().showMessage(summary.as_text(), 20_000),
-            busy="Stellen werden gesucht …",
+            busy=(
+                "Alle gespeicherten Stellen werden geprüft …"
+                if full
+                else "Stellen werden gesucht …"
+            ),
         )
 
     def check_mail(self) -> None:
@@ -369,6 +383,35 @@ class MainWindow(QMainWindow):
         task.failed.connect(
             lambda message: (failed(message), self._tasks.discard(task))
         )
+        task.start()
+
+    def check_expired(self, job_id: str) -> None:
+        """Nach dem Oeffnen einer Stelle nachsehen, ob es sie noch gibt.
+
+        Meldet die Seite die Anzeige als abgelaufen (oder antwortet sie mit
+        HTTP 404/410), verschwindet die Zeile sofort aus der Liste. Ein
+        Fehler bleibt still: es ist nur ein Hintergrundcheck.
+        """
+        if not job_id:
+            return
+        task = Task(lambda: self.pipeline.drop_if_expired(job_id), self)
+        self._tasks.add(task)
+
+        def done(removed: Any) -> None:
+            self._tasks.discard(task)
+            if not removed:
+                return
+            self.refresh_all()
+            self.statusBar().showMessage(
+                "Die Anzeige ist abgelaufen und wurde aus der Liste entfernt.",
+                10_000,
+            )
+
+        def failed(_message: str) -> None:
+            self._tasks.discard(task)
+
+        task.done.connect(done)
+        task.failed.connect(failed)
         task.start()
 
     def prepare_follow_ups(self) -> None:

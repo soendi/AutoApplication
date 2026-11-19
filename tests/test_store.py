@@ -35,6 +35,33 @@ def test_old_form_results_are_checked_again(tmp_path) -> None:
     assert again.meta_get("form_check_version") == FORM_CHECK_VERSION
 
 
+def test_jobs_for_expiry_check_starts_with_the_oldest(tmp_path) -> None:
+    store = Store(tmp_path / "daten.db")
+    for number, published in (
+        ("1", "2026-11-01"),
+        ("2", "2026-10-01"),
+        ("3", "2026-12-01"),
+    ):
+        store.upsert_job(
+            Job(
+                id=f"ostjob:{number}",
+                source="ostjob",
+                source_id=number,
+                title=f"Stelle {number}",
+                company="Muster AG",
+                published=published,
+            ),
+            now="2026-11-19T08:00:00+00:00",
+        )
+
+    order = [row["id"] for row in store.jobs_for_expiry_check(limit=10)]
+    assert order == ["ostjob:2", "ostjob:1", "ostjob:3"]
+    # Geprueftes wandert nach hinten, damit jede Zeile einmal dran kommt.
+    store.update_job("ostjob:2", expiry_checked_at="2026-11-19T09:00:00+00:00")
+    order = [row["id"] for row in store.jobs_for_expiry_check(limit=10)]
+    assert order == ["ostjob:1", "ostjob:3", "ostjob:2"]
+
+
 def test_upsert_job_only_new_once(tmp_path) -> None:
     store = Store(tmp_path / "daten.db")
     assert store.upsert_job(_job(), now=now_iso()) is True

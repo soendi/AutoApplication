@@ -37,6 +37,7 @@ JOB_FIELDS = {
     "contact_tried_for",
     "has_form",
     "form_checked",
+    "expiry_checked_at",
     "last_seen",
 }
 
@@ -97,6 +98,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     contact_tried_for TEXT NOT NULL DEFAULT '',
     has_form INTEGER NOT NULL DEFAULT 0,
     form_checked INTEGER NOT NULL DEFAULT 0,
+    expiry_checked_at TEXT NOT NULL DEFAULT '',
     raw TEXT NOT NULL DEFAULT '{}'
 );
 CREATE TABLE IF NOT EXISTS applications (
@@ -189,6 +191,12 @@ class Store:
             # 1 = Seite wurde geprueft; 0 = beim naechsten Lauf nachsehen.
             db.execute(
                 "ALTER TABLE jobs ADD COLUMN form_checked INTEGER NOT NULL DEFAULT 0"
+            )
+        if "expiry_checked_at" not in columns:
+            # Wann die Seite zuletzt auf «abgelaufen» geprueft wurde.
+            db.execute(
+                "ALTER TABLE jobs ADD COLUMN expiry_checked_at "
+                "TEXT NOT NULL DEFAULT ''"
             )
         # Fuer Stellen ohne gefundenes Formular das Ergebnis der alten
         # Pruefung verwerfen, damit Formulare in eingebetteten Seiten und
@@ -335,6 +343,30 @@ class Store:
             cursor = db.execute("DELETE FROM jobs WHERE id = ?", (job_id,))
             removed = cursor.rowcount
         return removed > 0
+
+    def jobs_for_expiry_check(self, limit: int = 15) -> list[dict[str, Any]]:
+        """Stellen fuer die Ablaufpruefung, die aeltesten zuerst.
+
+        Noch nie gepruefte kommen zuerst, danach die am laengsten nicht mehr
+        geprueften; innerhalb dieser Reihenfolge zaehlt das Datum der Anzeige
+        (aelteste zuerst). So kommt jede Zeile einmal dran, statt dass immer
+        dieselben alten Anzeigen abgefragt werden.
+        """
+        with self._db() as db:
+            return self._rows(
+                db.execute(
+                    """
+                    SELECT * FROM jobs
+                    WHERE status <> 'archiviert'
+                    ORDER BY CASE WHEN expiry_checked_at = '' THEN 0 ELSE 1 END,
+                             expiry_checked_at ASC,
+                             COALESCE(NULLIF(published, ''), first_seen) ASC,
+                             first_seen ASC
+                    LIMIT ?
+                    """,
+                    (max(1, int(limit)),),
+                )
+            )
 
     def update_job(self, job_id: str, **fields: Any) -> None:
         changes = {key: value for key, value in fields.items() if key in JOB_FIELDS}

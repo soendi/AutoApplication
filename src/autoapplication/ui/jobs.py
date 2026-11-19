@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QCheckBox,
     QComboBox,
     QHBoxLayout,
@@ -99,6 +100,16 @@ def _sort_value(item: tuple[Any, list[str], list[str]], column: int) -> Any:
     return STATUS_LABELS.get(status, status).casefold()
 
 
+class SearchButton(QPushButton):
+    """Knopf der Stellensuche; ein Doppelklick prueft alle Datensaetze."""
+
+    double_clicked = Signal()
+
+    def mouseDoubleClickEvent(self, event) -> None:  # noqa: N802 - Qt-Name
+        self.double_clicked.emit()
+        event.accept()
+
+
 class JobsPage(QWidget):
     def __init__(self, window: Any) -> None:
         super().__init__()
@@ -154,11 +165,19 @@ class JobsPage(QWidget):
         filters.addWidget(self.hide_forms)
         filters.addWidget(self.hide_brokers)
         filters.addWidget(self.status)
-        self.search_button = QPushButton("Jetzt Stellen neu suchen")
+        self.search_button = SearchButton("Jetzt Stellen neu suchen")
         self.search_button.setToolTip(
-            "Neue Anzeigen von ostjob.ch holen; bekannte Stellen bleiben stehen."
+            "Neue Anzeigen von ostjob.ch holen; bekannte Stellen bleiben stehen. "
+            "Doppelklick: alle gespeicherten Stellen ohne Begrenzung prüfen."
         )
-        self.search_button.clicked.connect(self.window.run_search)
+        # Ein einzelner Klick startet die Suche erst nach der Doppelklick-Zeit,
+        # damit ein Doppelklick nicht zwei Laeufe ausloest.
+        self._search_timer = QTimer(self)
+        self._search_timer.setSingleShot(True)
+        self._search_timer.setInterval(QApplication.doubleClickInterval())
+        self._search_timer.timeout.connect(self.window.run_search)
+        self.search_button.clicked.connect(self._search_timer.start)
+        self.search_button.double_clicked.connect(self._full_search)
         filters.addWidget(self.search_button)
         layout.addLayout(filters)
 
@@ -503,6 +522,14 @@ class JobsPage(QWidget):
         if not apply_url:
             return
         self.window.open_url(apply_url)
+        # Gleich nachsehen, ob die Anzeige noch existiert; abgelaufene
+        # Stellen verschwinden damit ohne naechsten Suchlauf.
+        self.window.check_expired(str(job.get("id") or ""))
+
+    def _full_search(self) -> None:
+        """Doppelklick: alle gespeicherten Stellen ohne Begrenzung pruefen."""
+        self._search_timer.stop()
+        self.window.run_full_search()
 
     def mark_broker(self) -> None:
         """Firmen der markierten oder angehakten Stellen als Vermittler merken."""

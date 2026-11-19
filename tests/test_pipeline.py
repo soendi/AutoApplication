@@ -1062,6 +1062,192 @@ def test_expired_advert_is_removed_from_the_store(tmp_path) -> None:
     assert store.get_job("ostjob:1130000") is None
 
 
+def test_gone_advert_is_dropped_right_away(tmp_path) -> None:
+    pipeline, store, _outlook, _ = _pipeline(
+        tmp_path, jobs=[], page_fetcher=lambda url: EXPIRED_PAGE
+    )
+    store.upsert_job(_expired_job(), now="2026-11-01T08:00:00+00:00")
+
+    assert pipeline.drop_if_expired("ostjob:1130000") is True
+    assert store.get_job("ostjob:1130000") is None
+
+
+def test_live_advert_stays_after_the_check(tmp_path) -> None:
+    pipeline, store, _outlook, _ = _pipeline(
+        tmp_path,
+        jobs=[],
+        page_fetcher=lambda url: "<html><body><p>Die Stelle ist offen.</p></body></html>",
+    )
+    store.upsert_job(_expired_job(), now="2026-11-01T08:00:00+00:00")
+
+    assert pipeline.drop_if_expired("ostjob:1130000") is False
+    assert store.get_job("ostjob:1130000") is not None
+
+
+def test_gone_advert_with_application_is_kept(tmp_path) -> None:
+    pipeline, store, _outlook, _ = _pipeline(
+        tmp_path, jobs=[], page_fetcher=lambda url: EXPIRED_PAGE
+    )
+    job = _expired_job()
+    store.upsert_job(job, now="2026-11-01T08:00:00+00:00")
+    store.add_application(job.id, "spedition", "Betreff", "Text")
+
+    assert pipeline.drop_if_expired(job.id) is False
+    assert store.get_job(job.id) is not None
+
+
+def test_http_410_counts_as_expired(monkeypatch) -> None:
+    import urllib.error
+    import urllib.request
+
+    from autoapplication.core import pipeline as module
+    from autoapplication.core.text import normalize, strip_html
+
+    def gone(*_args, **_kwargs):
+        raise urllib.error.HTTPError(
+            "https://www.ostjob.ch/job/x/1", 410, "Gone", {}, None
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", gone)
+    page = module.fetch_page("https://www.ostjob.ch/job/x/1")
+    assert module.EXPIRED_TEXT in normalize(strip_html(page))
+
+
+def test_search_removes_expired_stored_adverts(tmp_path) -> None:
+    old = _expired_job()
+    pages = {old.url: EXPIRED_PAGE}
+    pipeline, store, _outlook, _ = _pipeline(
+        tmp_path, jobs=[MATCHING], page_fetcher=lambda url: pages.get(url, "")
+    )
+    store.upsert_job(old, now="2026-10-01T08:00:00+00:00")
+
+    pipeline.run_search()
+
+    assert store.get_job(old.id) is None
+
+
+def test_expiry_check_takes_the_oldest_advert_first(tmp_path) -> None:
+    older = _expired_job()
+    newer = Job(
+        id="ostjob:1130001",
+        source="ostjob",
+        source_id="1130001",
+        title="Speditionskaufmann",
+        company="Muster AG",
+        city="Balgach",
+        published="2026-11-01",
+        url="https://www.ostjob.ch/job/alt/1130001",
+    )
+    pages = {older.url: EXPIRED_PAGE, newer.url: EXPIRED_PAGE}
+    pipeline, store, _outlook, _ = _pipeline(
+        tmp_path, jobs=[], page_fetcher=lambda url: pages.get(url, "")
+    )
+    store.upsert_job(older, now="2026-10-01T08:00:00+00:00")
+    store.upsert_job(newer, now="2026-10-20T08:00:00+00:00")
+
+    assert pipeline._check_expired_jobs(set(), limit=1) == 1
+    assert store.get_job(older.id) is None
+    assert store.get_job(newer.id) is not None
+
+
+def test_expiry_check_keeps_adverts_with_application(tmp_path) -> None:
+    job = _expired_job()
+    pages = {job.url: EXPIRED_PAGE}
+    pipeline, store, _outlook, _ = _pipeline(
+        tmp_path, jobs=[], page_fetcher=lambda url: pages.get(url, "")
+    )
+    store.upsert_job(job, now="2026-10-01T08:00:00+00:00")
+    store.add_application(job.id, "spedition", "Betreff", "Text")
+
+    assert pipeline._check_expired_jobs(set()) == 0
+    assert store.get_job(job.id) is not None
+    assert store.get_job(job.id)["expiry_checked_at"]
+
+
+def test_unreachable_page_keeps_the_advert_unchecked(tmp_path) -> None:
+    job = _expired_job()
+    pipeline, store, _outlook, _ = _pipeline(
+        tmp_path, jobs=[], page_fetcher=lambda url: ""
+    )
+    store.upsert_job(job, now="2026-10-01T08:00:00+00:00")
+
+    assert pipeline._check_expired_jobs(set()) == 0
+    assert store.get_job(job.id) is not None
+    # Kein Netz: die Zeile bleibt fuer den naechsten Lauf offen.
+    assert store.get_job(job.id)["expiry_checked_at"] == ""
+
+
+def test_full_search_checks_every_stored_advert(tmp_path) -> None:
+    olds: list[Job] = []
+    pages: dict[str, str] = {}
+    for number in range(20):
+        job = Job(
+            id=f"ostjob:9{number:03d}",
+            source="ostjob",
+            source_id=f"9{number:03d}",
+            title="Speditionskaufmann",
+            company="Muster AG",
+            city="Balgach",
+            published=f"2026-10-{number + 1:02d}",
+            url=f"https://www.ostjob.ch/job/alt/9{number:03d}",
+            # Kontaktdaten vollstaendig: nur die Ablaufpruefung greift.
+            contact_email="bewerbung@muster.ch",
+            contact_name="Frau Meier",
+            street="Bahnhofstrasse 1",
+            zip="9436",
+            form_checked=True,
+        )
+        pages[job.url] = EXPIRED_PAGE
+        olds.append(job)
+    pipeline, store, _outlook, _ = _pipeline(
+        tmp_path, jobs=[MATCHING], page_fetcher=lambda url: pages.get(url, "")
+    )
+    for job in olds:
+        store.upsert_job(job, now="2026-10-01T08:00:00+00:00")
+        store.update_job(job.id, form_checked=1)
+
+    # Der normale Lauf prueft nur eine begrenzte Zahl.
+    pipeline.run_search()
+    left = [job for job in olds if store.get_job(job.id) is not None]
+    assert 0 < len(left) < len(olds)
+
+    # Der volle Lauf nimmt alle Datensaetze ohne Grenze dran.
+    pipeline.run_search(full=True)
+    assert [job.id for job in olds if store.get_job(job.id) is not None] == []
+
+
+def test_full_search_checks_forms_again(tmp_path) -> None:
+    job = Job(
+        id="ostjob:500",
+        source="ostjob",
+        source_id="500",
+        title="Speditionskaufmann",
+        company="Muster AG",
+        city="Balgach",
+        published="2026-11-01",
+        url="https://www.ostjob.ch/job/alt/500",
+    )
+    pages = {
+        job.url: (
+            '<form action="/apply" enctype="multipart/form-data">'
+            '<input type="text" name="name">'
+            '<input type="file" name="cv">'
+            "<p>Bewerbung</p></form>"
+        )
+    }
+    pipeline, store, _outlook, _ = _pipeline(
+        tmp_path, jobs=[MATCHING], page_fetcher=lambda url: pages.get(url, "")
+    )
+    store.upsert_job(job, now="2026-10-01T08:00:00+00:00")
+    store.update_job(job.id, form_checked=1, has_form=0)
+
+    pipeline.run_search()
+    assert store.get_job(job.id)["has_form"] == 0
+
+    pipeline.run_search(full=True)
+    assert store.get_job(job.id)["has_form"] == 1
+
+
 def test_expired_advert_leaves_an_application_alone(tmp_path) -> None:
     pipeline, store, _outlook, _ = _pipeline(
         tmp_path, jobs=[], page_fetcher=lambda url: EXPIRED_PAGE
