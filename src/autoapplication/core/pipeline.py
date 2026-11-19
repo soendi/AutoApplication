@@ -499,6 +499,66 @@ class Pipeline:
             gaps.append("anrede")
         return gaps
 
+    # ------------------------------------------------------------------
+    # Datensaetze vervollstaendigen
+    # ------------------------------------------------------------------
+    def complete_job(self, job_id: str) -> bool:
+        """Eine gespeicherte Stelle um fehlende Kontaktdaten ergaenzen."""
+        row = self.store.get_job(job_id)
+        if row is None:
+            return False
+        return self._complete_job(Job.from_row(row))
+
+    def _complete_job(self, job: Job) -> bool:
+        """Name, E-Mail und Adresse nachschauen, soweit sie fehlen.
+
+        Gelesen wird nur, was Anzeige, Portal oder Firmenseite klar hergeben;
+        geraten wird nichts, und vorhandene Angaben bleiben stehen.
+        """
+        updates: dict[str, Any] = {}
+        if not (job.contact_email and job.contact_name):
+            address, person = self._find_contact(job)
+            portal = domain_of(job.url or job.apply_url)
+            # Die Adresse des Portals selbst ist keine Bewerbungsadresse.
+            if address and not (portal and domain_of(address) == portal):
+                if not job.contact_email:
+                    updates["contact_email"] = address
+            if person and not job.contact_name:
+                updates["contact_name"] = person
+        if not (job.street and job.zip):
+            street, zip_code = self._lookup_address(job)
+            if street and not job.street:
+                updates["street"] = street
+            if zip_code and not job.zip:
+                updates["zip"] = zip_code
+        if not updates:
+            return False
+        self.store.update_job(job.id, **updates)
+        log.info(
+            "Stelle vervollstaendigt: %s (%s)", job.id, ", ".join(sorted(updates))
+        )
+        return True
+
+    def _complete_stored_jobs(self, seen: set[str], limit: int = 15) -> int:
+        """Gespeicherte Stellen mit Luecken nachziehen - begrenzt je Lauf."""
+        done = 0
+        for row in self.store.list_jobs(limit=400):
+            if done >= limit:
+                break
+            job_id = str(row.get("id") or "")
+            if not job_id or job_id in seen:
+                continue
+            if str(row.get("status") or "") in {"ignoriert", "archiviert"}:
+                continue
+            if all(
+                row.get(key)
+                for key in ("contact_email", "contact_name", "street", "zip")
+            ):
+                continue
+            if self._complete_job(Job.from_row(row)):
+                done += 1
+        return done
+
     def _write_mail(
         self,
         template: Template,
@@ -628,9 +688,6 @@ class Pipeline:
             if known.get("status") == "ignoriert":
                 summary.skipped += 1
                 continue
-            existing = self.store.application_by_job(job.id)
-            if existing is not None:
-                continue
 
             # Neue Anzeigen einmal auslesen: Titel und Beschreibung bereinigt
             # ablegen, damit weitere Laeufe keine KI mehr brauchen.
@@ -661,6 +718,16 @@ class Pipeline:
                 )
                 digest = local_digest(job)
 
+            # Adresse, E-Mail und Ansprechperson gleich mitnehmen, damit der
+            # Datensatz vollstaendig ist - auch bei Stellen ohne Passung.
+            self._complete_job(job)
+            stored = self.store.get_job(job.id)
+            if stored:
+                job = Job.from_row(stored)
+
+            if self.store.application_by_job(job.id) is not None:
+                continue
+
             keywords = self._ai.keywords(job, terms)
             template, score, matches = choose_template(
                 templates, job, keywords, min_score
@@ -678,14 +745,6 @@ class Pipeline:
             # Entwuerfe entstehen nur noch auf Klick in der Stellenliste,
             # damit zuerst die gefundenen Stellen geprueft werden koennen.
             self.store.update_job(job.id, status="passend")
-            # Fuer die Tabelle: Firma, Strasse und Postleitzahl ergaenzen.
-            if not (job.street and job.zip):
-                street, zip_code = self._lookup_address(job)
-                if (street, zip_code) != (job.street, job.zip):
-                    job = replace(
-                        job, street=street or job.street, zip=zip_code or job.zip
-                    )
-                    self.store.update_job(job.id, street=job.street, zip=job.zip)
             self.store.log(
                 "stelle",
                 (
@@ -698,6 +757,14 @@ class Pipeline:
                     "Neue passende Stelle",
                     f"{job.company}: {job.title} – unter Stellen ansehen.",
                 )
+
+        # Aeltere Datensaetze mit Luecken ebenfalls nachziehen; begrenzt,
+        # damit ein Lauf nicht an vielen fremden Seiten haengt.
+        completed = self._complete_stored_jobs({job.id for job in jobs})
+        if completed:
+            self.store.log(
+                "stelle", f"Kontaktdaten ergänzt: {completed} Stellen"
+            )
 
         self.store.meta_set("letzter_lauf", stamp)
         self.store.log("lauf", f"Stellensuche: {summary.as_text()}")
@@ -1240,6 +1307,7 @@ class Pipeline:
         sender: str,
         subject: str,
         via: str = "",
+        manual: bool = False,
     ) -> None:
         app_id = int(application["id"])
         company = application.get("company") or "Firma"
@@ -1254,7 +1322,10 @@ class Pipeline:
             EINLADUNG: "Einladung zum Gespräch",
             INFO: "Antwort",
         }.get(kind, "Antwort")
-        routing = f" – zugeordnet über {via}" if via else ""
+        if manual:
+            routing = " – von Hand eingeordnet"
+        else:
+            routing = f" – zugeordnet über {via}" if via else ""
         self.store.log("antwort", f"{label} von {company}: {subject}{routing}")
         if kind == ABSAGE:
             self.store.update_application(
@@ -1282,6 +1353,23 @@ class Pipeline:
             if application.get("status") in {STATUS_GESENDET, STATUS_NACHGEFASST}:
                 changes["status"] = STATUS_ANTWORT
             self.store.update_application(app_id, **changes)
+
+    def set_reply_kind(self, application_id: int, kind: str) -> None:
+        """Antwort von Hand als Zusage, Einladung oder Absage einordnen."""
+        if kind not in {ABSAGE, ZUSAGE, EINLADUNG}:
+            return
+        application = self.store.get_application(application_id)
+        if application is None:
+            return
+        self.store.set_reply_kind(application_id, kind)
+        if kind in {ZUSAGE, EINLADUNG}:
+            # Eine frueher erfasste Absage nimmt die Bewerbung nicht mit.
+            self.store.update_application(application_id, archived_at="")
+        replies = self.store.replies_for(application_id)
+        subject = str(replies[-1].get("subject") or "") if replies else ""
+        if not subject:
+            subject = str(application.get("reply_note") or "")
+        self._apply_reply(application, kind, "", subject, manual=True)
 
     # ------------------------------------------------------------------
     # Nachfassen

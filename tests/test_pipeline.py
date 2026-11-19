@@ -912,3 +912,63 @@ def test_address_never_comes_from_the_ai(tmp_path) -> None:
     assert row["zip"] == ""
     preview = pipeline.draft_preview("ostjob:1")
     assert preview["address"] == "Muster Logistik AG\nBalgach"
+
+
+def test_reply_can_be_classified_by_hand(tmp_path) -> None:
+    pipeline, store, _outlook, _ = _pipeline(tmp_path)
+    pipeline.run_search()
+    pipeline.prepare_application(MATCHING.id)
+    application_id = int(store.list_applications()[0]["id"])
+    store.update_application(application_id, status="info", reply_kind="info")
+    store.add_reply(
+        application_id, "m1", "2026-11-16T09:00:00Z", "hr@muster.ch",
+        "Ihre Bewerbung", "info", "Kurz", body="Guten Tag",
+    )
+
+    pipeline.set_reply_kind(application_id, "einladung")
+    row = store.get_application(application_id)
+    assert row["status"] == "einladung"
+    assert row["reply_kind"] == "einladung"
+    assert store.replies_for(application_id)[-1]["kind"] == "einladung"
+
+    pipeline.set_reply_kind(application_id, "absage")
+    row = store.get_application(application_id)
+    assert row["status"] == "absage"
+    assert row["archived_at"]
+
+    # Eine Absage laesst sich korrigieren: die Bewerbung ist wieder aktiv.
+    pipeline.set_reply_kind(application_id, "zusage")
+    row = store.get_application(application_id)
+    assert row["status"] == "zusage"
+    assert row["archived_at"] == ""
+    assert store.replies_for(application_id)[-1]["kind"] == "zusage"
+    assert any("von Hand eingeordnet" in event["message"] for event in store.events())
+
+
+def test_search_completes_contact_data_right_away(tmp_path) -> None:
+    page = "Muster Logistik AG, Bahnhofstrasse 12, 9436 Balgach"
+    pipeline, store, _outlook, _ = _pipeline(
+        tmp_path, jobs=[UNRELATED], page_fetcher=lambda url: page
+    )
+    # Ein alter Datensatz, der bei dieser Suche nicht geliefert wird.
+    old = Job(
+        id="ostjob:alt",
+        source="ostjob",
+        source_id="alt",
+        title="Lagerist",
+        company="Muster Logistik AG",
+        city="Balgach",
+        raw={"company": {"homepage": "https://muster-logistik.ch"}},
+    )
+    store.upsert_job(old, now="2026-11-01T08:00:00+00:00")
+    pipeline.run_search()
+
+    # Auch ohne passende Vorlage ist die Adresse der gefundenen Stelle da.
+    fetched = store.get_job(UNRELATED.id)
+    assert fetched["street"] == "Bahnhofstrasse 12"
+    assert fetched["zip"] == "9436"
+
+    # Der alte, unvollstaendige Datensatz wurde mit nachgezogen.
+    stored = store.get_job("ostjob:alt")
+    assert stored["street"] == "Bahnhofstrasse 12"
+    assert stored["zip"] == "9436"

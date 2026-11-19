@@ -102,6 +102,11 @@ DEFAULTS: dict[str, Any] = {
         "follow_up_days": 14,
         "notify_desktop": True,
     },
+    # Ansicht: zuletzt gewaehlte Spaltenbreiten und Sortierung der Tabellen.
+    "ansicht": {
+        "stellen_spalten": [],
+        "stellen_sortierung": {},
+    },
 }
 
 

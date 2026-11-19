@@ -217,3 +217,41 @@ def test_job_stores_street_postcode_and_email(tmp_path) -> None:
     assert store.get_job(job.id)["street"] == "Neue Strasse 7"
     assert [item["id"] for item in store.list_jobs(search="Neue Strasse")] == [job.id]
     assert [item["id"] for item in store.list_jobs(search="9436")] == [job.id]
+
+
+def test_only_unclassified_unread_replies_need_attention(tmp_path) -> None:
+    store = Store(tmp_path / "daten.db")
+    job = Job(id="ostjob:1", source="ostjob", source_id="1", title="T", company="C")
+    store.upsert_job(job)
+    application_id = store.add_application(job.id, "spedition", "Betreff", "Text")
+    store.add_reply(
+        application_id, "m1", "2026-11-18T09:00:00Z", "hr@firma.ch",
+        "Ihre Bewerbung", "info", "kurz",
+    )
+    store.add_reply(
+        application_id, "m2", "2026-11-18T10:00:00Z", "hr@firma.ch",
+        "Absage", "absage", "kurz",
+    )
+    # Nur die unklare Antwort blinkt, die Absage ist bereits zugeordnet.
+    assert store.unclassified_by_application() == {application_id: 1}
+    # Angeschaut: das Blinken hoert auf.
+    store.mark_replies_seen(application_id)
+    assert store.unclassified_by_application() == {}
+    assert store.unseen_total() == 0
+
+
+def test_latest_reply_can_be_classified_afterwards(tmp_path) -> None:
+    store = Store(tmp_path / "daten.db")
+    job = Job(id="ostjob:1", source="ostjob", source_id="1", title="T", company="C")
+    store.upsert_job(job)
+    application_id = store.add_application(job.id, "spedition", "Betreff", "Text")
+    store.add_reply(
+        application_id, "m1", "2026-11-18T09:00:00Z", "hr@firma.ch",
+        "Ihre Bewerbung", "info", "kurz",
+    )
+    assert store.set_reply_kind(application_id, "zusage") is True
+    replies = store.replies_for(application_id)
+    assert replies[-1]["kind"] == "zusage"
+    # Zugeordnet heisst: kein Blinken mehr, auch wenn die Mail ungelesen ist.
+    assert store.unclassified_by_application() == {}
+    assert store.unseen_total() == 1

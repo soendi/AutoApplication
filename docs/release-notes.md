@@ -1,3 +1,39 @@
+## AutoApplication 1.0.18
+
+Antworten lassen sich von Hand einteilen, mehrere Stellen auf einmal ignorieren,
+und die Stellentabelle merkt sich Breiten und Sortierung.
+
+### Neu
+
+- **Antwort im Fenster einteilen.** Im Antwortfenster stehen die Knöpfe
+  **Zusage**, **Einladung** und **Absage**. Ein Klick ordnet die neueste Antwort
+  ein, übernimmt Status und Farbe der Bewerbung sowie den Stellenstatus und
+  schreibt den Schritt ins Protokoll («… – von Hand eingeordnet»). Eine falsche
+  Absage lässt sich mit «Zusage» oder «Einladung» korrigieren; die Bewerbung
+  kommt dabei aus dem Archiv zurück.
+- **Mehrere Stellen zusammen ignorieren.** Jede Zeile im Tab **Stellen** hat
+  vorne ein Häkchen. Alle angehakten Stellen verschwinden mit einem Klick auf
+  «Ignorieren» – nach einer Rückfrage, die die Anzahl nennt. Ohne Häkchen gilt
+  wie bisher die ausgewählte Zeile.
+- **Kontaktdaten beim Abruf ergänzt.** Beim Einlesen einer Anzeige sucht
+  AutoApplication sofort nach Ansprechperson, E-Mail-Adresse und Firmenadresse
+  und trägt Fehlendes nach – auch bei Stellen ohne passende Vorlage. Bei jedem
+  Lauf werden zusätzlich bis zu 15 ältere, unvollständige Datensätze
+  nachgezogen. Geraten wird nichts: nur Portalangaben und klar gelesener Text;
+  bleibt etwas unklar, bleibt das Feld leer.
+
+### Geändert
+
+- **Briefsymbol blinkt nur bei unklaren Antworten.** Es blinkt, wenn eine
+  Antwort weder Zusage, Einladung noch Absage ist. Sobald das Antwortfenster
+  geöffnet wird, hört das Blinken auf und der Zähler zieht sofort nach.
+  Erkannte Antworten zeigen den ruhigen Umschlag.
+- **Übersicht aufgeräumt.** Die vier grossen Knöpfe unter den Kennzahlen sind
+  entfernt; die Kacheln führen weiterhin per Klick in die passende Ansicht.
+- **Stellentabelle nach Wunsch.** Spaltenbreiten lassen sich am Kopf ziehen,
+  ein Klick auf den Spaltenkopf sortiert nach dieser Spalte (erneut: umgekehrt).
+  Breiten und Sortierung bleiben für den nächsten Start erhalten.
+
 ## AutoApplication 1.0.17
 
 Eigene Anschreiben-Vorlage, eine Stellenliste mit Ansprechperson und Adresse,

@@ -253,3 +253,61 @@ def test_escaped_line_break_does_not_glue_to_the_address(tmp_path) -> None:
     assert store.get_job("ostjob:77")["contact_email"] == (
         "marina.peter@progresspersonal.ch"
     )
+
+
+def test_complete_job_fills_missing_name_email_and_address(tmp_path) -> None:
+    job = _image_job(
+        contact_email="",
+        street="",
+        zip="",
+        description=(
+            "Bewerbung an personal@progresspersonal.ch. "
+            "Ansprechpartnerin: Frau Keller."
+        ),
+        raw={"company": {"homepage": "https://muster-logistik.ch"}},
+    )
+    settings = Settings(tmp_path / "einstellungen.json")
+    store = Store(tmp_path / "daten.db")
+    store.upsert_job(job)
+    pipeline = Pipeline(
+        settings,
+        store,
+        ai_client=FakeAI(),
+        templates_file=tmp_path / "vorlagen.json",
+        page_fetcher=lambda url: (
+            "Muster Logistik AG, Bahnhofstrasse 12, 9436 Balgach"
+        ),
+    )
+    assert pipeline.complete_job("ostjob:77") is True
+    row = store.get_job("ostjob:77")
+    assert row["contact_email"] == "personal@progresspersonal.ch"
+    assert row["contact_name"] == "Frau Keller"
+    assert row["street"] == "Bahnhofstrasse 12"
+    assert row["zip"] == "9436"
+    # Beim zweiten Mal ist nichts mehr zu ergaenzen.
+    assert pipeline.complete_job("ostjob:77") is False
+
+
+def test_complete_job_keeps_existing_values(tmp_path) -> None:
+    job = _image_job(
+        contact_email="bewerbung@muster-logistik.ch",
+        contact_name="Frau Meier",
+        street="Bahnhofstrasse 12",
+        zip="9436",
+    )
+    settings = Settings(tmp_path / "einstellungen.json")
+    store = Store(tmp_path / "daten.db")
+    store.upsert_job(job)
+    pipeline = Pipeline(
+        settings,
+        store,
+        ai_client=FakeAI(),
+        templates_file=tmp_path / "vorlagen.json",
+        page_fetcher=lambda url: "Muster AG, Andere Strasse 9, 8000 Zürich",
+    )
+    assert pipeline.complete_job("ostjob:77") is False
+    row = store.get_job("ostjob:77")
+    assert row["contact_email"] == "bewerbung@muster-logistik.ch"
+    assert row["contact_name"] == "Frau Meier"
+    assert row["street"] == "Bahnhofstrasse 12"
+    assert row["zip"] == "9436"

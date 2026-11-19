@@ -10,7 +10,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QListWidget,
-    QPushButton,
     QVBoxLayout,
     QWidget,
 )
@@ -77,32 +76,6 @@ class OverviewPage(QWidget):
             cards.addWidget(frame, 1)
         layout.addLayout(cards)
 
-        # Grosse Knoepfe; die Zahl der ungelesenen Antworten steht im Knopf.
-        buttons = QHBoxLayout()
-        buttons.setSpacing(10)
-        self.answers_button = QPushButton("Ungelesene Antworten: 0")
-        self.answers_button.setObjectName("BigPrimary")
-        self.answers_button.clicked.connect(
-            lambda: self.window.show_page("applications")
-        )
-        self.search_button = QPushButton("Jetzt Stellen suchen")
-        self.search_button.setObjectName("BigButton")
-        self.search_button.clicked.connect(self.window.run_search)
-        self.mail_button = QPushButton("Postfach prüfen")
-        self.mail_button.setObjectName("BigButton")
-        self.mail_button.clicked.connect(self.window.check_mail)
-        self.follow_button = QPushButton("Nachfragen vorbereiten")
-        self.follow_button.setObjectName("BigButton")
-        self.follow_button.clicked.connect(self.window.prepare_follow_ups)
-        for button in (
-            self.answers_button,
-            self.search_button,
-            self.mail_button,
-            self.follow_button,
-        ):
-            buttons.addWidget(button, 1)
-        layout.addLayout(buttons)
-
         self.next_label = QLabel("")
         self.next_label.setObjectName("Hint")
         layout.addWidget(self.next_label)
@@ -132,7 +105,6 @@ class OverviewPage(QWidget):
         self.values["entwurf"].setText(str(applications.get("entwurf", 0)))
         self.values["wartet"].setText(str(waiting))
         self.values["antwort"].setText(str(unread))
-        self.answers_button.setText(f"Ungelesene Antworten: {unread}")
 
         daily = self.window.settings.text("automation.daily_time", "07:30")
         upcoming = next_run_at(daily)

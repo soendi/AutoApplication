@@ -524,6 +524,26 @@ class Store:
             ).fetchall()
         return {int(row["application_id"]): int(row["number"]) for row in rows}
 
+    def unclassified_by_application(self) -> dict[int, int]:
+        """Ungelesene Antworten ohne Zuordnung - nur die brauchen ein Blinken."""
+        with self._db() as db:
+            rows = db.execute(
+                "SELECT application_id, COUNT(*) AS number FROM replies "
+                "WHERE seen = 0 AND kind NOT IN ('zusage', 'einladung', 'absage') "
+                "GROUP BY application_id"
+            ).fetchall()
+        return {int(row["application_id"]): int(row["number"]) for row in rows}
+
+    def set_reply_kind(self, application_id: int, kind: str) -> bool:
+        """Die neueste Antwort einer Bewerbung nachtraeglich einordnen."""
+        with self._db() as db:
+            cursor = db.execute(
+                "UPDATE replies SET kind = ? WHERE id = ("
+                "SELECT MAX(id) FROM replies WHERE application_id = ?)",
+                (kind, application_id),
+            )
+            return cursor.rowcount > 0
+
     def unseen_total(self) -> int:
         """Alle noch nicht geöffneten Antworten - gelesene zählen nicht mit."""
         with self._db() as db:

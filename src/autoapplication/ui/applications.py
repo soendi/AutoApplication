@@ -54,6 +54,13 @@ TITLE_COLUMN = 3
 NEW_MAIL_COLOR = "#ffa53d"
 SEEN_MAIL_COLOR = "#8a919c"
 
+# Einteilung einer Antwort von Hand, in dieser Reihenfolge angeboten.
+REPLY_KINDS = (
+    ("zusage", "Zusage"),
+    ("einladung", "Einladung"),
+    ("absage", "Absage"),
+)
+
 
 def envelope_pixmap(opened: bool, color: str, size: int = 18) -> QPixmap:
     """Kleiner Briefumschlag: offen oder geschlossen."""
@@ -87,7 +94,7 @@ def envelope_pixmap(opened: bool, color: str, size: int = 18) -> QPixmap:
 
 
 class MailBadge(QLabel):
-    """Umschlag je Zeile: orange pulsierend für neue, grau offen für gelesene."""
+    """Umschlag je Zeile: blinkt bei unklarer Antwort, sonst ruhig."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -106,15 +113,27 @@ class MailBadge(QLabel):
         self._animation.setDirection(QAbstractAnimation.Direction.Forward)
         self.set_state(new=False, unseen=0, total=0)
 
-    def set_state(self, *, new: bool, unseen: int, total: int) -> None:
+    def set_state(
+        self, *, new: bool, unseen: int, total: int, blink: bool = False
+    ) -> None:
         if new:
+            self._animation.stop()
             self.setPixmap(envelope_pixmap(False, NEW_MAIL_COLOR))
-            self.setToolTip(
-                f"{unseen} neue Antwort{'en' if unseen != 1 else ''} – "
-                "Doppelklick zeigt sie an."
-            )
             self._effect.setOpacity(1.0)
-            self._animation.start()
+            # Nur eine Antwort, die weder Zusage, Einladung noch Absage ist,
+            # braucht die Aufmerksamkeit. Angeschaut heisst: hoert auf.
+            if blink:
+                self.setToolTip(
+                    f"{unseen} neue Antwort{'en' if unseen != 1 else ''} ohne "
+                    "Zuordnung – im Antwortfenster als Zusage, Einladung oder "
+                    "Absage einteilen."
+                )
+                self._animation.start()
+            else:
+                self.setToolTip(
+                    f"{unseen} neue Antwort{'en' if unseen != 1 else ''} – "
+                    "Doppelklick zeigt sie an."
+                )
             return
         self._animation.stop()
         self._effect.setOpacity(1.0)
@@ -198,7 +217,9 @@ class ApplicationSection(QWidget):
         unseen: dict[int, int],
         totals: dict[int, int],
         days: int,
+        unclassified: dict[int, int] | None = None,
     ) -> None:
+        unclassified = unclassified or {}
         for badge in self._badges:
             badge.stop()
         self._badges = []
@@ -251,6 +272,7 @@ class ApplicationSection(QWidget):
                     new=unseen_count > 0,
                     unseen=unseen_count,
                     total=total_count,
+                    blink=unclassified.get(application_id, 0) > 0,
                 )
                 if tint is not None:
                     badge.setStyleSheet(
@@ -341,8 +363,9 @@ class ApplicationsPage(QWidget):
         try:
             unseen = self.window.store.unseen_by_application()
             totals = self.window.store.reply_counts()
+            unclassified = self.window.store.unclassified_by_application()
         except Exception:  # noqa: BLE001 - Anzeige darf nicht scheitern
-            unseen, totals = {}, {}
+            unseen, totals, unclassified = {}, {}, {}
         shown = 0
         for section in self.sections:
             wanted = set(section.selected_statuses())
@@ -351,7 +374,7 @@ class ApplicationsPage(QWidget):
                 for application in applications
                 if str(application.get("status") or "") in wanted
             ]
-            section.fill(rows, unseen, totals, days)
+            section.fill(rows, unseen, totals, days, unclassified)
             shown += len(rows)
         self.hint.setText(f"{shown} Bewerbungen")
         self._update_buttons()
@@ -459,11 +482,28 @@ class ApplicationsPage(QWidget):
             body = str(reply.get("body") or reply.get("snippet") or "")
             blocks.append((header, body))
         title = f"{'Absage' if only_absage else 'Antworten'} – {application.get('company') or 'Firma'}"
-        MailDialog(self, title, blocks).exec()
+        classified = False
+
+        def classify(kind: str) -> None:
+            nonlocal classified
+            self.window.pipeline.set_reply_kind(application_id, kind)
+            classified = True
+
+        dialog = MailDialog(
+            self,
+            title,
+            blocks,
+            on_classify=classify,
+            current_kind=str(replies[-1].get("kind") or ""),
+        )
+        # Geoeffnet heisst angeschaut: der Umschlag hoert sofort auf zu blinken.
         self.window.store.mark_replies_seen(application_id)
         self.refresh()
-        # Die Uebersicht zaehlt nur ungelesene Antworten - sofort nachziehen.
         self.window.overview.refresh()
+        dialog.exec()
+        if classified:
+            # Status, Stelle und Farbe koennen sich geaendert haben.
+            self.window.refresh_all()
 
     def open_draft(self) -> None:
         application = self._selected()
@@ -535,10 +575,14 @@ class MailDialog(QDialog):
         parent: QWidget,
         title: str,
         blocks: list[tuple[str, str]],
+        *,
+        on_classify: Any = None,
+        current_kind: str = "",
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle(title)
         self.resize(760, 600)
+        self._on_classify = on_classify
         layout = QVBoxLayout(self)
         parts: list[str] = []
         for index, (header, body) in enumerate(blocks):
@@ -554,6 +598,28 @@ class MailDialog(QDialog):
         view.setReadOnly(True)
         view.setToolTip("Antwort der Firma; mit „Kopieren“ in die Zwischenablage.")
         layout.addWidget(view, 1)
+        if self._on_classify is not None:
+            # Ohne klare Erkennung bleibt die Antwort offen; hier entscheidet
+            # der Benutzer, was sie ist - der Status zieht mit.
+            classify = QHBoxLayout()
+            classify.setSpacing(6)
+            hint = QLabel("Antwort einteilen:")
+            hint.setObjectName("Hint")
+            classify.addWidget(hint)
+            for key, label in REPLY_KINDS:
+                button = QPushButton(label)
+                button.setToolTip(
+                    f"Diese Antwort als {label} einteilen – der Status der "
+                    "Bewerbung wird übernommen."
+                )
+                if key == current_kind:
+                    button.setObjectName("Primary")
+                button.clicked.connect(
+                    lambda _checked=False, kind=key: self._classify(kind)
+                )
+                classify.addWidget(button)
+            classify.addStretch(1)
+            layout.addLayout(classify)
         buttons = QHBoxLayout()
         copy = QPushButton("Kopieren")
         copy.setObjectName("Primary")
@@ -569,6 +635,12 @@ class MailDialog(QDialog):
         from PySide6.QtWidgets import QApplication
 
         QApplication.clipboard().setText(text)
+
+    def _classify(self, kind: str) -> None:
+        if self._on_classify is None:
+            return
+        self._on_classify(kind)
+        self.accept()
 
 
 class LetterDialog(QDialog):
