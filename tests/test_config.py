@@ -102,6 +102,18 @@ def test_home_override(tmp_path, monkeypatch) -> None:
     assert config.database_path().name == "daten.db"
 
 
+def test_job_brokers_are_unique_and_clean(tmp_path) -> None:
+    settings = Settings(tmp_path / "e.json")
+    settings.set(
+        "search.job_brokers",
+        ["  Müller  AG ", "müller ag", "", "Meier GmbH", "MEIER GMBH"],
+    )
+    assert settings.job_brokers() == ["Müller AG", "Meier GmbH"]
+    settings.set("search.job_brokers", "Müller AG; Meier GmbH")
+    assert settings.job_brokers() == ["Müller AG", "Meier GmbH"]
+    assert DEFAULTS["search"]["hide_job_brokers"] is False
+
+
 def test_excluded_and_cantons(tmp_path) -> None:
     settings = Settings(tmp_path / "e.json")
     settings.set("search.exclude", "Lehre, Praktikum,  KV ")

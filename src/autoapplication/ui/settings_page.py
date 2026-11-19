@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListWidget,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
@@ -236,6 +237,32 @@ class SettingsPage(QWidget):
         hint.setObjectName("Hint")
         search_form.addRow("", hint)
         ostjob.addWidget(search)
+
+        # ------------------------------------------------------------------
+        brokers = QGroupBox("Jobvermittler")
+        brokers_layout = QVBoxLayout(brokers)
+        self.brokers = QListWidget()
+        self.brokers.setToolTip(
+            "Firmen, die nur vermitteln. In der Stellenübersicht mit "
+            "«ohne Jobvermittler» ausblendbar."
+        )
+        brokers_layout.addWidget(self.brokers)
+        broker_actions = QHBoxLayout()
+        self.broker_remove = QPushButton("Aus Liste entfernen")
+        self.broker_remove.clicked.connect(self.remove_broker)
+        broker_actions.addWidget(self.broker_remove)
+        broker_actions.addStretch(1)
+        brokers_layout.addLayout(broker_actions)
+        broker_hint = QLabel(
+            "Eintragen in der Stellenübersicht: Zeile markieren oder Zeilen "
+            "anhaken und unten «Als Jobvermittler eintragen» wählen. Doppelte "
+            "Firmen werden nicht eingetragen. Der Haken «ohne Jobvermittler» "
+            "in der Stellenübersicht blendet diese Firmen aus."
+        )
+        broker_hint.setWordWrap(True)
+        broker_hint.setObjectName("Hint")
+        brokers_layout.addWidget(broker_hint)
+        ostjob.addWidget(brokers)
 
         # ------------------------------------------------------------------
         matching = QGroupBox("Bewerbungen")
@@ -557,6 +584,20 @@ class SettingsPage(QWidget):
         self._refresh_outlook_status()
         self._refresh_imap_status()
 
+    def _fill_brokers(self, names: list[str]) -> None:
+        self.brokers.clear()
+        for name in names:
+            self.brokers.addItem(name)
+
+    def reload_brokers(self) -> None:
+        """Liste nach dem Eintragen in der Stellenübersicht nachführen."""
+        self._fill_brokers(self.window.settings.job_brokers())
+
+    def remove_broker(self) -> None:
+        """Markierte Firmen aus der Liste nehmen (wirksam mit «Speichern»)."""
+        for item in self.brokers.selectedItems():
+            self.brokers.takeItem(self.brokers.row(item))
+
     def load(self) -> None:
         settings = self.window.settings
         self.vorname.setText(settings.text("profile.vorname"))
@@ -593,6 +634,7 @@ class SettingsPage(QWidget):
         self.page_size.setValue(int(settings.number("search.page_size", 25)))
         self.max_pages.setValue(int(settings.number("search.max_pages", 3)))
         self.max_age.setValue(int(settings.number("search.max_age_days", 45)))
+        self._fill_brokers(settings.job_brokers())
 
         self.min_score.setValue(int(settings.number("matching.min_score", 2)))
 
@@ -676,6 +718,14 @@ class SettingsPage(QWidget):
         settings.set("search.page_size", self.page_size.value())
         settings.set("search.max_pages", self.max_pages.value())
         settings.set("search.max_age_days", self.max_age.value())
+        settings.set(
+            "search.job_brokers",
+            [
+                self.brokers.item(index).text().strip()
+                for index in range(self.brokers.count())
+                if self.brokers.item(index).text().strip()
+            ],
+        )
 
         settings.set("matching.min_score", self.min_score.value())
 

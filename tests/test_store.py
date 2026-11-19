@@ -31,6 +31,19 @@ def test_upsert_job_only_new_once(tmp_path) -> None:
     assert rows[0]["status"] == "neu"
 
 
+def test_job_form_fields_default_and_update(tmp_path) -> None:
+    store = Store(tmp_path / "daten.db")
+    store.upsert_job(_job(), now=now_iso())
+    row = store.get_job("ostjob:1")
+    assert row["has_form"] == 0
+    assert row["form_checked"] == 0
+    store.update_job("ostjob:1", has_form=1, form_checked=1)
+    row = store.get_job("ostjob:1")
+    assert row["has_form"] == 1
+    assert row["form_checked"] == 1
+    assert Job.from_row(row).has_form is True
+
+
 def test_job_analysis_and_status(tmp_path) -> None:
     store = Store(tmp_path / "daten.db")
     store.upsert_job(_job(), now=now_iso())

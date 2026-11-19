@@ -1,3 +1,26 @@
+## AutoApplication 1.0.25
+
+Jobvermittler lassen sich ausblenden, und Stellen mit Bewerbungsformular sind
+auf einen Blick markiert.
+
+### Neu
+
+- **Jobvermittler-Liste.** Unter **Einstellungen → Ostjob** lassen sich Firmen
+  sammeln, die nur vermitteln. In der Stellenuebersicht nimmt der Knopf
+  «Als Jobvermittler eintragen» die Firma der markierten Zeile oder aller
+  angehakten Zeilen auf; doppelte Eintraege werden uebersprungen. Die Checkbox
+  «ohne Jobvermittler» zwischen Suchfeld und Statusfilter blendet diese Firmen
+  aus. Ihr Zustand wird sofort gespeichert und gilt beim naechsten Start
+  wieder.
+- **Bewerbungsformular markiert.** Prueft das Programm die Bewerbungsseite
+  einer Stelle und findet dort Eingabefelder, Auswahlfelder oder Uploads, steht
+  in der Stellenuebersicht vorne ein **F**; der Mauszeiger darueber nennt
+  «Bewerbungsformular». Das Ergebnis bleibt je Stelle gespeichert und steht
+  auch nach einem Neustart. Eine Bewerbung per E-Mail gilt nicht als Formular.
+  Die Pruefung laeuft waehrend der Stellensuche und ist je Lauf begrenzt, damit
+  viele fremde Seiten den Lauf nicht aufhalten; weitere Zeilen folgen in den
+  naechsten Laeufen.
+
 ## AutoApplication 1.0.24
 
 Die KI-Pruefung sagt jetzt, was wirklich los ist - und die Anfragen an Groq

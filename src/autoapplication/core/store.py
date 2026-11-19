@@ -35,6 +35,8 @@ JOB_FIELDS = {
     "contact_name",
     "contact_tried_at",
     "contact_tried_for",
+    "has_form",
+    "form_checked",
     "last_seen",
 }
 
@@ -89,6 +91,8 @@ CREATE TABLE IF NOT EXISTS jobs (
     contact_name TEXT NOT NULL DEFAULT '',
     contact_tried_at TEXT NOT NULL DEFAULT '',
     contact_tried_for TEXT NOT NULL DEFAULT '',
+    has_form INTEGER NOT NULL DEFAULT 0,
+    form_checked INTEGER NOT NULL DEFAULT 0,
     raw TEXT NOT NULL DEFAULT '{}'
 );
 CREATE TABLE IF NOT EXISTS applications (
@@ -171,6 +175,16 @@ class Store:
             # Welche Angaben damals schon fehlten - dafuer nicht neu suchen.
             db.execute(
                 "ALTER TABLE jobs ADD COLUMN contact_tried_for TEXT NOT NULL DEFAULT ''"
+            )
+        if "has_form" not in columns:
+            # Bewerbungsformular auf der Seite des Arbeitgebers erkannt.
+            db.execute(
+                "ALTER TABLE jobs ADD COLUMN has_form INTEGER NOT NULL DEFAULT 0"
+            )
+        if "form_checked" not in columns:
+            # 1 = Seite wurde geprueft; 0 = beim naechsten Lauf nachsehen.
+            db.execute(
+                "ALTER TABLE jobs ADD COLUMN form_checked INTEGER NOT NULL DEFAULT 0"
             )
         app_columns = {
             row["name"] for row in db.execute("PRAGMA table_info(applications)")

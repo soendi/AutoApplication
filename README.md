@@ -1,4 +1,4 @@
-# AutoApplication 1.0.24
+# AutoApplication 1.0.25
 
 Stellen von ostjob.ch suchen, Bewerbungen als Entwurf in Outlook oder Gmail
 vorbereiten und Antworten bis zur Zusage verfolgen – als Windows-Programm mit
@@ -83,9 +83,14 @@ stillen Updates.
 
 ## Stellenliste
 
-Der Tab **Stellen** zeigt je Anzeige: Datum, Titel, Ansprechperson, E-Mail,
-Firma, Ort, Adresse und PLZ sowie Pensum, Weg, Interesse, Fähigkeit und Status.
-Die Suchzeile darüber findet auch Adresse und Postleitzahl.
+Der Tab **Stellen** zeigt je Anzeige: ein **F** für ein Bewerbungsformular,
+Datum, Titel, Ansprechperson, E-Mail, Firma, Ort, Adresse und PLZ sowie Pensum,
+Weg, Interesse, Fähigkeit und Status. Die Suchzeile darüber findet auch Adresse
+und Postleitzahl. Die Checkbox **ohne Jobvermittler** blendet alle Firmen aus
+der Liste **Einstellungen → Ostjob → Jobvermittler** aus; der Knopf
+**Als Jobvermittler eintragen** nimmt die Firma der markierten oder angehakten
+Zeilen in diese Liste auf. Doppelte Einträge werden übersprungen, und der
+Zustand der Checkbox bleibt für den nächsten Start erhalten.
 
 - **Ansprechperson mit Anrede.** Nennt die Anzeige „Herr …“ oder „Frau …“, wird
 das übernommen. Steht dort nur ein Name, leitet die KI die Anrede aus dem
@@ -102,7 +107,7 @@ vorhandene Adressen werden bei späteren Läufen nachgetragen.
 
 ## Installation
 
-`AutoApplication-1.0.24-Setup.exe` von der
+`AutoApplication-1.0.25-Setup.exe` von der
 [Release-Seite](https://github.com/soendi/AutoApplication/releases/latest)
 herunterladen und ausführen. Windows 10 und 11, kein Administrator- und kein
 Python-Zubehör nötig.

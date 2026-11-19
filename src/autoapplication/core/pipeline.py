@@ -130,6 +130,54 @@ def fetch_page(url: str) -> str:
         return ""
 
 
+# Bewerbungsformulare erkennen: Eingabefelder, Auswahlfelder und Uploads.
+_FORM_BLOCK_RE = re.compile(r"<form\b[^>]*>.*?</form>", re.IGNORECASE | re.DOTALL)
+_FILE_INPUT_RE = re.compile(r"<input\b[^>]*\btype\s*=\s*[\"']?file", re.IGNORECASE)
+_TEXT_INPUT_RE = re.compile(
+    r"<input\b[^>]*\btype\s*=\s*[\"']?"
+    r"(?:text|email|tel|url|search|number|date)",
+    re.IGNORECASE,
+)
+_TEXTAREA_RE = re.compile(r"<(?:textarea|select)\b", re.IGNORECASE)
+_MULTIPART_RE = re.compile(
+    r"<form\b[^>]*enctype\s*=\s*[\"']?multipart/form-data", re.IGNORECASE
+)
+_FORM_WORDS_RE = re.compile(
+    r"bewerb|application|lebenslauf|anschreiben|curriculum|upload|dokument",
+    re.IGNORECASE,
+)
+
+
+def has_application_form(html: str) -> bool:
+    """Steht auf der Seite ein Bewerbungsformular mit Feldern/Uploads?"""
+    value = html or ""
+    if not value:
+        return False
+    for block in _FORM_BLOCK_RE.findall(value):
+        uploads = len(_FILE_INPUT_RE.findall(block))
+        fields = len(_TEXT_INPUT_RE.findall(block))
+        extras = len(_TEXTAREA_RE.findall(block))
+        words = bool(_FORM_WORDS_RE.search(block))
+        # Uploads gehoeren zu einem Bewerbungsformular, sobald Felder oder
+        # Bewerbungsworte dazukommen. Eine reine Suchmaske bleibt aussen vor.
+        if uploads and (fields or extras or words):
+            return True
+        if _MULTIPART_RE.search(block) and (fields or extras) and words:
+            return True
+        if words and extras and fields >= 2:
+            return True
+        if words and fields >= 3:
+            return True
+    # Formulare, die Skripte ohne <form>-Rahmen aufbauen.
+    if (
+        _FILE_INPUT_RE.search(value)
+        and _FORM_WORDS_RE.search(value)
+        and len(_TEXT_INPUT_RE.findall(value)) >= 2
+    ):
+        return True
+    return False
+
+
 def _recent(value: str, minutes: int = DRAFT_GRACE_MINUTES) -> bool:
     """Liegt der Zeitpunkt weniger als ``minutes`` Minuten zurueck?"""
     text = (value or "").strip()
@@ -660,6 +708,64 @@ class Pipeline:
         return self._complete_job(Job.from_row(row))
 
     @staticmethod
+    def _form_source(job: Job) -> str:
+        """Seite, auf der das Bewerbungsformular liegen kann."""
+        apply_url = (job.apply_url or "").strip()
+        if apply_url.lower().startswith(("http://", "https://")):
+            if apply_url != (job.url or "").strip():
+                return apply_url
+        return ""
+
+    def _detect_form(self, job: Job) -> bool | None:
+        """Formular auf der Bewerbungsseite suchen (None = nicht erreichbar)."""
+        apply_url = (job.apply_url or "").strip()
+        if apply_url.lower().startswith("mailto:"):
+            # Bewerbung per E-Mail - dort gibt es kein Formular.
+            return False
+        page = self._page_texts.get((job.url or "").strip(), "")
+        if page and has_application_form(page):
+            return True
+        job_url = (job.url or "").strip()
+        source = self._form_source(job) or job_url
+        if not source.lower().startswith(("http://", "https://")):
+            return False
+        page = self._page_text(job) if source == job_url else self._page_text_for(source)
+        if not page:
+            return None
+        return has_application_form(page)
+
+    def _mark_form(self, job: Job) -> bool:
+        """Ergebnis der Formularpruefung an der Stelle vermerken."""
+        if job.form_checked:
+            return True
+        found = self._detect_form(job)
+        if found is None:
+            return False
+        if self.store.get_job(job.id) is None:
+            return False
+        self.store.update_job(job.id, has_form=int(found), form_checked=1)
+        job.has_form = found
+        job.form_checked = True
+        return True
+
+    def _check_stored_forms(self, seen: set[str], limit: int = 5) -> int:
+        """Aeltere Stellen nach und nach auf ein Formular pruefen."""
+        done = 0
+        attempts = 0
+        for row in self.store.list_jobs(limit=400):
+            if attempts >= limit:
+                break
+            job = Job.from_row(row)
+            if not job.id or job.id in seen or job.form_checked:
+                continue
+            if str(row.get("status") or "") in {"archiviert"}:
+                continue
+            attempts += 1
+            if self._mark_form(job):
+                done += 1
+        return done
+
+    @staticmethod
     def _missing_contact_fields(job: Job) -> list[str]:
         """Welche Kontaktangaben fehlen noch?"""
         return [
@@ -875,6 +981,8 @@ class Pipeline:
 
         summary.found = len(jobs)
         min_score = int(self.settings.number("matching.min_score", 2) or 2)
+        # Formularpruefung kostet je Stelle eine Seite; je Lauf begrenzt.
+        form_checks = 15
 
         for job in jobs:
             is_new = self.store.upsert_job(job, now=stamp)
@@ -923,6 +1031,9 @@ class Pipeline:
                 summary.skipped += 1
                 continue
             job = Job.from_row(stored)
+            if not job.form_checked and form_checks > 0:
+                form_checks -= 1
+                self._mark_form(job)
 
             if self.store.application_by_job(job.id) is not None:
                 continue
@@ -964,6 +1075,7 @@ class Pipeline:
             self.store.log(
                 "stelle", f"Kontaktdaten ergänzt: {completed} Stellen"
             )
+        self._check_stored_forms({job.id for job in jobs})
 
         self.store.meta_set("letzter_lauf", stamp)
         self.store.log("lauf", f"Stellensuche: {summary.as_text()}")

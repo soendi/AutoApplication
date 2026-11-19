@@ -14,6 +14,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from .text import normalize
+
 APP_DIR_NAME = "AutoApplication"
 
 DEFAULTS: dict[str, Any] = {
@@ -63,6 +65,9 @@ DEFAULTS: dict[str, Any] = {
         "page_size": 25,
         "max_pages": 3,
         "max_age_days": 45,
+        # Firmen, die nur vermitteln; in der Stellenliste ausblendbar.
+        "job_brokers": [],
+        "hide_job_brokers": False,
     },
     "matching": {
         "min_score": 2,
@@ -278,6 +283,22 @@ class Settings:
         if isinstance(raw, list):
             raw = ",".join(str(item) for item in raw)
         return [part.strip() for part in str(raw).split(",") if part.strip()]
+
+    def job_brokers(self) -> list[str]:
+        """Jobvermittler aus den Einstellungen - ohne Doppel und Leerzeilen."""
+        value = self.get("search.job_brokers", [])
+        if isinstance(value, str):
+            value = value.replace(";", "\n").replace(",", "\n").splitlines()
+        names: list[str] = []
+        seen: set[str] = set()
+        for item in value or []:
+            name = " ".join(str(item or "").split())
+            key = normalize(name)
+            if not name or key in seen:
+                continue
+            seen.add(key)
+            names.append(name)
+        return names
 
     def place_params(self) -> tuple[str, str, str]:
         place = self.text("search.place")

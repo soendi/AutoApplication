@@ -34,6 +34,10 @@ class Job:
     keywords: list[str] = field(default_factory=list)
     distance_km: float | None = None
     home_office: bool = False
+    # Auf der Bewerbungsseite stehen Eingabe- und Upload-Felder.
+    has_form: bool = False
+    # Wurde die Bewerbungsseite schon auf ein Formular geprueft?
+    form_checked: bool = False
     raw: dict[str, Any] = field(default_factory=dict)
 
     # ------------------------------------------------------------------
@@ -103,6 +107,8 @@ class Job:
             "contact_email": self.contact_email,
             "keywords": json.dumps(self.keywords, ensure_ascii=False),
             "distance_km": self.distance_km,
+            "has_form": int(self.has_form),
+            "form_checked": int(self.form_checked),
             "raw": json.dumps(self.raw, ensure_ascii=False),
         }
 
@@ -138,5 +144,7 @@ class Job:
                 float(row["distance_km"]) if row.get("distance_km") is not None else None
             ),
             home_office=bool((raw or {}).get("homeOffice")),
+            has_form=bool(row.get("has_form")),
+            form_checked=bool(row.get("form_checked")),
             raw=raw,
         )

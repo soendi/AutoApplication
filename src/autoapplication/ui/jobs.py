@@ -8,6 +8,7 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QComboBox,
     QHBoxLayout,
     QHeaderView,
@@ -22,7 +23,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core.matching import personal_match, priority_key
-from ..core.text import format_date
+from ..core.text import format_date, normalize
 from .theme import FIT_COLORS, FIT_LABELS, fit_level
 
 STATUS_LABELS = {
@@ -37,6 +38,7 @@ STATUS_LABELS = {
 
 COLUMNS = (
     "",  # Haekchen: mehrere Stellen zusammen ignorieren
+    "F",  # Bewerbungsformular
     "Datum",
     "Titel",
     "Ansprechperson",
@@ -55,7 +57,7 @@ COLUMNS = (
 CHECK_COLUMN = 0
 
 # Startbreiten; ab dem ersten Ziehen gilt, was der Benutzer eingestellt hat.
-DEFAULT_WIDTHS = (34, 85, 210, 120, 175, 160, 100, 160, 55, 70, 55, 70, 75, 95)
+DEFAULT_WIDTHS = (34, 26, 85, 210, 120, 175, 160, 100, 160, 55, 70, 55, 70, 75, 95)
 
 
 def _sort_value(item: tuple[Any, list[str], list[str]], column: int) -> Any:
@@ -64,32 +66,34 @@ def _sort_value(item: tuple[Any, list[str], list[str]], column: int) -> Any:
     if column == CHECK_COLUMN:
         return ""
     if column == 1:
+        return 1 if job.get("has_form") else 0
+    if column == 2:
         # ISO-Datum aus der Ablage sortiert richtig, auch wenn dd.mm. steht.
         return str(job.get("published") or job.get("first_seen") or "")
-    if column == 2:
-        return str(job.get("title") or "").casefold()
     if column == 3:
-        return str(job.get("contact_name") or "").casefold()
+        return str(job.get("title") or "").casefold()
     if column == 4:
-        return str(job.get("contact_email") or "").casefold()
+        return str(job.get("contact_name") or "").casefold()
     if column == 5:
-        return str(job.get("company") or "").casefold()
+        return str(job.get("contact_email") or "").casefold()
     if column == 6:
-        return str(job.get("city") or "").casefold()
+        return str(job.get("company") or "").casefold()
     if column == 7:
-        return str(job.get("street") or "").casefold()
+        return str(job.get("city") or "").casefold()
     if column == 8:
+        return str(job.get("street") or "").casefold()
+    if column == 9:
         zone = str(job.get("zip") or "")
         return int(zone) if zone.isdigit() else 0
-    if column == 9:
-        return str(job.get("workload") or "").casefold()
     if column == 10:
+        return str(job.get("workload") or "").casefold()
+    if column == 11:
         distance = job.get("distance_km")
         # Ohne Angabe steht die Zeile vorne (aufsteigend) bzw. hinten.
         return float(distance) if distance is not None else -1.0
-    if column == 11:
-        return len(interests)
     if column == 12:
+        return len(interests)
+    if column == 13:
         return len(skills)
     status = str(job.get("status") or "")
     return STATUS_LABELS.get(status, status).casefold()
@@ -124,7 +128,19 @@ class JobsPage(QWidget):
         if index >= 0:
             self.status.setCurrentIndex(index)
         self.status.blockSignals(False)
+        # Firmen aus der Jobvermittler-Liste ausblenden. Der Zustand wird
+        # beim Umschalten gespeichert und gilt beim naechsten Start wieder.
+        self.hide_brokers = QCheckBox("ohne Jobvermittler")
+        self.hide_brokers.setToolTip(
+            "Firmen aus der Liste «Jobvermittler» in der Tabelle ausblenden "
+            "(Einstellungen → Ostjob)."
+        )
+        self.hide_brokers.setChecked(
+            self.window.settings.flag("search.hide_job_brokers", False)
+        )
+        self.hide_brokers.toggled.connect(self._hide_brokers_changed)
         filters.addWidget(self.search, 1)
+        filters.addWidget(self.hide_brokers)
         filters.addWidget(self.status)
         self.search_button = QPushButton("Jetzt Stellen neu suchen")
         self.search_button.setToolTip(
@@ -171,7 +187,19 @@ class JobsPage(QWidget):
         self.open_button.clicked.connect(self.open_job)
         self.ignore_button = QPushButton("Ignorieren")
         self.ignore_button.clicked.connect(self.ignore)
-        for button in (self.prepare_button, self.open_button, self.ignore_button):
+        self.broker_button = QPushButton("Als Jobvermittler eintragen")
+        self.broker_button.setToolTip(
+            "Firma der markierten Zeile - oder aller angehakten Zeilen - in die "
+            "Liste der Jobvermittler aufnehmen. Doppelte Eintraege werden "
+            "uebersprungen."
+        )
+        self.broker_button.clicked.connect(self.mark_broker)
+        for button in (
+            self.prepare_button,
+            self.open_button,
+            self.ignore_button,
+            self.broker_button,
+        ):
             buttons.addWidget(button)
         buttons.addStretch(1)
         self.hint = QLabel("")
@@ -254,11 +282,32 @@ class JobsPage(QWidget):
         self.refresh()
 
     # ------------------------------------------------------------------
+    def _hide_brokers_changed(self, checked: bool) -> None:
+        """Haekchen sofort merken - auch ohne «Speichern» in den Einstellungen."""
+        self.window.settings.set("search.hide_job_brokers", checked)
+        try:
+            self.window.settings.save()
+        except OSError:
+            # Eine nicht schreibbare Einstellungsdatei darf die Ansicht nicht
+            # blockieren; dann gilt beim naechsten Start wieder der alte Wert.
+            pass
+        self.refresh()
+
     def refresh(self) -> None:
         status = self.status.currentData() or None
         jobs = self.window.store.list_jobs(
             status=status or None, search=self.search.text()
         )
+        if self.hide_brokers.isChecked():
+            brokers = {
+                normalize(name) for name in self.window.settings.job_brokers()
+            }
+            if brokers:
+                jobs = [
+                    job
+                    for job in jobs
+                    if normalize(str(job.get("company") or "")) not in brokers
+                ]
         interests = self.window.settings.interests()
         skills = self.window.settings.skills()
         decorated = []
@@ -307,6 +356,7 @@ class JobsPage(QWidget):
             check.setData(Qt.UserRole, job.get("id"))
             self.table.setItem(row, CHECK_COLUMN, check)
             values = (
+                "F" if job.get("has_form") else "",
                 format_date(job.get("published") or job.get("first_seen")),
                 job.get("title") or "",
                 job.get("contact_name") or "–",
@@ -328,26 +378,29 @@ class JobsPage(QWidget):
             for column, value in enumerate(values, start=CHECK_COLUMN + 1):
                 item = QTableWidgetItem(str(value))
                 item.setBackground(tint)
-                if column == 3:
+                if column == 1:
+                    if value:
+                        item.setToolTip("Bewerbungsformular")
+                elif column == 4:
                     item.setToolTip(
                         "Ansprechperson aus der Anzeige"
                         if value != "–"
                         else "Die Anzeige nennt keine Ansprechperson"
                     )
-                elif column == 4:
+                elif column == 5:
                     item.setToolTip(
                         "Bewerbungsadresse aus der Anzeige"
                         if value != "–"
                         else "Die Anzeige nennt keine E-Mail-Adresse"
                     )
-                elif column in {7, 8}:
+                elif column in {8, 9}:
                     item.setToolTip(
                         "Adresse der Firma – aus dem Portal oder von der "
                         "Firmenwebsite"
                         if value != "–"
                         else "Adresse noch nicht gefunden"
                     )
-                elif column == 11:
+                elif column == 12:
                     item.setTextAlignment(Qt.AlignCenter)
                     item.setToolTip(
                         (
@@ -360,16 +413,16 @@ class JobsPage(QWidget):
                         f"({FIT_LABELS[level]}, Schwelle {min_score})\n"
                         f"Stichworte: {job.get('keywords') or ''}"
                     )
-                elif column == 12:
+                elif column == 13:
                     item.setTextAlignment(Qt.AlignCenter)
                     item.setToolTip(
                         "Fähigkeiten in der Anzeige: " + ", ".join(found_skills)
                         if found_skills
                         else "Keine Fähigkeit aus dem Profil in der Anzeige"
                     )
-                if column in {1, 8, 9, 10, 11, 12}:
+                if column in {1, 2, 9, 10, 11, 12, 13}:
                     item.setTextAlignment(Qt.AlignCenter)
-                if column == 1:
+                if column == 2:
                     item.setData(Qt.UserRole, job.get("id"))
                 self.table.setItem(row, column, item)
             self.table.setRowHeight(row, 28)
@@ -407,6 +460,7 @@ class JobsPage(QWidget):
         )
         self.prepare_button.setEnabled(job is not None and not exists)
         self.open_button.setEnabled(bool(job and job.get("url")))
+        self.broker_button.setEnabled(job is not None or checked)
         self.ignore_button.setEnabled(checked or (job is not None and job.get("status") not in {"ignoriert", "beworben"}))
 
     # ------------------------------------------------------------------
@@ -424,6 +478,51 @@ class JobsPage(QWidget):
         if not apply_url:
             return
         self.window.open_url(apply_url)
+
+    def mark_broker(self) -> None:
+        """Firmen der markierten oder angehakten Stellen als Vermittler merken."""
+        jobs = self._checked_jobs()
+        if not jobs:
+            job = self._selected()
+            if job is None:
+                return
+            jobs = [job]
+        names = self.window.settings.job_brokers()
+        known = {normalize(name) for name in names}
+        added: list[str] = []
+        skipped = 0
+        for job in jobs:
+            company = " ".join(str(job.get("company") or "").split())
+            if not company:
+                continue
+            key = normalize(company)
+            if key in known:
+                skipped += 1
+                continue
+            known.add(key)
+            names.append(company)
+            added.append(company)
+        if not added:
+            self.window.statusBar().showMessage(
+                "Bereits als Jobvermittler eingetragen – nichts geändert.", 6000
+            )
+            return
+        self.window.settings.set("search.job_brokers", names)
+        try:
+            self.window.settings.save()
+        except OSError as exc:
+            QMessageBox.warning(
+                self, "Jobvermittler", f"Einstellungen nicht schreibbar: {exc}"
+            )
+            return
+        page = getattr(self.window, "settings_page", None)
+        if page is not None:
+            page.reload_brokers()
+        self.refresh()
+        message = f"{len(added)} als Jobvermittler eingetragen: {', '.join(added)}"
+        if skipped:
+            message += f" ({skipped} bereits vorhanden)"
+        self.window.statusBar().showMessage(message, 8000)
 
     def ignore(self) -> None:
         # Angehakte Stellen zuerst; ohne Haekchen gilt die ausgewaehlte Zeile.
