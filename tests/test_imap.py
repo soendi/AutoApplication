@@ -27,6 +27,7 @@ class FakeImap:
         self.selected = b""
         self.appended: list[tuple[bytes, bytes, bytes]] = []
         self.searches: list[tuple[bytes, ...]] = []
+        self.fetched: list[str] = []
         self.logged_out = False
 
     def login(self, user: str, password: str):
@@ -57,6 +58,19 @@ class FakeImap:
         index = int(number) - 1
         pool = self.sent if self.selected == b"[Gmail]/Sent Mail" else self.inbox
         raw = pool[index]
+        self.fetched.append(str(parts))
+        if "HEADER" in str(parts):
+            head = raw.split(b"\n\n", 1)[0] + b"\n\n"
+            return "OK", [(b"1 (BODY[HEADER] {%d}" % len(head), head), b")"]
+        if "BODYSTRUCTURE" in str(parts):
+            return "OK", [(
+                b'1 (BODYSTRUCTURE ("TEXT" "PLAIN" ("CHARSET" "UTF-8") '
+                b'NIL NIL "7BIT" 5 1 NIL NIL NIL NIL))',
+                b"",
+            )]
+        if "BODY.PEEK[" in str(parts) and "BODY.PEEK[]" not in str(parts):
+            _, _, body = raw.partition(b"\n\n")
+            return "OK", [(b"1 (BODY[1] {%d}" % len(body), body), b")"]
         return "OK", [(b"1 (BODY[] {%d}" % len(raw), raw), b")"]
 
     def logout(self):
@@ -204,28 +218,83 @@ def test_wrong_app_password_is_explained() -> None:
     assert "App-Passwort" in str(error.value)
 
 
-def test_find_sent_reads_sent_folder() -> None:
-    fake = FakeImap(sent=[_message("Bewerbung", "ich@example.com")])
+def test_bodystructure_finds_text_part_of_multipart() -> None:
+    from autoapplication.core.imap_mail import _parse_structure, _text_part
+
+    raw = (
+        b'1 (BODYSTRUCTURE (((' 
+        b'"TEXT" "PLAIN" ("CHARSET" "UTF-8") NIL NIL "7BIT" 5 1)'
+        b'("TEXT" "HTML" ("CHARSET" "UTF-8") NIL NIL "7BIT" 9 1) '
+        b'"ALTERNATIVE" NIL NIL NIL)'
+        b'("APPLICATION" "PDF" ("NAME" "a.pdf") NIL NIL "BASE64" 100) '
+        b'"MIXED" NIL NIL NIL))'
+    )
+    assert _text_part(_parse_structure(raw)) == "1.1"
+
+
+def test_bodystructure_without_text_part_has_no_number() -> None:
+    from autoapplication.core.imap_mail import _parse_structure, _text_part
+
+    raw = (
+        b'1 (BODYSTRUCTURE (("APPLICATION" "PDF" NIL NIL NIL "BASE64" 100) '
+        b'"MIXED" NIL NIL))'
+    )
+    assert _text_part(_parse_structure(raw)) == ""
+
+
+def test_sent_recent_reads_sent_folder() -> None:
+    message = EmailMessage()
+    message["From"] = "ich@example.com"
+    message["Subject"] = "Bewerbung"
+    message["Date"] = formatdate(localtime=True)
+    message["Message-ID"] = "<sent@example.com>"
+    message["X-AutoApplication-ID"] = "a" * 32
+    message["X-AutoApplication-Ref"] = "AA-7K4P-Q9XM-3TRZ"
+    message.set_content("Text")
+    fake = FakeImap(sent=[message.as_bytes()])
     client = _client(fake)
-    token = "a" * 32
-    sent = client.find_sent(token)
-    assert sent is not None
-    assert sent["conversationId"] == token
-    assert sent["subject"] == "Bewerbung"
-    assert sent["internetMessageId"] == "<abc@example.com>"
-    assert fake.searches[0][:2] == ("HEADER", "X-AutoApplication-ID")
+    sent = client.sent_recent(100)
+    assert sent[0]["conversationId"] == "a" * 32
+    assert sent[0]["tracking"] == "AA-7K4P-Q9XM-3TRZ"
+    assert sent[0]["subject"] == "Bewerbung"
+    assert sent[0]["sentDateTime"]
+    # Nur Kopfzeilen: keine volle Mail, kein Textteil, keine Anhaenge.
+    assert sent[0]["text"] == ""
+    assert not any("BODY.PEEK[]" in part for part in fake.fetched)
+    assert all("HEADER" in part for part in fake.fetched)
 
 
-def test_find_sent_ignores_foreign_tokens() -> None:
-    fake = FakeImap(sent=[_message("Bewerbung", "ich@example.com")])
+def test_sent_recent_finds_own_draft_by_headers() -> None:
+    fake = FakeImap()
     client = _client(fake)
-    assert client.find_sent("' OR 1=1 --") is None
-    assert fake.searches == []
+    client.create_draft(
+        "Bewerbung",
+        "Text",
+        to_address="hr@firma.ch",
+        tracking="AA-7K4P-Q9XM-3TRZ",
+    )
+    raw = fake.appended[-1][2]
+    sent_fake = FakeImap(sent=[raw])
+    sent = _client(sent_fake).sent_recent(100)
+    assert sent[0]["tracking"] == "AA-7K4P-Q9XM-3TRZ"
+    assert len(sent[0]["conversationId"]) == 32
+    assert sent[0]["text"] == ""
+    assert not any("BODY.PEEK[]" in part for part in sent_fake.fetched)
 
 
-def test_find_sent_returns_none_without_match() -> None:
-    client = _client(FakeImap())
-    assert client.find_sent("b" * 32) is None
+def test_sent_recent_reads_text_part_only_without_header_code() -> None:
+    message = EmailMessage()
+    message["From"] = "ich@example.com"
+    message["Subject"] = "Bewerbung"
+    message["Date"] = formatdate(localtime=True)
+    message.set_content("Kennung AA-7K4P-Q9XM-3TRZ im Text")
+    fake = FakeImap(sent=[message.as_bytes()])
+    client = _client(fake)
+    sent = client.sent_recent(100)
+    assert sent[0]["tracking"] == "AA-7K4P-Q9XM-3TRZ"
+    assert "AA-7K4P-Q9XM-3TRZ" in sent[0]["text"]
+    assert any("BODY.PEEK[1]" in part for part in fake.fetched)
+    assert not any("BODY.PEEK[]" in part for part in fake.fetched)
 
 
 def test_inbox_since_normalizes_sender_and_body() -> None:

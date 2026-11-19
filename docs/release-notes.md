@@ -1,3 +1,31 @@
+## AutoApplication 1.0.16
+
+Das Fenster öffnet auf Windows 10 zuverlässig, und der Versand folgt nur noch
+einer Regel: einer Mail im Ordner «Gesendet».
+
+### Behoben
+
+- **Fenster blieb nach der Installation zu.** Die Prüfung der
+  Windows-Texterkennung lief vor dem Fensteraufbau und konnte dort hängen. Sie
+  läuft jetzt erst nach dem Fensterstart im Hintergrund. Das Protokoll nennt
+  jeden Start, und ein Fehler beim Fensteraufbau erscheint als Meldung statt
+  als stummer Abbruch.
+
+### Geändert
+
+- **Eine Versandregel.** Nur die Prüfung der letzten 100 Mails aus «Gesendet»
+  entscheidet über den Versand – für Bewerbung und Nachfrage mit derselben
+  Karenz und derselben Grenze. Der zweite Weg über einen Einzelabruf ist
+  entfernt; ein verschwundener Entwurf allein genügt weiterhin nicht.
+- **Leichter Sent-Abruf bei Gmail.** Statt 100 vollständiger Mails werden nur
+  Kopfzeilen gelesen; der Textteil wird nur nachgeladen, wenn dort keine
+  Kennung steht. Anhänge werden nie geladen.
+
+### Neu
+
+- **Versanddatum mit Uhrzeit.** Die Spalte «Gesendet» und der
+  Nachfrage-Vermerk zeigen Datum und Uhrzeit (z. B. «19.11.2026 08:36»).
+
 ## AutoApplication 1.0.15
 
 Kontakt aus der Anzeige selbst und eine Bildauslese, die nur nutzbare Bilder

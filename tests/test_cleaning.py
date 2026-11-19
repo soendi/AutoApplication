@@ -51,3 +51,10 @@ def test_contact_person_from_ad() -> None:
     assert salutation("Frau Meier") == "Sehr geehrte Frau Meier"
     assert salutation("") == "Sehr geehrte Damen und Herren"
     assert salutation("Müller") == "Sehr geehrte Damen und Herren"
+
+
+def test_format_datetime_shows_date_and_time() -> None:
+    from autoapplication.core.text import format_datetime
+
+    assert format_datetime("2026-11-19T08:36:00") == "19.11.2026 08:36"
+    assert format_datetime("") == ""

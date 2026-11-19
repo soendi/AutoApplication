@@ -1,4 +1,4 @@
-# AutoApplication 1.0.15
+# AutoApplication 1.0.16
 
 Stellen von ostjob.ch suchen, Bewerbungen als Entwurf in Outlook oder Gmail
 vorbereiten und Antworten bis zur Zusage verfolgen – als Windows-Programm mit
@@ -44,8 +44,9 @@ stillen Updates.
    erkannt und übersprungen. Fehlt danach immer noch etwas, fragt vor dem
    Entwurf ein Fenster nach E-Mail-Adresse und Ansprechperson. Der Entwurf
    landet in Outlook oder Gmail und wird von Hand gesendet.
-5. **Versand erkennen.** Taucht die Mail in „Gesendete Elemente“ auf, steht das
-   Versanddatum in der Bewerbungstabelle.
+5. **Versand erkennen.** Nur eine Mail im Ordner „Gesendet“ (die letzten 100)
+   gilt als verschickt; dann stehen Versanddatum und Uhrzeit in der
+   Bewerbungstabelle. Ein verschwundener Entwurf allein genügt nicht.
 6. **Antworten auswerten.** Jede Bewerbung trägt eine einmalige Kennung
    (z. B. `AA-7K4P-Q9XM-3TRZ`), die im HTML-Teil der Mail unsichtbar mitreist
    (weisser Text in Schriftgrösse 0, dazu HTML-Kommentar und Mailkopf
@@ -76,13 +77,13 @@ stillen Updates.
    Bewerbung: Empfänger, Anrede, Betreff und Text sind änderbar, die
    Rechtschreibprüfung läuft beim Öffnen, und erst mit „Entwurf erstellen“
    entsteht die Mail im Mailkonto. Die Kennung der Bewerbung steht auch in der
-   Nachfrage: Verschwindet der Entwurf aus dem Entwurfsordner, vermerkt die
-   Fünf-Minuten-Prüfung die Nachfrage als verschickt; im Tab **Bewerbungen**
-   steht dann das Versanddatum in der Spalte „Fällig“.
+   Nachfrage: Erst wenn die Nachfrage im Ordner „Gesendet“ liegt, vermerkt die
+   Fünf-Minuten-Prüfung sie als verschickt; im Tab **Bewerbungen** stehen dann
+   Versanddatum und Uhrzeit in der Spalte „Fällig“.
 
 ## Installation
 
-`AutoApplication-1.0.15-Setup.exe` von der
+`AutoApplication-1.0.16-Setup.exe` von der
 [Release-Seite](https://github.com/soendi/AutoApplication/releases/latest)
 herunterladen und ausführen. Windows 10 und 11, kein Administrator- und kein
 Python-Zubehör nötig.

@@ -157,6 +157,25 @@ def format_date(value: str | None) -> str:
     return parsed.strftime("%d.%m.%Y") if parsed else ""
 
 
+def format_datetime(value: str | None) -> str:
+    """Datum und Uhrzeit einer Mail, in Ortszeit (z. B. 19.11.2026 08:36)."""
+    text = (value or "").strip()
+    if not text:
+        return ""
+    candidates = [text.replace("Z", "+00:00")]
+    if text.endswith("+0200") or text.endswith("+0100"):
+        candidates.append(f"{text[:-5]}{text[-5:-2]}:{text[-2:]}")
+    for candidate in candidates:
+        try:
+            moment = datetime.fromisoformat(candidate)
+        except ValueError:
+            continue
+        if moment.tzinfo is not None:
+            moment = moment.astimezone()
+        return moment.strftime("%d.%m.%Y %H:%M")
+    return format_date(text)
+
+
 def days_since(value: str | None, reference: date | None = None) -> int | None:
     parsed = parse_date(value)
     if parsed is None:

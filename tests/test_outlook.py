@@ -136,20 +136,14 @@ def test_create_draft_without_recipient() -> None:
     assert b"toRecipients" not in request.calls[0]["data"]
 
 
-def test_find_sent_uses_conversation() -> None:
-    request = FakeRequest([(200, {"value": [{"id": "s1", "sentDateTime": "2026-11-18T08:00:00Z"}]})])
+def test_sent_recent_reads_last_hundred() -> None:
+    request = FakeRequest([(200, {"value": [{"id": "s1"}]})])
     client = OutlookClient(_auth_with_token(), request=request)
-    sent = client.find_sent("conv'1")
-    assert sent is not None and sent["id"] == "s1"
+    assert client.sent_recent(100)[0]["id"] == "s1"
     url = urllib.parse.unquote_plus(request.calls[0]["url"])
-    assert "conversationId eq 'conv''1'" in url
-
-
-def test_find_sent_without_conversation_does_not_call() -> None:
-    request = FakeRequest([])
-    client = OutlookClient(_auth_with_token(), request=request)
-    assert client.find_sent("") is None
-    assert request.calls == []
+    assert "/me/mailFolders/sentitems/messages" in url
+    assert "$top=100" in url
+    assert "sentDateTime desc" in url
 
 
 def test_inbox_since() -> None:

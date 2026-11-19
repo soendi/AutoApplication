@@ -334,38 +334,20 @@ class OutlookClient:
                     log.warning("Anhang %s nicht angehaengt: %s", path.name, exc)
         return created
 
-    def find_sent(self, conversation_id: str) -> dict[str, Any] | None:
-        """Wurde der Entwurf verschickt? Suche im Ordner Gesendete Elemente."""
-        if not conversation_id:
-            return None
-        escaped = conversation_id.replace("'", "''")
+    def sent_recent(self, limit: int = 100) -> list[dict[str, Any]]:
+        """Die letzten Mails aus «Gesendete Elemente» (hoechstens ``limit``)."""
         body = self._call(
             "GET",
             "/me/mailFolders/sentitems/messages",
             params={
-                "$filter": f"conversationId eq '{escaped}'",
-                "$select": "id,sentDateTime,internetMessageId,conversationId,subject",
-                "$top": "1",
+                "$top": str(max(1, min(1000, int(limit)))),
+                "$orderby": "sentDateTime desc",
+                "$select": (
+                    "id,conversationId,internetMessageId,sentDateTime,subject,body"
+                ),
             },
         )
-        items = body.get("value") or []
-        return items[0] if items else None
-
-    def draft_present(self, code: str) -> bool:
-        """Steckt der Entwurf mit dieser Kennung noch im Ordner Entwuerfe?"""
-        token = (code or "").strip()
-        if not token:
-            return False
-        body = self._call(
-            "GET",
-            "/me/mailFolders/drafts/messages",
-            params={
-                "$search": f'"{token}"',
-                "$select": "id,subject",
-                "$top": "1",
-            },
-        )
-        return bool(body.get("value"))
+        return list(body.get("value") or [])
 
     def inbox_since(self, since_iso: str, top: int = 50) -> list[dict[str, Any]]:
         """Nachrichten im Posteingang ab einem Zeitpunkt."""

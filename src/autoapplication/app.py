@@ -12,6 +12,8 @@ from pathlib import Path
 from . import APP_NAME, APP_VERSION
 from .core.config import Settings, ensure_home, log_path
 
+log = logging.getLogger(__name__)
+
 
 def _configure_logging() -> None:
     ensure_home()
@@ -209,7 +211,7 @@ def main(argv: list[str] | None = None) -> int:
 
     os.environ.setdefault("QT_AUTO_SCREEN_SCALE_FACTOR", "1")
 
-    from PySide6.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication, QMessageBox
 
     from .core.config import database_path
     from .core.pipeline import Pipeline
@@ -233,8 +235,17 @@ def main(argv: list[str] | None = None) -> int:
     apply_theme(app)
 
     pipeline = Pipeline(settings, store)
-    _log_ocr_status(store)
-    window = MainWindow(settings=settings, store=store, pipeline=pipeline)
+    log.info("%s %s startet", APP_NAME, APP_VERSION)
+    try:
+        window = MainWindow(settings=settings, store=store, pipeline=pipeline)
+    except Exception as exc:  # noqa: BLE001 - Fehler sichtbar machen
+        log.exception("Fenster konnte nicht aufgebaut werden")
+        QMessageBox.critical(
+            None,
+            APP_NAME,
+            f"Das Fenster konnte nicht geöffnet werden:\n\n{exc}",
+        )
+        return 1
     pipeline.notifier = window.notify
     window.show()
 

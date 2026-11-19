@@ -87,7 +87,8 @@ class WritingAI(FakeAI):
 class FakeOutlook:
     def __init__(self) -> None:
         self.drafts: list[dict] = []
-        self.sent: dict | None = None
+        self.sent_messages: list[dict] = []
+        self.sent_limit: int | None = None
         self.messages: list[dict] = []
 
     def create_draft(
@@ -108,11 +109,9 @@ class FakeOutlook:
             "webLink": "https://outlook.test/draft",
         }
 
-    def find_sent(self, conversation_id: str):
-        return self.sent
-
-    def draft_present(self, code: str) -> bool:
-        return any(entry.get("tracking") == code for entry in self.drafts)
+    def sent_recent(self, limit: int = 100):
+        self.sent_limit = limit
+        return list(self.sent_messages)
 
     def inbox_since(self, since_iso: str, top: int = 50):
         return list(self.messages)
@@ -219,25 +218,41 @@ def test_draft_uses_known_contact_person(tmp_path) -> None:
     assert store.get_job(job.id)["contact_name"] == "Frau Meier"
 
 
-def test_sync_sent_marks_application(tmp_path) -> None:
+def test_sent_check_marks_only_once(tmp_path) -> None:
     pipeline, store, outlook, _ = _pipeline(tmp_path)
     pipeline.run_search()
     pipeline.prepare_application(MATCHING.id)
-    outlook.sent = {"id": "s1", "sentDateTime": "2026-11-18T08:15:00Z"}
-    assert pipeline.sync_sent() == 1
     application = store.list_applications()[0]
-    assert application["status"] == "gesendet"
-    assert application["sent_at"].startswith("2026-11-18")
-    assert outlook.sent is not None  # bleibt gesetzt, zweiter Lauf findet nichts Neues
-    assert pipeline.sync_sent() == 0
+    store.update_application(
+        application["id"],
+        created_at=(datetime.now(timezone.utc) - timedelta(minutes=30)).isoformat(),
+    )
+    outlook.sent_messages.append(
+        {
+            "id": "s1",
+            "conversationId": application["conversation_id"],
+            "internetMessageId": "<s1@example.test>",
+            "sentDateTime": "2026-11-18T08:15:00+00:00",
+            "subject": "Bewerbung",
+            "text": "",
+        }
+    )
+    assert pipeline.check_drafts() == 1
+    assert pipeline.check_drafts() == 0
+    stored = store.list_applications()[0]
+    assert stored["status"] == "gesendet"
+    assert stored["sent_at"].startswith("2026-11-18")
 
 
 def test_reply_rejection_archives(tmp_path) -> None:
     pipeline, store, outlook, _ = _pipeline(tmp_path)
     pipeline.run_search()
     pipeline.prepare_application(MATCHING.id)
-    outlook.sent = {"sentDateTime": "2026-11-18T08:15:00+00:00"}
-    pipeline.sync_sent()
+    store.update_application(
+        store.list_applications()[0]["id"],
+        status="gesendet",
+        sent_at="2026-11-18T08:15:00+00:00",
+    )
     outlook.messages = [
         {
             "id": "inbox1",
@@ -366,8 +381,11 @@ def test_reply_is_matched_by_tracking_code(tmp_path) -> None:
     pipeline.prepare_application(MATCHING.id)
     application = store.list_applications()[0]
     code = application["tracking"]
-    outlook.sent = {"sentDateTime": "2026-11-18T08:15:00+00:00"}
-    pipeline.sync_sent()
+    store.update_application(
+        application["id"],
+        status="gesendet",
+        sent_at="2026-11-18T08:15:00+00:00",
+    )
     # Betreff und Absender passen zu keiner Bewerbung - nur die Kennung tut es.
     outlook.messages = [
         {
@@ -530,7 +548,7 @@ def test_proofread_failure_keeps_the_text(tmp_path) -> None:
     assert pipeline.proofread("Hallo Welt") == "Hallo Welt"
 
 
-def test_draft_gone_means_sent(tmp_path) -> None:
+def test_vanished_draft_alone_is_not_sent(tmp_path) -> None:
     pipeline, store, outlook, _ = _pipeline(tmp_path)
     pipeline.run_search()
     pipeline.prepare_application(MATCHING.id)
@@ -540,18 +558,41 @@ def test_draft_gone_means_sent(tmp_path) -> None:
         created_at=(datetime.now(timezone.utc) - timedelta(minutes=30)).isoformat(),
     )
     assert application["status"] == "entwurf"
-    # Solange der Entwurf im Mailkonto liegt, bleibt der Status.
+    # Der Entwurf verschwindet, liegt aber nicht in «Gesendet»: bleibt Entwurf.
+    outlook.drafts.clear()
     assert pipeline.check_drafts() == 0
     assert store.get_application(application["id"])["status"] == "entwurf"
-    # Der Entwurf verschwindet - also wurde die Mail verschickt.
+    assert not any(event["message"].startswith("Bewerbung an") for event in store.events())
+
+
+def test_sent_folder_marks_application_sent(tmp_path) -> None:
+    pipeline, store, outlook, _ = _pipeline(tmp_path)
+    pipeline.run_search()
+    pipeline.prepare_application(MATCHING.id)
+    application = store.list_applications()[0]
+    store.update_application(
+        application["id"],
+        created_at=(datetime.now(timezone.utc) - timedelta(minutes=30)).isoformat(),
+    )
     outlook.drafts.clear()
+    # Erst die Mail im Ordner «Gesendet» zählt als Versand.
+    outlook.sent_messages.append(
+        {
+            "id": "s1",
+            "conversationId": application["conversation_id"],
+            "internetMessageId": "<m1@example.test>",
+            "sentDateTime": "2026-11-19T07:36:00+00:00",
+            "subject": "Bewerbung",
+            "text": f"Kennung {application['tracking']}",
+        }
+    )
     assert pipeline.check_drafts() == 1
     stored = store.get_application(application["id"])
     assert stored["status"] == "gesendet"
-    assert stored["sent_at"]
-    assert any(
-        "nicht mehr im Entwurf" in event["message"] for event in store.events()
-    )
+    assert stored["sent_at"] == "2026-11-19T07:36:00+00:00"
+    assert stored["internet_message_id"] == "<m1@example.test>"
+    assert outlook.sent_limit == 100
+    assert any("Gesendet" in event["message"] for event in store.events())
 
 
 def test_draft_check_needs_a_tracking_code(tmp_path) -> None:
@@ -713,15 +754,44 @@ def test_check_drafts_marks_follow_up_as_sent(tmp_path) -> None:
     assert pipeline.check_drafts() == 0
     assert not store.get_application(application_id)["follow_up_sent_at"]
 
-    # Nach dem Versand fehlt die Kennung im Entwurfsordner.
+    # Der verschwundene Entwurf allein genügt nicht.
     outlook.drafts.clear()
+    assert pipeline.check_drafts() == 0
+    application = store.get_application(application_id)
+    assert not application["follow_up_sent_at"]
+
+    # Die alte Bewerbungsmail trägt dieselbe Kennung, ist aber zu früh.
+    outlook.sent_messages.append(
+        {
+            "id": "alt",
+            "conversationId": application["conversation_id"],
+            "internetMessageId": "<alt@example.test>",
+            "sentDateTime": "2026-11-01T08:00:00+00:00",
+            "subject": "Bewerbung",
+            "text": f"Kennung {application['tracking']}",
+        }
+    )
+    assert pipeline.check_drafts() == 0
+
+    # Erst die Nachfrage selbst im Ordner «Gesendet» zählt.
+    sent_time = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    outlook.sent_messages.append(
+        {
+            "id": "f1",
+            "conversationId": application["follow_up_conversation_id"],
+            "internetMessageId": "<f1@example.test>",
+            "sentDateTime": sent_time,
+            "subject": "Nachfrage",
+            "text": "",
+        }
+    )
     assert pipeline.check_drafts() == 1
     application = store.get_application(application_id)
-    assert application["follow_up_sent_at"]
+    assert application["follow_up_sent_at"] == sent_time
     assert application["status"] == "nachgefasst"
     assert pipeline.check_drafts() == 0
     messages = [entry["message"] for entry in store.events()]
-    assert any("Nachfrage" in text and "verschickt" in text for text in messages)
+    assert any("Nachfrage" in text and "Gesendet" in text for text in messages)
 
 
 def test_check_drafts_ignores_follow_up_shortly_after_preparation(tmp_path) -> None:

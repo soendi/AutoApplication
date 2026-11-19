@@ -72,6 +72,9 @@ class MainWindow(QMainWindow):
         self._setup_tray()
         self._start_timer()
         self.refresh_all()
+        # Texterkennung erst nach dem Fensterstart prüfen: die Windows-OCR
+        # kann auf Rechnern ohne passende Sprache lange blockieren.
+        QTimer.singleShot(0, self._probe_ocr)
 
     # ------------------------------------------------------------------
     def _build_header(self) -> None:
@@ -189,6 +192,28 @@ class MainWindow(QMainWindow):
         self.draft_timer.timeout.connect(self.check_drafts)
         self.draft_timer.start()
 
+    def _probe_ocr(self) -> None:
+        """Texterkennung im Hintergrund prüfen und ins Protokoll schreiben."""
+        from ..core import ocr
+
+        def done(message: Any) -> None:
+            text = str(message or "")
+            if not text:
+                return
+            for event in self.store.events(80):
+                if event.get("kind") != "ocr":
+                    continue
+                if event.get("message") == text:
+                    return
+                break
+            self.store.log("ocr", text)
+
+        task = Task(ocr.status_line, self)
+        self._tasks.add(task)
+        task.done.connect(lambda result: (done(result), self._tasks.discard(task)))
+        task.failed.connect(lambda _message: self._tasks.discard(task))
+        task.start()
+
     # ------------------------------------------------------------------
     def refresh_all(self) -> None:
         for page in getattr(self, "pages", []):
@@ -300,7 +325,7 @@ class MainWindow(QMainWindow):
             return
 
         def work() -> tuple[int, int]:
-            sent = self.pipeline.check_drafts() + self.pipeline.sync_sent()
+            sent = self.pipeline.check_drafts()
             replies = self.pipeline.check_replies()
             return sent, len(replies)
 

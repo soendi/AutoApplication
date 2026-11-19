@@ -48,6 +48,7 @@ from .text import (
     domain_of,
     emails,
     format_date,
+    format_datetime,
     normalize,
     now_iso,
     parse_date,
@@ -66,6 +67,8 @@ STATUS_ANTWORT = INFO  # Antwort ohne Absage, Zusage oder Einladung
 # Frisch angelegte Entwuerfe erst spaeter pruefen: ein noch nicht indexierter
 # Entwurf soll nicht faelschlich als gesendet gelten.
 DRAFT_GRACE_MINUTES = 10
+# So viele Mails aus dem Ordner «Gesendet» liest die Versandpruefung.
+SENT_LOOKBACK = 100
 # Obergrenze fuer den Anzeigentext: die Seite wird nur nachgelesen, wenn der
 # Kontakt fehlt.
 PAGE_BYTES = 1_000_000
@@ -129,6 +132,20 @@ def _recent(value: str, minutes: int = DRAFT_GRACE_MINUTES) -> bool:
     if moment.tzinfo is None:
         moment = moment.replace(tzinfo=timezone.utc)
     return moment > datetime.now(timezone.utc) - timedelta(minutes=minutes)
+
+
+def _moment(value: str) -> datetime | None:
+    """ISO-Zeitstempel lesen, auch mit ``Z`` am Ende."""
+    text = (value or "").strip().replace("Z", "+00:00")
+    if not text:
+        return None
+    try:
+        moment = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return moment
 
 
 class Pipeline:
@@ -841,99 +858,101 @@ class Pipeline:
     # ------------------------------------------------------------------
     # Versand erkennen
     # ------------------------------------------------------------------
-    def sync_sent(self) -> int:
-        if not self.outlook_ready():
-            return 0
-        client = self.outlook()
-        count = 0
-        for application in self.store.list_applications(status=STATUS_ENTWURF):
-            conversation = application.get("conversation_id") or ""
-            if not conversation:
-                continue
-            try:
-                sent = client.find_sent(conversation)
-            except (OutlookError, ImapError) as exc:
-                self.store.log("fehler", f"Versandprüfung: {exc}")
-                return count
-            if not sent:
-                continue
-            sent_at = str(sent.get("sentDateTime") or now_iso())
-            self.store.update_application(
-                application["id"],
-                status=STATUS_GESENDET,
-                sent_at=sent_at,
-                internet_message_id=str(sent.get("internetMessageId") or ""),
-            )
-            self.store.log(
-                "versand",
-                f"Bewerbung an {application.get('company') or ''} wurde gesendet.",
-            )
-            self.notify(
-                "Bewerbung gesendet",
-                f"{application.get('company') or 'Firma'}: {application.get('title') or ''}",
-            )
-            count += 1
-        return count
-
     def check_drafts(self) -> int:
-        """Entwürfe prüfen: fehlt die Kennung im Entwurfsordner, gilt die
-        Bewerbung als verschickt.
+        """Versand prüfen: nur eine Mail im Ordner «Gesendet» zählt.
 
-        Die Kennung macht die Zuordnung eindeutig, auch wenn Betreff oder
-        Empfänger im Mailkonto verändert wurden.
+        Gelesen werden die letzten 100 Mails aus «Gesendet». Fehlt der Entwurf,
+        ohne dass die Mail dort auftaucht, bleibt die Bewerbung ein Entwurf.
         """
         if not self.outlook_ready():
             return 0
         client = self.outlook()
-        present = getattr(client, "draft_present", None)
-        if not callable(present):
+        try:
+            sent = self._sent_messages(client)
+        except (OutlookError, ImapError) as exc:
+            self.store.log("fehler", f"Versandprüfung: {exc}")
+            return 0
+        if sent is None:
+            # Ohne Sammelabruf gibt es keinen zweiten Weg: nichts markieren.
+            self.store.log(
+                "fehler",
+                "Versandprüfung: Das Mailkonto liefert keinen Sent-Abruf.",
+            )
             return 0
         count = 0
         for application in self.store.list_applications(status=STATUS_ENTWURF):
             code = str(application.get("tracking") or "")
-            if not code:
+            conversation = str(application.get("conversation_id") or "")
+            if not code and not conversation:
                 continue
             if _recent(str(application.get("created_at") or "")):
                 continue
-            try:
-                still_there = bool(present(code))
-            except (OutlookError, ImapError) as exc:
-                self.store.log("fehler", f"Entwurfsprüfung: {exc}")
-                return count
-            if still_there:
+            message = self._sent_entry(application, sent)
+            if message is None:
                 continue
-            sent: dict[str, Any] | None = None
-            conversation = str(application.get("conversation_id") or "")
-            if conversation:
-                try:
-                    sent = client.find_sent(conversation)
-                except (OutlookError, ImapError):
-                    sent = None
+            sent_at = str(message.get("sentDateTime") or "")
             self.store.update_application(
                 int(application["id"]),
                 status=STATUS_GESENDET,
-                sent_at=str((sent or {}).get("sentDateTime") or now_iso()),
-                internet_message_id=str((sent or {}).get("internetMessageId") or ""),
+                sent_at=sent_at or now_iso(),
+                internet_message_id=str(message.get("internetMessageId") or ""),
             )
             company = application.get("company") or "Firma"
             self.store.log(
                 "versand",
-                f"Bewerbung an {company} ist nicht mehr im Entwurf "
-                f"({code}) – als gesendet markiert.",
+                f"Bewerbung an {company} steht im Ordner Gesendet "
+                f"({code}, {format_datetime(sent_at) or sent_at}) – "
+                "als gesendet markiert.",
             )
             self.notify(
                 "Bewerbung gesendet",
                 f"{company}: {application.get('title') or ''}",
             )
             count += 1
-        count += self._check_follow_up_drafts(client, present)
+        count += self._check_follow_up_drafts(sent)
         return count
 
-    def _check_follow_up_drafts(self, client: Any, present: Any) -> int:
-        """Nachfragen mit derselben Kennung pruefen wie die Bewerbung.
+    def _sent_messages(self, client: Any) -> list[dict[str, Any]] | None:
+        """Die letzten Mails aus «Gesendet»; ``None`` ohne Sammelabruf."""
+        recent = getattr(client, "sent_recent", None)
+        if callable(recent):
+            return list(recent(SENT_LOOKBACK) or [])
+        return None
 
-        Fehlt die Kennung im Entwurfsordner, wurde die Nachfrage verschickt.
-        """
+    def _sent_entry(
+        self,
+        application: dict[str, Any],
+        sent: list[dict[str, Any]],
+        *,
+        conversation_key: str = "conversation_id",
+        not_before: str = "",
+    ) -> dict[str, Any] | None:
+        """Mail zu einer Bewerbung in «Gesendet» finden – sonst ``None``."""
+        conversation = str(application.get(conversation_key) or "")
+        code = str(application.get("tracking") or "").lower()
+        threshold = _moment(not_before)
+        for message in sent:
+            moment = _moment(str(message.get("sentDateTime") or ""))
+            if threshold is not None and moment is not None and moment < threshold:
+                continue
+            if conversation and str(message.get("conversationId") or "") == conversation:
+                return message
+        if not code:
+            return None
+        for message in sent:
+            moment = _moment(str(message.get("sentDateTime") or ""))
+            if threshold is not None and moment is not None and moment < threshold:
+                continue
+            haystack = " ".join(
+                str(message.get(key) or "")
+                for key in ("tracking", "subject", "text", "body")
+            ).lower()
+            if code in haystack:
+                return message
+        return None
+
+    def _check_follow_up_drafts(self, sent: list[dict[str, Any]]) -> int:
+        """Nachfragen gelten erst als verschickt, wenn sie in «Gesendet» liegen."""
         count = 0
         for application in self.store.list_applications():
             if str(application.get("status") or "") != STATUS_NACHGEFASST:
@@ -947,25 +966,24 @@ class Pipeline:
             if not str(application.get("follow_up_draft_id") or ""):
                 continue
             code = str(application.get("tracking") or "")
-            if not code:
+            conversation = str(application.get("follow_up_conversation_id") or "")
+            if not code and not conversation:
                 continue
             if _recent(str(application.get("follow_up_at") or "")):
                 continue
             try:
-                still_there = bool(present(code))
+                message = self._sent_entry(
+                    application,
+                    sent,
+                    conversation_key="follow_up_conversation_id",
+                    not_before=str(application.get("follow_up_at") or ""),
+                )
             except (OutlookError, ImapError) as exc:
                 self.store.log("fehler", f"Nachfrage-Prüfung: {exc}")
                 return count
-            if still_there:
+            if message is None:
                 continue
-            sent_at = now_iso()
-            conversation = str(application.get("follow_up_conversation_id") or "")
-            if conversation:
-                try:
-                    sent = client.find_sent(conversation)
-                except (OutlookError, ImapError):
-                    sent = None
-                sent_at = str((sent or {}).get("sentDateTime") or sent_at)
+            sent_at = str(message.get("sentDateTime") or now_iso())
             self.store.update_application(
                 int(application["id"]),
                 follow_up_sent_at=sent_at,
@@ -973,7 +991,7 @@ class Pipeline:
             company = application.get("company") or "Firma"
             self.store.log(
                 "versand",
-                f"Nachfrage an {company} ist nicht mehr im Entwurf "
+                f"Nachfrage an {company} steht im Ordner Gesendet "
                 f"({code}) – als verschickt vermerkt.",
             )
             self.notify(
@@ -1161,7 +1179,6 @@ class Pipeline:
         summary = self.run_search(moment)
         try:
             self.check_drafts()
-            self.sync_sent()
             if self.settings.flag("automation.check_replies", True):
                 self.check_replies()
         except (OutlookError, ImapError) as exc:

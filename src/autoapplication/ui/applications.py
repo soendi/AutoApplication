@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..core.pipeline import due_label, reply_summary
-from ..core.text import format_date, now_iso
+from ..core.text import format_date, format_datetime, now_iso
 from .flow_layout import FlowLayout
 from .theme import APPLICATION_COLOR_NAMES, APPLICATION_COLORS
 
@@ -211,7 +211,10 @@ class ApplicationSection(QWidget):
             status = str(application.get("status") or "")
             due = due_label(application, days)
             if application.get("follow_up_sent_at"):
-                due = f"Nachfrage {format_date(application.get('follow_up_sent_at'))}"
+                due = (
+                    "Nachfrage "
+                    f"{format_datetime(application.get('follow_up_sent_at'))}"
+                )
             elif application.get("follow_up_at"):
                 due = "vorbereitet"
             elif reply_summary(application):
@@ -222,7 +225,7 @@ class ApplicationSection(QWidget):
                 application.get("title") or "",
                 application.get("template_id") or "",
                 STATUS_LABELS.get(status, status),
-                format_date(application.get("sent_at")),
+                format_datetime(application.get("sent_at")),
                 due,
             )
             tint = QColor(APPLICATION_COLORS[status]) if status in APPLICATION_COLORS else None
