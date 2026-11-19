@@ -1015,3 +1015,68 @@ def test_only_complete_rows_are_skipped(tmp_path) -> None:
     assert any("nirgends" in url for url in urls)
     assert store.get_job("ostjob:komplett")["contact_tried_at"] == ""
     assert store.get_job("ostjob:offen")["contact_tried_at"]
+
+
+EXPIRED_PAGE = (
+    "<html><body><p>Das gesuchte Inserat ist abgelaufen oder wurde "
+    "deaktiviert. Unten findest du ähnliche Jobs, die für dich von "
+    "Interesse sein könnten.</p>"
+    "<p>Frau Meier, meier@beispiel.ch, Bahnhofstrasse 12, 9436 Balgach</p>"
+    "</body></html>"
+)
+
+
+def _expired_job() -> Job:
+    return Job(
+        id="ostjob:1130000",
+        source="ostjob",
+        source_id="1130000",
+        title="Speditionskaufmann",
+        company="Muster AG",
+        city="Balgach",
+        url="https://www.ostjob.ch/job/alt/1130000",
+    )
+
+
+def test_expired_advert_is_removed_from_the_store(tmp_path) -> None:
+    pipeline, store, _outlook, _ = _pipeline(
+        tmp_path, jobs=[], page_fetcher=lambda url: EXPIRED_PAGE
+    )
+    store.upsert_job(_expired_job(), now="2026-11-01T08:00:00+00:00")
+
+    assert pipeline.complete_job("ostjob:1130000") is False
+    assert store.get_job("ostjob:1130000") is None
+
+
+def test_expired_advert_leaves_an_application_alone(tmp_path) -> None:
+    pipeline, store, _outlook, _ = _pipeline(
+        tmp_path, jobs=[], page_fetcher=lambda url: EXPIRED_PAGE
+    )
+    job = _expired_job()
+    store.upsert_job(job, now="2026-11-01T08:00:00+00:00")
+    store.add_application(job.id, "spedition", "Betreff", "Text")
+
+    pipeline.complete_job("ostjob:1130000")
+    # An der Stelle haengt die Bewerbung; sie bleibt erhalten.
+    assert store.get_job("ostjob:1130000") is not None
+
+
+def test_expired_advert_during_search_is_skipped(tmp_path) -> None:
+    job = Job(
+        id="ostjob:2",
+        source="ostjob",
+        source_id="2",
+        title="Buchhalter Treuhand",
+        company="Muster AG",
+        city="Balgach",
+        description="Belege und Jahresabschluss",
+        keywords=["Buchhaltung"],
+        url="https://www.ostjob.ch/job/alt/2",
+    )
+    pipeline, store, _outlook, _ = _pipeline(
+        tmp_path, jobs=[job], page_fetcher=lambda url: EXPIRED_PAGE
+    )
+
+    summary = pipeline.run_search()
+    assert summary.found == 1
+    assert store.get_job("ostjob:2") is None

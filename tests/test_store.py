@@ -302,3 +302,12 @@ def test_upsert_fills_missing_job_fields(tmp_path) -> None:
     assert row["city"] == "Balgach"
     assert row["contact_name"] == "Frau Meier"
     assert row["contact_email"] == "hr@muster.ch"
+
+
+def test_delete_job_removes_the_row(tmp_path) -> None:
+    store = Store(tmp_path / "daten.db")
+    job = Job(id="ostjob:9", source="ostjob", source_id="9", title="Alt", company="X")
+    store.upsert_job(job)
+    assert store.delete_job("ostjob:9") is True
+    assert store.get_job("ostjob:9") is None
+    assert store.delete_job("ostjob:9") is False

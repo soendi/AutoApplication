@@ -296,6 +296,13 @@ class Store:
             )
             return True
 
+    def delete_job(self, job_id: str) -> bool:
+        """Eine Stelle aus der Ablage entfernen (Anzeige abgelaufen)."""
+        with self._db() as db:
+            cursor = db.execute("DELETE FROM jobs WHERE id = ?", (job_id,))
+            removed = cursor.rowcount
+        return removed > 0
+
     def update_job(self, job_id: str, **fields: Any) -> None:
         changes = {key: value for key, value in fields.items() if key in JOB_FIELDS}
         if not changes:

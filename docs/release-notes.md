@@ -1,3 +1,18 @@
+## AutoApplication 1.0.21
+
+Abgelaufene oder deaktivierte Anzeigen verschwinden aus der Stellenliste.
+
+### Neu
+
+- **Abgelaufene Anzeigen werden entfernt.** Meldet die Inseratseite «Das
+  gesuchte Inserat ist abgelaufen oder wurde deaktiviert», loescht
+  AutoApplication die Stelle aus der internen Datenbank. Der Seitentext wird
+  dabei verworfen, damit nicht Ansprechperson oder Adresse aus den darunter
+  vorgeschlagenen aehnlichen Jobs gelesen wird.
+- **Bewerbungen bleiben erhalten.** Haengt an der Stelle eine Bewerbung, bleibt
+  der Datensatz bestehen - dort haengen Entwurf, Versand und Antworten dran.
+  Das Protokoll vermerkt den Fall.
+
 ## AutoApplication 1.0.20
 
 Ansprechperson, E-Mail und Adresse kommen jetzt auch aus PDF-Beilaugen und

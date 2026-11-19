@@ -73,6 +73,9 @@ SENT_LOOKBACK = 100
 # Obergrenze fuer den Anzeigentext: die Seite wird nur nachgelesen, wenn der
 # Kontakt fehlt.
 PAGE_BYTES = 1_000_000
+# So meldet ostjob.ch eine Anzeige, die es nicht mehr gibt. Der Rest der
+# Meldung ("Unten findest du aehnliche Jobs ...") ist nicht Teil des Merkmals.
+EXPIRED_TEXT = "das gesuchte inserat ist abgelaufen oder wurde deaktiviert"
 # Technische Kennungen wie Sentry-IDs sehen wie Adressen aus.
 _HEX_LOCAL_RE = re.compile(r"[0-9a-f]{16,}")
 # Firmenadresse: Schweizer Postleitzahl mit Ort und Strasse mit Hausnummer.
@@ -189,6 +192,8 @@ class Pipeline:
         self._pdf_texts: dict[str, str] = {}
         # Inhalt eingebetteter Rahmen (dort steht oft die ganze Ausschreibung).
         self._frame_texts: dict[str, str] = {}
+        # Abgelaufene Anzeigen, deren Datensatz bereits entfernt wurde.
+        self._dropped: set[str] = set()
         # Zuletzt zusammengestellte Bewerbung je Stelle (fuer die Vorschau).
         self._previews: dict[str, dict[str, Any]] = {}
         # Dasselbe fuer Nachfragen, damit die Vorlage nicht doppelt laeuft.
@@ -338,13 +343,37 @@ class Pipeline:
         return self._contact_from_text(" ".join(parts), *self._contact_domains(job))
 
     def _page_text(self, job: Job) -> str:
-        """Text der Anzeigenseite - einmal je Adresse geholt."""
+        """Text der Anzeigenseite - einmal je Adresse geholt.
+
+        Meldet das Portal die Anzeige als abgelaufen oder deaktiviert, wird
+        der Datensatz aus der Ablage entfernt und der Seitentext verworfen:
+        die verbleibende Seite zeigt nur noch aehnliche Stellen.
+        """
         url = job.url or job.apply_url
         if not url:
             return ""
         if url not in self._page_texts:
             self._page_texts[url] = self._page_fetcher(url)
-        return self._page_texts[url]
+        page = self._page_texts[url]
+        if page and EXPIRED_TEXT in normalize(strip_html(page)):
+            self._drop_expired_job(job)
+            return ""
+        return page
+
+    def _drop_expired_job(self, job: Job) -> None:
+        """Abgelaufene Anzeige aus der Ablage entfernen.
+
+        Eine vorhandene Bewerbung bleibt mit ihrer Stelle erhalten - dort
+        haengt die Geschichte dran (Entwurf, Versand, Antworten).
+        """
+        if job.id in self._dropped:
+            return
+        self._dropped.add(job.id)
+        if self.store.application_by_job(job.id) is not None:
+            log.info("Anzeige abgelaufen, Bewerbung bleibt: %s", job.id)
+            return
+        if self.store.delete_job(job.id):
+            log.info("Anzeige abgelaufen oder deaktiviert, Stelle entfernt: %s", job.id)
 
     def _frame_text(self, job: Job) -> str:
         """HTML der eingebetteten Rahmen einer Anzeige - einmal geholt.
@@ -566,7 +595,7 @@ class Pipeline:
             if not person and found_person:
                 person = found_person
                 updates["contact_name"] = found_person
-            if updates:
+            if updates and self.store.get_job(job_id) is not None:
                 self.store.update_job(job_id, **updates)
                 log.info("Kontakt aus der Anzeige gelesen: %s", job_id)
         gaps: list[str] = []
@@ -622,6 +651,9 @@ class Pipeline:
                     updates["contact_email"] = address
             if person and not job.contact_name:
                 updates["contact_name"] = person
+        if self.store.get_job(job.id) is None:
+            # Die Anzeige war abgelaufen; der Datensatz ist bereits entfernt.
+            return False
         if not (job.street and job.zip):
             street, zip_code = self._lookup_address(job)
             if not (street and zip_code):
@@ -842,8 +874,11 @@ class Pipeline:
             # Datensatz vollstaendig ist - auch bei Stellen ohne Passung.
             self._complete_job(job)
             stored = self.store.get_job(job.id)
-            if stored:
-                job = Job.from_row(stored)
+            if stored is None:
+                # Anzeige war abgelaufen oder deaktiviert und ist entfernt.
+                summary.skipped += 1
+                continue
+            job = Job.from_row(stored)
 
             if self.store.application_by_job(job.id) is not None:
                 continue
