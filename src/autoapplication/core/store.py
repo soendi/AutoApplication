@@ -33,6 +33,8 @@ JOB_FIELDS = {
     "template_id",
     "contact_email",
     "contact_name",
+    "contact_tried_at",
+    "contact_tried_for",
     "last_seen",
 }
 
@@ -85,6 +87,8 @@ CREATE TABLE IF NOT EXISTS jobs (
     template_id TEXT NOT NULL DEFAULT '',
     contact_email TEXT NOT NULL DEFAULT '',
     contact_name TEXT NOT NULL DEFAULT '',
+    contact_tried_at TEXT NOT NULL DEFAULT '',
+    contact_tried_for TEXT NOT NULL DEFAULT '',
     raw TEXT NOT NULL DEFAULT '{}'
 );
 CREATE TABLE IF NOT EXISTS applications (
@@ -158,6 +162,16 @@ class Store:
             )
         if "street" not in columns:
             db.execute("ALTER TABLE jobs ADD COLUMN street TEXT NOT NULL DEFAULT ''")
+        if "contact_tried_at" not in columns:
+            # Wann zuletzt ohne Ergebnis nach Kontaktdaten gesucht wurde.
+            db.execute(
+                "ALTER TABLE jobs ADD COLUMN contact_tried_at TEXT NOT NULL DEFAULT ''"
+            )
+        if "contact_tried_for" not in columns:
+            # Welche Angaben damals schon fehlten - dafuer nicht neu suchen.
+            db.execute(
+                "ALTER TABLE jobs ADD COLUMN contact_tried_for TEXT NOT NULL DEFAULT ''"
+            )
         app_columns = {
             row["name"] for row in db.execute("PRAGMA table_info(applications)")
         }

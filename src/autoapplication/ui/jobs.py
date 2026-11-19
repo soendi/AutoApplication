@@ -126,6 +126,12 @@ class JobsPage(QWidget):
         self.status.blockSignals(False)
         filters.addWidget(self.search, 1)
         filters.addWidget(self.status)
+        self.search_button = QPushButton("Jetzt Stellen neu suchen")
+        self.search_button.setToolTip(
+            "Neue Anzeigen von ostjob.ch holen; bekannte Stellen bleiben stehen."
+        )
+        self.search_button.clicked.connect(self.window.run_search)
+        filters.addWidget(self.search_button)
         layout.addLayout(filters)
 
         self.table = QTableWidget(0, len(COLUMNS))

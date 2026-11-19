@@ -502,19 +502,52 @@ class Pipeline:
     # ------------------------------------------------------------------
     # Datensaetze vervollstaendigen
     # ------------------------------------------------------------------
-    def complete_job(self, job_id: str) -> bool:
-        """Eine gespeicherte Stelle um fehlende Kontaktdaten ergaenzen."""
+    def complete_job(self, job_id: str, *, retry: bool = False) -> bool:
+        """Eine gespeicherte Stelle um fehlende Kontaktdaten ergaenzen.
+
+        ``retry`` erzwingt einen neuen Versuch, auch wenn fuer die Luecken
+        schon einmal ohne Ergebnis gesucht wurde.
+        """
         row = self.store.get_job(job_id)
         if row is None:
             return False
-        return self._complete_job(Job.from_row(row))
+        return self._complete_job(
+            Job.from_row(row),
+            tried=str(row.get("contact_tried_for") or ""),
+            retry=retry,
+        )
 
-    def _complete_job(self, job: Job) -> bool:
+    @staticmethod
+    def _missing_contact_fields(job: Job) -> list[str]:
+        """Welche Kontaktangaben fehlen noch?"""
+        return [
+            key
+            for key, value in (
+                ("contact_email", job.contact_email),
+                ("contact_name", job.contact_name),
+                ("street", job.street),
+                ("zip", job.zip),
+            )
+            if not value
+        ]
+
+    def _complete_job(
+        self, job: Job, *, tried: str = "", retry: bool = False
+    ) -> bool:
         """Name, E-Mail und Adresse nachschauen, soweit sie fehlen.
 
         Gelesen wird nur, was Anzeige, Portal oder Firmenseite klar hergeben;
-        geraten wird nichts, und vorhandene Angaben bleiben stehen.
+        geraten wird nichts, und vorhandene Angaben bleiben stehen. Ein
+        erfolgloser Versuch wird gemerkt, damit derselbe Datensatz nicht bei
+        jedem Lauf erneut im Netz gesucht wird.
         """
+        missing = self._missing_contact_fields(job)
+        if not missing:
+            return False
+        attempted = {part for part in (tried or "").split(",") if part}
+        if not retry and set(missing) <= attempted:
+            # Fuer genau diese Luecken wurde schon ohne Ergebnis gesucht.
+            return False
         updates: dict[str, Any] = {}
         if not (job.contact_email and job.contact_name):
             address, person = self._find_contact(job)
@@ -531,9 +564,25 @@ class Pipeline:
                 updates["street"] = street
             if zip_code and not job.zip:
                 updates["zip"] = zip_code
+        values = {
+            "contact_email": job.contact_email,
+            "contact_name": job.contact_name,
+            "street": job.street,
+            "zip": job.zip,
+        }
+        values.update(updates)
+        # Auch ein Fehlversuch wird vermerkt: dieselbe Luecke wird nicht bei
+        # jedem Lauf erneut im Netz gesucht.
+        self.store.update_job(
+            job.id,
+            contact_tried_at=now_iso(),
+            contact_tried_for=",".join(
+                key for key, value in values.items() if not value
+            ),
+            **updates,
+        )
         if not updates:
             return False
-        self.store.update_job(job.id, **updates)
         log.info(
             "Stelle vervollstaendigt: %s (%s)", job.id, ", ".join(sorted(updates))
         )
@@ -555,7 +604,9 @@ class Pipeline:
                 for key in ("contact_email", "contact_name", "street", "zip")
             ):
                 continue
-            if self._complete_job(Job.from_row(row)):
+            if self._complete_job(
+                Job.from_row(row), tried=str(row.get("contact_tried_for") or "")
+            ):
                 done += 1
         return done
 
@@ -720,7 +771,7 @@ class Pipeline:
 
             # Adresse, E-Mail und Ansprechperson gleich mitnehmen, damit der
             # Datensatz vollstaendig ist - auch bei Stellen ohne Passung.
-            self._complete_job(job)
+            self._complete_job(job, tried=str(known.get("contact_tried_for") or ""))
             stored = self.store.get_job(job.id)
             if stored:
                 job = Job.from_row(stored)

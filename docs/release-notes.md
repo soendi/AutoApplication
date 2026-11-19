@@ -1,3 +1,28 @@
+## AutoApplication 1.0.19
+
+Stellensuche direkt aus der Stellenliste, und erfolglose Kontaktsuchen bremsen
+den Abruf nicht mehr.
+
+### Neu
+
+- **«Jetzt Stellen neu suchen» im Tab Stellen.** Der Knopf steht neben dem
+  Statusfilter und startet denselben Ablauf wie in der Übersicht: neue Anzeigen
+  von ostjob.ch holen, auswerten und die Liste auffüllen. Bekannte Stellen
+  bleiben erhalten; ist die Stellen-API ausgeschaltet, führt der Weg wie
+  gewohnt zu den Einstellungen.
+
+### Geändert
+
+- **Fehlversuche werden gemerkt.** Findet AutoApplication für eine Stelle weder
+  Ansprechperson noch E-Mail oder Adresse, wird das mit Zeitpunkt und den
+  offenen Angaben vermerkt. Beim nächsten Lauf entfällt dafür der Netzzugriff,
+  statt dieselbe hoffnungslose Stelle erneut Homepage, Impressum und
+  Kontaktseite abfragen zu lassen. Die 15 Nachzieh-Plätze je Lauf gehen so an
+  Datensätze, bei denen noch etwas zu holen ist.
+- Teilweise ergänzte Datensätze behalten die gefundenen Werte; nur die
+  verbliebenen Lücken gelten als versucht. Ein ausdrücklicher neuer Versuch
+  (`retry`) ist weiterhin möglich, wenn eine Firma ihre Seite später ergänzt.
+
 ## AutoApplication 1.0.18
 
 Antworten lassen sich von Hand einteilen, mehrere Stellen auf einmal ignorieren,

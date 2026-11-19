@@ -311,3 +311,54 @@ def test_complete_job_keeps_existing_values(tmp_path) -> None:
     assert row["contact_name"] == "Frau Meier"
     assert row["street"] == "Bahnhofstrasse 12"
     assert row["zip"] == "9436"
+
+
+def test_failed_lookup_is_remembered_and_not_repeated(tmp_path) -> None:
+    job = _image_job(
+        contact_email="",
+        description="Disposition, Transport und Zoll",
+        raw={"company": {"homepage": "https://muster-logistik.ch"}},
+    )
+    settings = Settings(tmp_path / "einstellungen.json")
+    store = Store(tmp_path / "daten.db")
+    store.upsert_job(job)
+    calls: list[str] = []
+
+    def fetch(url: str) -> str:
+        calls.append(url)
+        return ""
+
+    pipeline = Pipeline(
+        settings,
+        store,
+        ai_client=FakeAI(),
+        templates_file=tmp_path / "vorlagen.json",
+        page_fetcher=fetch,
+    )
+    assert pipeline.complete_job("ostjob:77") is False
+    assert calls, "der erste Versuch soll im Netz suchen"
+    row = store.get_job("ostjob:77")
+    assert row["contact_tried_at"]
+    assert set(row["contact_tried_for"].split(",")) == {
+        "contact_email",
+        "contact_name",
+        "street",
+        "zip",
+    }
+
+    # Zweiter Lauf: derselbe Fehlversuch wird nicht wiederholt.
+    first_round = len(calls)
+    assert pipeline.complete_job("ostjob:77") is False
+    assert len(calls) == first_round
+
+    # Ein ausdruecklicher neuer Versuch darf wieder suchen; frische Instanz,
+    # damit der Zwischenspeicher des ersten Laufs nicht hilft.
+    second = Pipeline(
+        settings,
+        store,
+        ai_client=FakeAI(),
+        templates_file=tmp_path / "vorlagen.json",
+        page_fetcher=fetch,
+    )
+    assert second.complete_job("ostjob:77", retry=True) is False
+    assert len(calls) > first_round

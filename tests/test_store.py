@@ -255,3 +255,19 @@ def test_latest_reply_can_be_classified_afterwards(tmp_path) -> None:
     # Zugeordnet heisst: kein Blinken mehr, auch wenn die Mail ungelesen ist.
     assert store.unclassified_by_application() == {}
     assert store.unseen_total() == 1
+
+
+def test_job_remembers_failed_contact_lookups(tmp_path) -> None:
+    store = Store(tmp_path / "daten.db")
+    job = Job(id="ostjob:5", source="ostjob", source_id="5", title="T", company="C")
+    store.upsert_job(job)
+    assert store.get_job("ostjob:5")["contact_tried_for"] == ""
+    assert store.get_job("ostjob:5")["contact_tried_at"] == ""
+    store.update_job(
+        "ostjob:5",
+        contact_tried_at="2026-11-19T08:00:00+00:00",
+        contact_tried_for="zip",
+    )
+    row = store.get_job("ostjob:5")
+    assert row["contact_tried_for"] == "zip"
+    assert row["contact_tried_at"].startswith("2026-11-19")
