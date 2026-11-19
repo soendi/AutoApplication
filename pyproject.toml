@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "autoapplication"
-version = "1.0.14"
+version = "1.0.15"
 description = "Stellen suchen, Bewerbungen vorbereiten und Antworten verfolgen"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -22,7 +22,7 @@ autoapplication = "autoapplication.app:main"
 package-dir = { "" = "src" }
 
 [tool.setuptools.package-data]
-autoapplication = ["data/*.json"]
+autoapplication = ["data/*.json", "data/*.png"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

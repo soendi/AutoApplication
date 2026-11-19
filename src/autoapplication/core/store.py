@@ -36,6 +36,7 @@ JOB_FIELDS = {
 }
 
 APPLICATION_FIELDS = {
+    "created_at",
     "tracking",
     "status",
     "sent_at",
@@ -43,6 +44,7 @@ APPLICATION_FIELDS = {
     "reply_kind",
     "reply_note",
     "follow_up_at",
+    "follow_up_sent_at",
     "archived_at",
     "draft_id",
     "conversation_id",
@@ -101,6 +103,7 @@ CREATE TABLE IF NOT EXISTS applications (
     reply_kind TEXT NOT NULL DEFAULT '',
     reply_note TEXT NOT NULL DEFAULT '',
     follow_up_at TEXT NOT NULL DEFAULT '',
+    follow_up_sent_at TEXT NOT NULL DEFAULT '',
     follow_up_subject TEXT NOT NULL DEFAULT '',
     follow_up_body TEXT NOT NULL DEFAULT '',
     follow_up_draft_id TEXT NOT NULL DEFAULT '',
@@ -116,7 +119,9 @@ CREATE TABLE IF NOT EXISTS replies (
     sender TEXT NOT NULL DEFAULT '',
     subject TEXT NOT NULL DEFAULT '',
     kind TEXT NOT NULL DEFAULT '',
-    snippet TEXT NOT NULL DEFAULT ''
+    snippet TEXT NOT NULL DEFAULT '',
+    body TEXT NOT NULL DEFAULT '',
+    seen INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -155,6 +160,27 @@ class Store:
         if "tracking" not in app_columns:
             db.execute(
                 "ALTER TABLE applications ADD COLUMN tracking TEXT NOT NULL DEFAULT ''"
+            )
+        if "follow_up_sent_at" not in app_columns:
+            db.execute(
+                "ALTER TABLE applications ADD COLUMN follow_up_sent_at "
+                "TEXT NOT NULL DEFAULT ''"
+            )
+        reply_columns = {
+            row["name"] for row in db.execute("PRAGMA table_info(replies)")
+        }
+        if "body" not in reply_columns:
+            # Ganze Antwort speichern, damit sie sich im Fenster lesen laesst.
+            db.execute("ALTER TABLE replies ADD COLUMN body TEXT NOT NULL DEFAULT ''")
+        if "seen" not in reply_columns:
+            db.execute("ALTER TABLE replies ADD COLUMN seen INTEGER NOT NULL DEFAULT 0")
+        if "reply_kind" in app_columns:
+            # Frueher blieb eine blosse Antwort ohne eigenen Status; der Filter
+            # «Antwort» lief deshalb ins Leere. Alte Bewerbungen nachziehen.
+            db.execute(
+                "UPDATE applications SET status = 'info' "
+                "WHERE reply_kind = 'info' "
+                "AND status IN ('gesendet', 'nachgefasst')"
             )
 
     # ------------------------------------------------------------------
@@ -447,17 +473,55 @@ class Store:
         subject: str,
         kind: str,
         snippet: str,
+        body: str = "",
     ) -> bool:
         with self._db() as db:
             cursor = db.execute(
                 """
                 INSERT OR IGNORE INTO replies (
-                    application_id, message_id, received_at, sender, subject, kind, snippet
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    application_id, message_id, received_at, sender, subject, kind,
+                    snippet, body
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (application_id, message_id, received_at, sender, subject, kind, snippet),
+                (
+                    application_id,
+                    message_id,
+                    received_at,
+                    sender,
+                    subject,
+                    kind,
+                    snippet,
+                    body,
+                ),
             )
             return cursor.rowcount > 0
+
+    def unseen_by_application(self) -> dict[int, int]:
+        """Anzahl noch nicht angesehener Antworten je Bewerbung."""
+        with self._db() as db:
+            rows = db.execute(
+                "SELECT application_id, COUNT(*) AS number FROM replies "
+                "WHERE seen = 0 GROUP BY application_id"
+            ).fetchall()
+        return {int(row["application_id"]): int(row["number"]) for row in rows}
+
+    def reply_counts(self) -> dict[int, int]:
+        """Anzahl Antworten je Bewerbung (gesehen und ungelesen)."""
+        with self._db() as db:
+            rows = db.execute(
+                "SELECT application_id, COUNT(*) AS number FROM replies "
+                "GROUP BY application_id"
+            ).fetchall()
+        return {int(row["application_id"]): int(row["number"]) for row in rows}
+
+    def mark_replies_seen(self, application_id: int) -> int:
+        """Antworten einer Bewerbung als gelesen markieren."""
+        with self._db() as db:
+            cursor = db.execute(
+                "UPDATE replies SET seen = 1 WHERE application_id = ? AND seen = 0",
+                (application_id,),
+            )
+            return cursor.rowcount
 
     def replies_for(self, application_id: int) -> list[dict[str, Any]]:
         with self._db() as db:

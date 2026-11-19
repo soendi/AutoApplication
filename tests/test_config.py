@@ -108,3 +108,12 @@ def test_excluded_and_cantons(tmp_path) -> None:
     assert settings.excluded_terms() == ["Lehre", "Praktikum", "KV"]
     settings.set("search.cantons", "St. Gallen, Thurgau")
     assert settings.canton_filter() == ["St. Gallen", "Thurgau"]
+
+
+def test_profile_has_a_werdegang_with_stations(tmp_path) -> None:
+    settings = Settings(tmp_path / "e.json").load()
+    werdegang = settings.text("profile.werdegang")
+    assert "Keller & Dürr Kassensysteme AG" in werdegang
+    assert "Escatec Switzerland AG" in werdegang
+    assert "Schenker Schweiz AG" in werdegang
+    assert werdegang.count("\n") >= 4

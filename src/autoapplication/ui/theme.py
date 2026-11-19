@@ -7,6 +7,57 @@ from PySide6.QtWidgets import QApplication
 
 ACCENT = "#4d8dff"
 
+# Passungsfarben fuer die Stellenliste. Der Text bleibt hell, deshalb dunkle
+# Toene mit genug Kontrast.
+FIT_COLORS = {
+    "gut": "#24513a",
+    "mittel": "#5a4d16",
+    "schwach": "#6b3a16",
+    "kein": "#5c2326",
+}
+FIT_LABELS = {
+    "gut": "passt gut",
+    "mittel": "weniger gut",
+    "schwach": "noch weniger gut",
+    "kein": "passt gar nicht",
+}
+
+# Farben der Bewerbungen nach Status:
+# Entwurf weiss/neutral, Gesendet gruen, Nachgefragt orange,
+# Antwort orange, Einladung und Zusage gruen, Absage rot, Archiviert grau.
+APPLICATION_COLORS = {
+    "entwurf": "#2a2e36",
+    "gesendet": FIT_COLORS["gut"],
+    "nachgefasst": FIT_COLORS["schwach"],
+    "info": FIT_COLORS["schwach"],
+    "zusage": FIT_COLORS["gut"],
+    "einladung": FIT_COLORS["gut"],
+    "absage": FIT_COLORS["kein"],
+    "archiviert": "#3b414b",
+}
+APPLICATION_COLOR_NAMES = {
+    "entwurf": "Entwurf (weiss)",
+    "gesendet": "Gesendet (grün)",
+    "nachgefasst": "Nachgefragt (orange)",
+    "info": "Antwort (orange)",
+    "zusage": "Zusage Stelle (grün)",
+    "einladung": "Einladung Gespräch (grün)",
+    "absage": "Absage (rot)",
+    "archiviert": "Archiviert (grau)",
+}
+
+
+def fit_level(score: int, min_score: int) -> str:
+    """Passung einordnen - von deutlich über der Schwelle bis kein Treffer."""
+    threshold = max(1, int(min_score))
+    if score >= threshold + 1:
+        return "gut"
+    if score >= threshold:
+        return "mittel"
+    if score >= 1:
+        return "schwach"
+    return "kein"
+
 STYLESHEET = """
 QMainWindow, QDialog { background: #14161b; }
 QWidget { color: #e6e8ec; }

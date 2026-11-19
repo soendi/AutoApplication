@@ -280,6 +280,16 @@ class GmailImapClient:
             "subject": str(message.get("Subject") or ""),
         }
 
+    def draft_present(self, code: str) -> bool:
+        """Steckt der Entwurf mit dieser Kennung noch im Entwuerfe-Ordner?"""
+        token = (code or "").strip()
+        if not re.fullmatch(r"AA-[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}", token):
+            return False
+        with self._imap() as connection:
+            drafts = self._folder(connection, b"\\Drafts")
+            connection.select(drafts, readonly=True)
+            return bool(self._search(connection, "TEXT", f'"{token}"'))
+
     # ------------------------------------------------------------------
     def inbox_since(self, since_iso: str, top: int = INBOX_LIMIT) -> list[dict[str, Any]]:
         """Nachrichten im Posteingang ab einem Zeitpunkt."""

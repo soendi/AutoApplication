@@ -48,7 +48,8 @@ class TemplatesPage(QWidget):
             "Titel steht oder deutlich mehr Stichworte in der Anzeige "
             "vorkommen. Platzhalter: {anrede} (Herr/Frau mit Nachname, sonst "
             "allgemein), {ansprechperson}, {titel}, {firma}, {ort}, {pensum}, "
-            "{stellen_id}, {vorname}, {nachname}, {erfahrung}, {verfuegbar}."
+            "{stellen_id}, {vorname}, {nachname}, {erfahrung}, "
+            "{erfahrung_spedition}, {verfuegbar}."
         )
         hint.setWordWrap(True)
         hint.setObjectName("Hint")

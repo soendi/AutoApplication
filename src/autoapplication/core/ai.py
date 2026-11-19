@@ -135,6 +135,26 @@ ABSAGE_PHRASES = (
     "absehen",
 )
 
+# Feste Stellenzusage: Vertrag, Einstellung, Stellenangebot.
+FESTE_ZUSAGE_PHRASES = (
+    "arbeitsvertrag",
+    "vertragsentwurf",
+    "vertragsunterlagen",
+    "vertrag zugesandt",
+    "stellen wir sie ein",
+    "wir moechten sie einstellen",
+    "wir möchten sie einstellen",
+    "willkommen im team",
+    "herzlichen glueckwunsch",
+    "herzlichen glückwunsch",
+    "wir freuen uns, ihnen mitzuteilen",
+    "ihnen eine stelle anbieten",
+    "bieten wir ihnen eine stelle",
+    "feste zusage",
+    "verbindliche zusage",
+    "einstellung zugesagt",
+)
+
 ZUSAGE_PHRASES = (
     "zusage",
     "herzlichen glueckwunsch",
@@ -163,6 +183,19 @@ EINLADUNG_PHRASES = (
     "termin vereinbaren",
     "terminvorschlag",
     "interview",
+    "zusage zum gespraech",
+    "termin am",
+    "termin um",
+    "termin bestaetigen",
+    "termin bestätigen",
+    "bestaetigen sie den termin",
+    "bestaetigen sie bitte den termin",
+    "gespraech am",
+    "gespraech um",
+    "zusage zum vorstellungsgespraech",
+    "zu einem kennenlernen",
+    "einladen wir sie",
+    "wir laden sie ein",
     "zu einem gespraech",
     "zu einem gespräch",
     "persoenlich vorstellen",
@@ -178,6 +211,7 @@ def classify_local(subject: str, body: str) -> str:
     """Antwort ohne KI einordnen - Absage zuerst, dann Zusage, dann Einladung."""
     haystack = normalize(f"{subject} {strip_html(body)}")
     absage = _score_phrases(haystack, ABSAGE_PHRASES)
+    fest = _score_phrases(haystack, FESTE_ZUSAGE_PHRASES)
     zusage = _score_phrases(haystack, ZUSAGE_PHRASES)
     einladung = _score_phrases(haystack, EINLADUNG_PHRASES)
 
@@ -185,10 +219,15 @@ def classify_local(subject: str, body: str) -> str:
     # braucht deshalb mindestens zwei Formulierungen oder ein klares Wort.
     if absage >= 2 or "absage" in haystack or "abgelehnt" in haystack:
         return ABSAGE
-    if zusage >= 1:
+    # Ein Terminwunsch bleibt eine Einladung, auch wenn das Wort "Zusage"
+    # faellt ("Danke fuer Ihre Zusage zum Gespraech"). Erst Vertrag oder
+    # feste Einstellung machen daraus eine Zusage.
+    if fest >= 1:
         return ZUSAGE
     if einladung >= 1:
         return EINLADUNG
+    if zusage >= 1:
+        return ZUSAGE
     return INFO
 
 
@@ -362,6 +401,23 @@ class AiClient:
             log.info("KI-Auslesen der Anzeige fehlgeschlagen (%s) - lokal weiter", exc)
             return local
 
+    def proofread(self, text: str) -> str:
+        """Rechtschreibung und Grammatik korrigieren, Inhalt unverändert.
+
+        Ohne eingerichtete KI kommt der Text unverändert zurück.
+        """
+        value = (text or "").strip()
+        if not value or not self.available():
+            return text
+        system = (
+            "Du korrigierst deutsche Texte: Rechtschreibung, Grammatik und "
+            "Zeichensetzung. Inhalt, Anrede, Namen, Zahlen und der Aufbau mit "
+            "Zeilenumbrüchen bleiben unverändert. Antworte nur mit dem "
+            "korrigierten Text, ohne Kommentar und ohne Anführungszeichen."
+        )
+        corrected = self._chat(system, value, temperature=0.0).strip()
+        return corrected or text
+
     def write_application(
         self,
         template: Template,
@@ -389,14 +445,22 @@ class AiClient:
             "hoeflichen Schlussformel. Erfinde keine Abschluesse, Zeugnisse oder "
             "Berufsjahre. Keine Gendermarken wie (m/w/d) oder (gn*), keine IDs, "
             "keine Platzhalter in geschweiften Klammern."
+            "\n\nFirmen und Zeitraeume stammen ausschliesslich aus dem Werdegang "
+            "des Bewerbers unten. Nenne nur Stationen, die dort stehen, "
+            "uebernimm Schreibweise und Jahre unveraendert und erfinde keine "
+            "Firma, keinen Zeitraum und keine Aufgabe."
         )
         content = (
             f"Bewerber: {name or '-'}\n"
             f"Wohnort: {profile.get('wohnort') or '-'}\n"
-            f"Erfahrung: {profile.get('erfahrung_jahre') or '-'}\n"
+            f"Erfahrung gesamt: {profile.get('erfahrung_jahre') or '-'}\n"
+            f"Erfahrung in Spedition und Export: "
+            f"{profile.get('erfahrung_spedition') or '-'}\n"
             f"Verfuegbar: {profile.get('verfuegbar') or '-'}\n"
             f"Faehigkeiten: {', '.join(self.settings.skills()) or '-'}\n"
-            f"Interessen: {', '.join(self.settings.interests()) or '-'}\n\n"
+            f"Interessen: {', '.join(self.settings.interests()) or '-'}\n"
+            f"Werdegang (Stationen mit Zeitraum und Aufgabe):\n"
+            f"{profile.get('werdegang') or '-'}\n\n"
             f"Stelle: {digest.title}\n"
             f"Firma: {job.company}\n"
             f"Ort: {job.city}\n"
@@ -440,14 +504,18 @@ class AiClient:
             "Anforderungen mit den Faehigkeiten des Bewerbers und endet mit "
             "einer Schlussformel und dem Namen. Rund 250 bis 350 Woerter, "
             "sachlich und ohne Floskeln. Keine Gendermarken, keine IDs, keine "
-            "Platzhalter, keine erfundenen Abschluesse."
+            "Platzhalter, keine erfundenen Abschluesse. Firmen und Zeitraeume "
+            "stammen ausschliesslich aus dem Werdegang des Bewerbers unten; "
+            "erfinde keine Station, keinen Zeitraum und keine Aufgabe."
         )
         content = (
             f"Bewerber: {name or '-'}\n"
             f"Wohnort: {profile.get('wohnort') or '-'}\n"
             f"Verfuegbar: {profile.get('verfuegbar') or '-'}\n"
             f"Faehigkeiten: {', '.join(self.settings.skills()) or '-'}\n"
-            f"Interessen: {', '.join(self.settings.interests()) or '-'}\n\n"
+            f"Interessen: {', '.join(self.settings.interests()) or '-'}\n"
+            f"Werdegang (Stationen mit Zeitraum und Aufgabe):\n"
+            f"{profile.get('werdegang') or '-'}\n\n"
             f"Stelle: {digest.title}\n"
             f"Firma: {job.company}\n"
             f"Ansprechperson: {digest.contact_name or '-'}\n"
@@ -503,19 +571,43 @@ class AiClient:
             log.info("KI-Stichworte fehlgeschlagen (%s) - lokal weiter", exc)
         return local_keywords(job, vocabulary)
 
-    def classify(self, subject: str, body: str, sender: str = "") -> str:
+    def classify(
+        self,
+        subject: str,
+        body: str,
+        sender: str = "",
+        context: str = "",
+    ) -> str:
         """Antwort als absage, zusage, einladung, info oder unbekannt einordnen."""
         if not self.available():
             return classify_local(subject, body)
         system = (
-            "Du liest Antworten von Firmen auf Bewerbungen. Antworte nur mit "
-            "einem JSON-Objekt der Form "
+            "Du liest die Antwort einer Firma auf eine Bewerbung und ordnest "
+            "sie ein. Antworte nur mit einem JSON-Objekt der Form "
             '{"art": "absage|zusage|einladung|info|unbekannt"}. '
-            "absage = Bewerbung abgelehnt, zusage = Stelle angeboten, "
-            "einladung = Gespraech oder Termin gewuenscht, info = sonstiges."
+            "zusage = die Stelle ist verbindlich zugesagt: Arbeitsvertrag oder "
+            "Vertragsentwurf, feste Einstellungszusage, mit Stellenantritt, "
+            "Pensum oder Lohn. "
+            "einladung = Einladung zu einem Vorstellungsgespraech, Kennenlernen, "
+            "Interview, Telefonat oder Assessment, oder die Bitte, einen Termin "
+            "zu vereinbaren. "
+            "absage = die Bewerbung wird abgelehnt. "
+            "info = alles andere, etwa Eingangsbestaetigung, Rueckfrage oder "
+            "Zwischenstand ohne Termin und ohne Entscheid. "
+            "Wichtig: Ein Gespraechstermin ist immer eine einladung, auch wenn "
+            "die Mail das Wort Zusage enthaelt (\"Zusage zum "
+            "Vorstellungsgespraech\") oder sich sehr freundlich ueber die "
+            "Bewerbung aeussert. Eine zusage nur dann, wenn die Anstellung "
+            "selbst zugesagt ist, nicht bloss ein Termin oder ein Kennenlernen. "
+            "Wenn Merkmale beider Arten vorkommen, entscheide nach dem, was die "
+            "Mail tatsaechlich verlangt: Termin vereinbaren = einladung, "
+            "Vertrag unterschreiben = zusage."
         )
         content = (
-            f"Absender: {sender}\nBetreff: {subject}\n\n{strip_html(body)[:4000]}"
+            f"Absender: {sender or '-'}\n"
+            f"Betreff: {subject or '-'}\n"
+            f"Bezug: {context or '-'}\n\n"
+            f"Antwort der Firma:\n{strip_html(body)[:6000]}"
         )
         try:
             raw = self._chat(system, content, temperature=0.0)

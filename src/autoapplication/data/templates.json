@@ -1,11 +1,11 @@
 {
-  "version": 3,
+  "version": 4,
   "templates": [
     {
       "id": "spedition",
       "name": "Spedition und Logistik",
       "description": "Bewerbung mit Bezug auf die bisherige Arbeit in Spedition, Export und Transportlogistik.",
-      "revision": 3,
+      "revision": 4,
       "keywords": [
         "Spedition",
         "Speditionslogistik",
@@ -37,14 +37,14 @@
         "ERP"
       ],
       "subject": "Bewerbung als {titel} – {vorname} {nachname}",
-      "body": "{anrede}\n\nmit grossem Interesse habe ich Ihre Stellenanzeige als {titel} bei {firma} in {ort} gelesen. Seit {erfahrung} Jahren arbeite ich in Logistik und Export: von 2005 bis 2011 in der Luftfracht bei Schenker Schweiz, anschliessend bei Emons Transporte und über elf Jahre als Shipping Officer bei der Escatec Switzerland AG. Seit Juli 2026 bin ich als Techniker bei der Keller & Dürr Kassensysteme AG tätig.\n\nIn diesen Jahren habe ich Sendungen von der Abholung bis zur Zustellung begleitet: Disposition, Kommissionierung, transportsichere Verpackung, Fracht- und Zolldokumente, das Einholen und Vergleichen von Speditionsofferten und die Überwachung von Terminen. Ich arbeite mit ERP-Systemen (Infor Cloud Suite), kenne die Anforderungen von Luft-, Land- und Seefracht und weiss, wie wichtig saubere Papiere und dokumentierte Exportkontrollen sind.\n\nMeine Stärken liegen im Organisieren und im Kontakt: Ich behalte mehrere Aufträge gleichzeitig im Blick, kommuniziere klar mit Kunden, Fahrern und Partnern und bleibe auch unter Termindruck zuverlässig. Als fachliche Anlaufstelle für Versand- und Exportfragen habe ich intern Schulungen gegeben und Kolleginnen und Kollegen im Tagesgeschäft unterstützt.\n\nGerne bringe ich diese Erfahrung in Ihr Team ein und stelle mich Ihnen in einem persönlichen Gespräch vor. Ich bin {verfuegbar} verfügbar.\n\nFreundliche Grüsse\n{vorname} {nachname}\n{strasse}, {plz} {wohnort}\n{telefon} · {email}",
+      "body": "{anrede}\n\nmit grossem Interesse habe ich Ihre Stellenanzeige als {titel} bei {firma} in {ort} gelesen. Seit {erfahrung_spedition} Jahren arbeite ich in Logistik und Export: von 2005 bis 2011 in der Luftfracht bei Schenker Schweiz, anschliessend bei Emons Transporte und über elf Jahre als Shipping Officer bei der Escatec Switzerland AG. Seit Juli 2026 bin ich als Techniker bei der Keller & Dürr Kassensysteme AG tätig.\n\nIn diesen Jahren habe ich Sendungen von der Abholung bis zur Zustellung begleitet: Disposition, Kommissionierung, transportsichere Verpackung, Fracht- und Zolldokumente, das Einholen und Vergleichen von Speditionsofferten und die Überwachung von Terminen. Ich arbeite mit ERP-Systemen (Infor Cloud Suite), kenne die Anforderungen von Luft-, Land- und Seefracht und weiss, wie wichtig saubere Papiere und dokumentierte Exportkontrollen sind.\n\nMeine Stärken liegen im Organisieren und im Kontakt: Ich behalte mehrere Aufträge gleichzeitig im Blick, kommuniziere klar mit Kunden, Fahrern und Partnern und bleibe auch unter Termindruck zuverlässig. Als fachliche Anlaufstelle für Versand- und Exportfragen habe ich intern Schulungen gegeben und Kolleginnen und Kollegen im Tagesgeschäft unterstützt.\n\nGerne bringe ich diese Erfahrung in Ihr Team ein und stelle mich Ihnen in einem persönlichen Gespräch vor. Ich bin {verfuegbar} verfügbar.\n\nFreundliche Grüsse\n{vorname} {nachname}\n{strasse}, {plz} {wohnort}\n{telefon} · {email}",
       "follow_up": false
     },
     {
       "id": "export_zoll",
       "name": "Export, Zoll und Aussenhandel",
       "description": "Bewerbung für Exportabwicklung, Zolldeklaration und Aussenhandel.",
-      "revision": 3,
+      "revision": 4,
       "keywords": [
         "Export",
         "Exportabwicklung",
@@ -68,7 +68,7 @@
         "Versandabwicklung"
       ],
       "subject": "Bewerbung als {titel} – {vorname} {nachname}",
-      "body": "{anrede}\n\nauf ostjob.ch bin ich auf Ihre Stellenanzeige als {titel} bei {firma} in {ort} aufmerksam geworden. Seit {erfahrung} Jahren arbeite ich an der Schnittstelle zwischen Ware, Dokumenten und Zoll: über elf Jahre als Shipping Officer bei der Escatec Switzerland AG, davor bei Emons Transporte und Schenker Schweiz. Seit Juli 2026 betreue ich als Techniker bei der Keller & Dürr Kassensysteme AG Kassensysteme und ihre Schnittstellen zu Zahlungsterminals und Hotelsoftware.\n\nIn dieser Zeit habe ich Liefer-, Export- und Zolldokumente erstellt, Exportkontrollen durchgeführt und dokumentiert, Transportofferten eingeholt und verglichen sowie Sendungen in die USA, nach China, Singapur und Indien abgewickelt – inklusive Spezial-, Cross-Trade- und Letter-of-Credit-Sendungen. Transitverfahren, Ursprungs- und Präferenznachweise sowie die Anforderungen an eine lückenlose Dokumentation sind mir vertraut.\n\nSorgfalt und Termintreue sind für mich zentral: Ich prüfe Unterlagen, bevor sie das Haus verlassen, halte Fristen ein und melde früh, wenn sich etwas ändert. Intern habe ich Schulungen zu Exportkontrollen gegeben und Kolleginnen und Kollegen im Tagesgeschäft unterstützt.\n\nGerne übernehme ich diese Aufgaben in Ihrem Unternehmen und stelle mich Ihnen persönlich vor. Ich bin {verfuegbar} verfügbar.\n\nFreundliche Grüsse\n{vorname} {nachname}\n{strasse}, {plz} {wohnort}\n{telefon} · {email}",
+      "body": "{anrede}\n\nauf ostjob.ch bin ich auf Ihre Stellenanzeige als {titel} bei {firma} in {ort} aufmerksam geworden. Seit {erfahrung_spedition} Jahren arbeite ich an der Schnittstelle zwischen Ware, Dokumenten und Zoll: über elf Jahre als Shipping Officer bei der Escatec Switzerland AG, davor bei Emons Transporte und Schenker Schweiz. Seit Juli 2026 betreue ich als Techniker bei der Keller & Dürr Kassensysteme AG Kassensysteme und ihre Schnittstellen zu Zahlungsterminals und Hotelsoftware.\n\nIn dieser Zeit habe ich Liefer-, Export- und Zolldokumente erstellt, Exportkontrollen durchgeführt und dokumentiert, Transportofferten eingeholt und verglichen sowie Sendungen in die USA, nach China, Singapur und Indien abgewickelt – inklusive Spezial-, Cross-Trade- und Letter-of-Credit-Sendungen. Transitverfahren, Ursprungs- und Präferenznachweise sowie die Anforderungen an eine lückenlose Dokumentation sind mir vertraut.\n\nSorgfalt und Termintreue sind für mich zentral: Ich prüfe Unterlagen, bevor sie das Haus verlassen, halte Fristen ein und melde früh, wenn sich etwas ändert. Intern habe ich Schulungen zu Exportkontrollen gegeben und Kolleginnen und Kollegen im Tagesgeschäft unterstützt.\n\nGerne übernehme ich diese Aufgaben in Ihrem Unternehmen und stelle mich Ihnen persönlich vor. Ich bin {verfuegbar} verfügbar.\n\nFreundliche Grüsse\n{vorname} {nachname}\n{strasse}, {plz} {wohnort}\n{telefon} · {email}",
       "follow_up": false
     },
     {

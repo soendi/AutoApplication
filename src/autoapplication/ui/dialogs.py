@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMessageBox,
+    QPlainTextEdit,
     QPushButton,
     QVBoxLayout,
 )
@@ -244,5 +245,155 @@ class ContactDialog(QDialog):
                 "Bitte mit «Herr …» oder «Frau …» angeben, z. B. «Frau Meier».",
             )
             self.person.setFocus()
+            return
+        super().accept()
+
+
+class DraftPreviewDialog(QDialog):
+    """Zeigt Empfänger, Anrede, Betreff und Text vor dem Anlegen des Entwurfs."""
+
+    def __init__(
+        self,
+        parent: Any,
+        *,
+        email: str = "",
+        salutation: str = "",
+        subject: str = "",
+        body: str = "",
+        title: str = "",
+        company: str = "",
+        heading: str = "Bewerbung prüfen",
+        intro: str = "",
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(heading)
+        self.resize(760, 680)
+        self._salutation = salutation
+        self._original_body = body
+        self._tasks: list[Task] = []
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(18, 16, 18, 16)
+        layout.setSpacing(8)
+
+        caption = QLabel(heading)
+        caption.setObjectName("CardTitle")
+        layout.addWidget(caption)
+
+        info = QLabel(
+            intro
+            or "Empfänger, Anrede, Betreff und Text lassen sich hier noch ändern. "
+            "Erst mit „Entwurf erstellen“ entsteht die Mail im Mailkonto."
+        )
+        info.setWordWrap(True)
+        info.setObjectName("Hint")
+        layout.addWidget(info)
+
+        if title or company:
+            job = QLabel(" – ".join(part for part in (title, company) if part))
+            job.setWordWrap(True)
+            layout.addWidget(job)
+
+        layout.addWidget(QLabel("Empfänger"))
+        self.email = QLineEdit(email)
+        self.email.setPlaceholderText("z. B. bewerbung@firma.ch")
+        layout.addWidget(self.email)
+
+        layout.addWidget(QLabel("Anrede"))
+        self.anrede = QLineEdit(salutation)
+        self.anrede.setPlaceholderText("z. B. Sehr geehrte Frau Meier")
+        self.anrede.setToolTip(
+            "Wird geändert, ersetzt die neue Anrede die erste Zeile des Textes."
+        )
+        layout.addWidget(self.anrede)
+
+        layout.addWidget(QLabel("Betreff"))
+        self.betreff = QLineEdit(subject)
+        layout.addWidget(self.betreff)
+
+        layout.addWidget(QLabel("Text"))
+        self.text = QPlainTextEdit()
+        self.text.setPlainText(body)
+        self.text.setMinimumHeight(280)
+        layout.addWidget(self.text, 1)
+
+        self.status = QLabel("")
+        self.status.setObjectName("Hint")
+        self.status.setWordWrap(True)
+        layout.addWidget(self.status)
+
+        buttons = QHBoxLayout()
+        buttons.addStretch(1)
+        cancel = QPushButton("Abbrechen")
+        cancel.clicked.connect(self.reject)
+        confirm = QPushButton("Entwurf erstellen")
+        confirm.setObjectName("Primary")
+        confirm.setDefault(True)
+        confirm.clicked.connect(self.accept)
+        buttons.addWidget(cancel)
+        buttons.addWidget(confirm)
+        layout.addLayout(buttons)
+
+    # ------------------------------------------------------------------
+    def body(self) -> str:
+        return self.text.toPlainText()
+
+    def set_status(self, message: str) -> None:
+        self.status.setText(message)
+
+    def track(self, task: Task) -> None:
+        """Hält den Hintergrundauftrag am Leben, solange der Dialog offen ist."""
+        self._tasks.append(task)
+
+    def apply_correction(self, text: str) -> None:
+        """Korrigierten Text übernehmen - ausser der Text wurde schon geändert."""
+        corrected = (text or "").strip()
+        if not corrected:
+            self.set_status("Rechtschreibprüfung ohne Ergebnis.")
+            return
+        current = self.text.toPlainText()
+        if current.strip() != self._original_body.strip():
+            self.set_status(
+                "Rechtschreibung geprüft – dein bereits bearbeiteter Text "
+                "bleibt stehen."
+            )
+            return
+        self.text.setPlainText(corrected)
+        self._original_body = corrected
+        self.set_status("Rechtschreibung geprüft.")
+
+    def values(self) -> tuple[str, str, str, str]:
+        anrede = self.anrede.text().strip()
+        text = self.text.toPlainText()
+        if anrede and anrede != self._salutation:
+            lines = text.splitlines()
+            for index, line in enumerate(lines):
+                if line.strip():
+                    lines[index] = anrede
+                    break
+            text = "\n".join(lines)
+        return (
+            self.email.text().strip(),
+            anrede,
+            self.betreff.text().strip(),
+            text.strip(),
+        )
+
+    def accept(self) -> None:
+        email, _anrede, subject, _text = self.values()
+        if not email or "@" not in email or "." not in email.rsplit("@", 1)[-1]:
+            QMessageBox.warning(
+                self,
+                "Empfänger",
+                "Bitte eine vollständige E-Mail-Adresse angeben, "
+                "z. B. bewerbung@firma.ch.",
+            )
+            self.email.setFocus()
+            return
+        if not subject:
+            QMessageBox.warning(
+                self, "Betreff", "Bitte einen Betreff angeben."
+            )
+            self.betreff.setFocus()
             return
         super().accept()

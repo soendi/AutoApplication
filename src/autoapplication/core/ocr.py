@@ -14,11 +14,13 @@ import logging
 import re
 import urllib.parse
 import urllib.request
+from pathlib import Path
 from typing import Callable
 
 log = logging.getLogger(__name__)
 
-MAX_IMAGES = 3
+# Schutzgrenze gegen endlos lange Seiten; Kontaktbilder stehen weit vorne.
+MAX_IMAGES = 60
 MAX_BYTES = 4 * 1024 * 1024
 TIMEOUT = 20.0
 HEADERS = {
@@ -27,23 +29,101 @@ HEADERS = {
         "(KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36"
     ),
 }
-IMAGE_RE = re.compile(r"<img[^>]+src\s*=\s*[\"']([^\"']+)[\"']", re.IGNORECASE)
+IMG_TAG_RE = re.compile(r"<img\b[^>]*>", re.IGNORECASE)
+SRC_RE = re.compile(r"\bsrc\s*=\s*[\"']([^\"']+)[\"']", re.IGNORECASE)
+# alt/title/class verraten Logos auch dann, wenn die Adresse nichts sagt.
+HINT_RE = re.compile(
+    r"\b(?:alt|title|class)\s*=\s*[\"']([^\"']*)[\"']", re.IGNORECASE
+)
+# Nicht lesbare Formate: Vektor- und Icon-Dateien enthalten keinen Fliesstext.
+SKIP_SUFFIXES = (".svg", ".svgz", ".ico")
+# Logo- und Social-Adressen: solche Bilder zeigen keine Kontaktdaten.
+SKIP_WORDS = (
+    "logo",
+    "logotype",
+    "icon",
+    "favicon",
+    "sprite",
+    "svg",
+    "social",
+    "badge",
+    "facebook",
+    "linkedin",
+    "instagram",
+    "twitter",
+    "xing",
+    "youtube",
+    "whatsapp",
+    "tiktok",
+    "pinterest",
+)
+SKIP_RE = re.compile(
+    r"(?:^|[^a-z])(?:" + "|".join(SKIP_WORDS) + r")(?:[^a-z]|$)",
+    re.IGNORECASE,
+)
+
+# Testbild mit Kontaktdaten: zeigt, ob die Texterkennung wirklich liest.
+TEST_EMAIL = "anna.muster@example.ch"
+TEST_NAME = "Anna Muster"
+
+
+def is_icon_url(url: str) -> bool:
+    """Zeigt die Adresse auf ein Logo, ein Icon oder ein Vektorbild?"""
+    parts = urllib.parse.urlsplit(url)
+    path = urllib.parse.unquote(parts.path).lower()
+    if path.endswith(SKIP_SUFFIXES):
+        return True
+    return bool(SKIP_RE.search(path) or SKIP_RE.search(parts.query))
+
+
+def is_icon_hint(value: str) -> bool:
+    """Beschreibt alt/title/class das Bild als Logo, Icon oder Social-Bild?"""
+    return bool(SKIP_RE.search(value or ""))
 
 
 def image_urls(value: str, base_url: str = "") -> list[str]:
-    """Bildadressen aus dem HTML einer Anzeige (absolut, ohne Doppel)."""
+    """Bildadressen aus dem HTML einer Anzeige (absolut, ohne Doppel).
+
+    Logos, Icons und SVG-Dateien fallen weg - erkennbar an der Adresse oder
+    an ``alt``/``title``/``class`` - damit die Texterkennung nicht an
+    Dekoration haengen bleibt. Alle uebrigen Bilder kommen mit, nicht nur
+    die ersten drei.
+    """
     urls: list[str] = []
-    for raw in IMAGE_RE.findall(value or ""):
-        url = raw.strip()
+    for tag in IMG_TAG_RE.findall(value or ""):
+        match = SRC_RE.search(tag)
+        if match is None:
+            continue
+        url = match.group(1).strip()
         if url.startswith("//"):
             url = "https:" + url
         elif base_url and not url.lower().startswith(("http://", "https://")):
             url = urllib.parse.urljoin(base_url, url)
         if not url.lower().startswith(("http://", "https://")):
             continue
+        if is_icon_url(url):
+            continue
+        if any(is_icon_hint(hint) for hint in HINT_RE.findall(tag)):
+            continue
         if url not in urls:
             urls.append(url)
     return urls[:MAX_IMAGES]
+
+
+def test_image_path() -> Path:
+    """Testbild mit bekannter Adresse (liegt neben den Vorlagen)."""
+    return Path(__file__).resolve().parent.parent / "data" / "ocr-test.png"
+
+
+def backend_name() -> str:
+    """Name der gefundenen Texterkennung (``winrt``, ``winsdk`` oder leer)."""
+    for package in ("winrt", "winsdk"):
+        try:
+            __import__(f"{package}.windows.media.ocr")
+        except Exception:  # noqa: BLE001 - fehlende Pakete sind der Normalfall
+            continue
+        return package
+    return ""
 
 
 def available() -> bool:
@@ -150,6 +230,70 @@ def extract_text(data: bytes) -> str:
         return ""
     finally:
         loop.close()
+
+
+def diagnose(
+    recognize: Callable[[bytes], str] | None = None,
+    backend: str | None = None,
+) -> dict[str, object]:
+    """Texterkennung pruefen: vorhanden, und liest sie ein Testbild?"""
+    name = backend_name() if backend is None else backend
+    reader = recognize or extract_text
+    try:
+        data = test_image_path().read_bytes()
+    except OSError as exc:
+        return {
+            "backend": name,
+            "available": bool(name),
+            "text": "",
+            "ok": False,
+            "note": f"Testbild fehlt ({exc})",
+        }
+    if reader is extract_text and not name:
+        return {
+            "backend": "",
+            "available": False,
+            "text": "",
+            "ok": False,
+            "note": "keine Windows-Texterkennung",
+        }
+    try:
+        text = str(reader(data) or "").strip()
+    except Exception as exc:  # noqa: BLE001 - Diagnose darf nichts stoppen
+        return {
+            "backend": name,
+            "available": True,
+            "text": "",
+            "ok": False,
+            "note": f"Fehler beim Lesen ({exc})",
+        }
+    # Leerzeichen zaehlen nicht: manche Erkenner trennen Woerter nicht.
+    glued = re.sub(r"\s+", "", text).lower()
+    ok = TEST_EMAIL in glued
+    return {
+        "backend": name,
+        "available": True,
+        "text": text,
+        "ok": ok,
+        "note": "" if ok else "Testbild nicht gelesen",
+    }
+
+
+def status_line(info: dict[str, object] | None = None) -> str:
+    """Kurztext fuer Selbsttest und Protokoll."""
+    info = info if info is not None else diagnose()
+    engine = (
+        f"Windows-Texterkennung ({info['backend']})"
+        if info["available"]
+        else "keine Windows-Texterkennung"
+    )
+    if not info["available"]:
+        return f"{engine}: Kontakte aus Bildern werden übersprungen."
+    if info["ok"]:
+        return f"{engine} liest das Testbild, Adresse {TEST_EMAIL} erkannt."
+    text = " ".join(str(info.get("text") or "").split())[:80]
+    note = str(info.get("note") or "Testbild nicht gelesen")
+    return f"{engine} vorhanden, aber {note}: «{text or '–'}»"
 
 
 def _fetch(url: str) -> bytes:

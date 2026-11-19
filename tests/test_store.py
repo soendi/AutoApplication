@@ -130,3 +130,47 @@ def test_meta_and_events(tmp_path) -> None:
     assert store.meta_get("letzter_lauf").startswith("2026-11-18")
     store.log("lauf", "Test")
     assert store.events()[0]["message"] == "Test"
+
+
+def test_old_info_replies_get_the_answer_status(tmp_path) -> None:
+    path = tmp_path / "daten.db"
+    store = Store(path)
+    store.upsert_job(_job())
+    application_id = store.add_application(
+        "ostjob:1", "spedition", "Betreff", "Text", status="gesendet"
+    )
+    store.update_application(application_id, reply_kind="info")
+    # Ablage erneut oeffnen: die Migration zieht den Status nach.
+    reopened = Store(path)
+    assert reopened.get_application(application_id)["status"] == "info"
+    assert [row["id"] for row in reopened.list_applications(statuses=["info"])] == [
+        application_id
+    ]
+
+
+def test_replies_store_the_whole_mail_and_stay_unread_until_opened(tmp_path) -> None:
+    store = Store(tmp_path / "daten.db")
+    job = Job(id="ostjob:1", source="ostjob", source_id="1", title="T", company="C")
+    store.upsert_job(job)
+    application_id = store.add_application(job.id, "spedition", "Betreff", "Text")
+    long_body = "Zeile\n" * 400
+    assert store.add_reply(
+        application_id, "m1", "2026-11-18T09:00:00Z", "hr@firma.ch",
+        "Einladung", "einladung", "kurz", body=long_body,
+    )
+    replies = store.replies_for(application_id)
+    assert replies[0]["body"] == long_body
+    assert replies[0]["seen"] == 0
+    assert store.unseen_by_application() == {application_id: 1}
+    assert store.reply_counts() == {application_id: 1}
+
+    assert store.mark_replies_seen(application_id) == 1
+    assert store.unseen_by_application() == {}
+    assert store.replies_for(application_id)[0]["seen"] == 1
+    # Zweite Mail kommt an: wieder ungelesen.
+    assert store.add_reply(
+        application_id, "m2", "2026-11-19T09:00:00Z", "hr@firma.ch",
+        "Absage", "absage", "kurz", body="Leider abgesagt.",
+    )
+    assert store.unseen_by_application() == {application_id: 1}
+    assert store.reply_counts() == {application_id: 2}

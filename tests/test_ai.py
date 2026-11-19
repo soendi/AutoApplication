@@ -165,3 +165,88 @@ def test_ai_disabled_never_calls_transport(tmp_path) -> None:
     client = AiClient(_settings(tmp_path, enabled=False), transport=fail)
     assert client.available() is False
     assert client.keywords(_job(), []) == ["Spedition", "Transport", "Speditionskaufmann", "Disposition"]
+
+
+def test_ai_classify_sees_the_whole_reply_and_the_job(tmp_path) -> None:
+    calls: list = []
+
+    def transport(url, payload, headers, timeout):
+        calls.append(payload)
+        return {"choices": [{"message": {"content": '{"art": "einladung"}'}}]}
+
+    client = AiClient(_settings(tmp_path), transport=transport)
+    reply = (
+        "Gerne laden wir Sie zu einem Vorstellungsgespräch ein. Passt Ihnen "
+        "Dienstag, 24. November, um 14 Uhr? Bitte bestätigen Sie den Termin."
+    )
+    kind = client.classify(
+        "Ihre Bewerbung als Speditionskaufmann",
+        reply,
+        "hr@muster.ch",
+        "Bewerbung als Speditionskaufmann bei Muster AG",
+    )
+    assert kind == EINLADUNG
+    prompt = calls[0]["messages"]
+    system = prompt[0]["content"]
+    content = prompt[1]["content"]
+    assert "Arbeitsvertrag" in system
+    assert "Vorstellungsgespraech" in system
+    assert "Zusage zum" in system
+    assert reply in content
+    assert "Bewerbung als Speditionskaufmann bei Muster AG" in content
+
+
+def test_ai_classify_sends_a_long_reply_completely(tmp_path) -> None:
+    calls: list = []
+
+    def transport(url, payload, headers, timeout):
+        calls.append(payload)
+        return {"choices": [{"message": {"content": '{"art": "info"}'}}]}
+
+    client = AiClient(_settings(tmp_path), transport=transport)
+    reply = "Satz mit Inhalt. " * 500  # rund 8500 Zeichen
+    client.classify("Betreff", reply)
+    content = calls[0]["messages"][1]["content"]
+    assert content.count("Satz mit Inhalt.") >= 300
+    assert 5000 < len(content) < 6200  # gekappt bei 6000 Zeichen Antworttext
+
+
+def test_local_classifier_separates_offer_from_invitation() -> None:
+    assert (
+        classify_local(
+            "Ihre Bewerbung",
+            "Gerne laden wir Sie zu einem Vorstellungsgespräch ein.",
+        )
+        == EINLADUNG
+    )
+    # "Zusage" im Termin-Kontext ist eine Einladung, keine Stellenzusage.
+    assert (
+        classify_local(
+            "Ihre Bewerbung",
+            "Vielen Dank für Ihre Zusage zum Vorstellungsgespräch am 3. Dezember.",
+        )
+        == EINLADUNG
+    )
+    assert (
+        classify_local(
+            "Ihre Bewerbung",
+            "Wir freuen uns, Ihnen mitzuteilen, dass Sie die Stelle erhalten. "
+            "Den Arbeitsvertrag finden Sie im Anhang.",
+        )
+        == ZUSAGE
+    )
+    assert classify_local("Ihre Bewerbung", "Im Anhang der Vertragsentwurf.") == ZUSAGE
+    # Betreff "Zusage", im Text aber nur ein Termin: Einladung.
+    assert (
+        classify_local("Zusage", "Gerne bestätigen wir Ihnen den Termin am Montag.")
+        == EINLADUNG
+    )
+    # Eine Einladung mit Terminvorschlag bleibt eine Einladung, auch wenn sie
+    # den Vertrag nur erwähnt.
+    assert (
+        classify_local(
+            "Kennenlernen",
+            "Wir möchten Sie gerne kennenlernen und laden Sie zu einem Gespräch ein.",
+        )
+        == EINLADUNG
+    )

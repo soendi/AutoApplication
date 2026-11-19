@@ -74,6 +74,8 @@ class SettingsPage(QWidget):
         self.email = QLineEdit()
         self.erfahrung = QLineEdit()
         self.erfahrung.setPlaceholderText("z. B. über zwanzig")
+        self.erfahrung_spedition = QLineEdit()
+        self.erfahrung_spedition.setPlaceholderText("z. B. fast neunzehn")
         self.verfuegbar = QLineEdit()
         self.verfuegbar.setPlaceholderText("z. B. sofort oder ab 1. März")
         self.interessen = QPlainTextEdit()
@@ -82,6 +84,11 @@ class SettingsPage(QWidget):
         self.faehigkeiten = QPlainTextEdit()
         self.faehigkeiten.setFixedHeight(58)
         self.faehigkeiten.setPlaceholderText("Stichworte, z. B. Disposition, SAP, Staplerschein")
+        self.werdegang = QPlainTextEdit()
+        self.werdegang.setFixedHeight(120)
+        self.werdegang.setPlaceholderText(
+            "Eine Station pro Zeile: Zeitraum: Funktion, Firma – Aufgaben"
+        )
         for label, field in (
             ("Vorname", self.vorname),
             ("Nachname", self.nachname),
@@ -90,16 +97,20 @@ class SettingsPage(QWidget):
             ("Ort", self.wohnort),
             ("Telefon", self.telefon),
             ("E-Mail", self.email),
-            ("Jahre Erfahrung (Wort)", self.erfahrung),
+            ("Jahre Erfahrung gesamt (Wort)", self.erfahrung),
+            ("Jahre in Spedition/Export (Wort)", self.erfahrung_spedition),
             ("Verfügbar", self.verfuegbar),
             ("Interessen (Stichworte)", self.interessen),
             ("Fähigkeiten (Stichworte)", self.faehigkeiten),
+            ("Werdegang (Stationen)", self.werdegang),
         ):
             person_form.addRow(label, field)
         person_hint = QLabel(
             "Interessen und Fähigkeiten werden getrennt gespeichert und müssen "
             "sich nicht decken: Sie können etwas, interessieren sich aber eher "
-            "für etwas anderes. Beides fliesst in die KI-Auswertung ein."
+            "für etwas anderes. Beides fliesst in die KI-Auswertung ein.\n"
+            "Der Werdegang gibt der KI die Stationen mit Zeitraum und Aufgabe vor; "
+            "Firmen und Jahre im Mailtext und im Anschreiben stammen nur von dort."
         )
         person_hint.setWordWrap(True)
         person_hint.setObjectName("Hint")
@@ -406,9 +417,13 @@ class SettingsPage(QWidget):
         self.telefon.setText(settings.text("profile.telefon"))
         self.email.setText(settings.text("profile.email"))
         self.erfahrung.setText(settings.text("profile.erfahrung_jahre"))
+        self.erfahrung_spedition.setText(
+            settings.text("profile.erfahrung_spedition")
+        )
         self.verfuegbar.setText(settings.text("profile.verfuegbar"))
         self.interessen.setPlainText(", ".join(settings.interests()))
         self.faehigkeiten.setPlainText(", ".join(settings.skills()))
+        self.werdegang.setPlainText(settings.text("profile.werdegang"))
 
         self.api_enabled.setChecked(settings.flag("search.api_enabled", False))
         self.queries.setPlainText("\n".join(settings.search_terms()))
@@ -480,9 +495,13 @@ class SettingsPage(QWidget):
         settings.set("profile.telefon", self.telefon.text().strip())
         settings.set("profile.email", self.email.text().strip())
         settings.set("profile.erfahrung_jahre", self.erfahrung.text().strip())
+        settings.set(
+            "profile.erfahrung_spedition", self.erfahrung_spedition.text().strip()
+        )
         settings.set("profile.verfuegbar", self.verfuegbar.text().strip())
         settings.set("profile.interessen", _split_terms(self.interessen.toPlainText()))
         settings.set("profile.faehigkeiten", _split_terms(self.faehigkeiten.toPlainText()))
+        settings.set("profile.werdegang", self.werdegang.toPlainText().strip())
 
         terms = [
             part.strip()

@@ -9,6 +9,8 @@
 from __future__ import annotations
 
 import logging
+import re
+import urllib.request
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -51,6 +53,7 @@ from .text import (
     parse_date,
     salutation,
     short,
+    strip_html,
 )
 from .tracking import find_code, new_code
 
@@ -58,6 +61,16 @@ log = logging.getLogger(__name__)
 
 STATUS_ENTWURF = "entwurf"
 STATUS_GESENDET = "gesendet"
+STATUS_ANTWORT = INFO  # Antwort ohne Absage, Zusage oder Einladung
+
+# Frisch angelegte Entwuerfe erst spaeter pruefen: ein noch nicht indexierter
+# Entwurf soll nicht faelschlich als gesendet gelten.
+DRAFT_GRACE_MINUTES = 10
+# Obergrenze fuer den Anzeigentext: die Seite wird nur nachgelesen, wenn der
+# Kontakt fehlt.
+PAGE_BYTES = 1_000_000
+# Technische Kennungen wie Sentry-IDs sehen wie Adressen aus.
+_HEX_LOCAL_RE = re.compile(r"[0-9a-f]{16,}")
 STATUS_ABSAGE = "absage"
 STATUS_ZUSAGE = "zusage"
 STATUS_EINLADUNG = "einladung"
@@ -90,6 +103,34 @@ class RunSummary:
         return text
 
 
+def fetch_page(url: str) -> str:
+    """HTML einer Anzeigenseite holen; Fehler ergeben leeren Text."""
+    target = (url or "").strip()
+    if not target.lower().startswith(("http://", "https://")):
+        return ""
+    request = urllib.request.Request(target, headers=ocr.HEADERS)
+    try:
+        with urllib.request.urlopen(request, timeout=ocr.TIMEOUT) as response:
+            return response.read(PAGE_BYTES).decode("utf-8", "replace")
+    except Exception as exc:  # noqa: BLE001 - Seite ist nur ein Zusatz
+        log.info("Anzeigetext konnte nicht geladen werden (%s): %s", target, exc)
+        return ""
+
+
+def _recent(value: str, minutes: int = DRAFT_GRACE_MINUTES) -> bool:
+    """Liegt der Zeitpunkt weniger als ``minutes`` Minuten zurueck?"""
+    text = (value or "").strip()
+    if not text:
+        return False
+    try:
+        moment = datetime.fromisoformat(text)
+    except ValueError:
+        return False
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return moment > datetime.now(timezone.utc) - timedelta(minutes=minutes)
+
+
 class Pipeline:
     """Verbindet Stellenquelle, KI, Vorlagen, Ablage und Outlook."""
 
@@ -104,6 +145,7 @@ class Pipeline:
         ostjob_client: OstjobClient | None = None,
         notifier: Callable[[str, str], None] | None = None,
         templates_file: Path | None = None,
+        page_fetcher: Callable[[str], str] | None = None,
     ) -> None:
         self.settings = settings
         self.store = store
@@ -113,6 +155,14 @@ class Pipeline:
         self._ostjob = ostjob_client
         self.notifier = notifier
         self.templates_file = templates_file or templates_path()
+        # Anzeigenseite nachlesen; im Test durch eine Attrappe ersetzbar.
+        self._page_fetcher = page_fetcher or fetch_page
+        # Einmal geholte Anzeigenseiten nicht erneut laden.
+        self._page_texts: dict[str, str] = {}
+        # Zuletzt zusammengestellte Bewerbung je Stelle (fuer die Vorschau).
+        self._previews: dict[str, dict[str, Any]] = {}
+        # Dasselbe fuer Nachfragen, damit die Vorlage nicht doppelt laeuft.
+        self._follow_up_previews: dict[int, dict[str, Any]] = {}
 
     # ------------------------------------------------------------------
     # Vorlagen und Verbindungen
@@ -200,15 +250,90 @@ class Pipeline:
         return self._with_image_contact(job, digest)
 
     def _with_image_contact(self, job: Job, digest: JobDigest) -> JobDigest:
-        """Fehlenden Kontakt aus Bildern der Anzeige lesen (Texterkennung)."""
+        """Fehlenden Kontakt aus Anzeigetext, Seite und Bildern lesen."""
+        # Was die Anzeige schon mitgibt, gilt vor jedem Nachladen.
+        digest.contact_email = digest.contact_email or job.contact_email
+        digest.contact_name = digest.contact_name or job.contact_name
         if digest.contact_email and digest.contact_name:
             return digest
-        address, person = self._ocr_contact(job)
+        address, person = self._find_contact(job)
         if not digest.contact_email and address:
             digest.contact_email = address
         if not digest.contact_name and person:
             digest.contact_name = person
         return digest
+
+    @staticmethod
+    def _contact_domains(job: Job) -> tuple[str, str]:
+        """Portaldomain der Anzeige und Domain des Arbeitgebers."""
+        portal = domain_of(job.url or job.apply_url)
+        raw = job.raw if isinstance(job.raw, dict) else {}
+        company = raw.get("company")
+        homepage = str(company.get("homepage") or "") if isinstance(company, dict) else ""
+        return portal, domain_of(homepage)
+
+    @staticmethod
+    def _contact_from_text(
+        value: str, portal: str = "", company: str = ""
+    ) -> tuple[str, str]:
+        """Adresse und Ansprechperson aus einem Textstueck lesen."""
+        text = strip_html(value or "")
+        # Maskierte Umbrueche aus Skripten kleben sonst an der Adresse.
+        text = text.replace("\\n", " ").replace("\\r", " ").replace("\\t", " ")
+        if not text.strip():
+            return "", ""
+        candidates: list[str] = []
+        for address in emails(text):
+            domain = domain_of(address)
+            if not domain or (portal and domain == portal):
+                continue
+            if _HEX_LOCAL_RE.fullmatch(address.split("@", 1)[0].lower()):
+                # Technische Kennung statt Kontaktadresse.
+                continue
+            candidates.append(address)
+        address = ""
+        if candidates:
+            preferred = [item for item in candidates if company and domain_of(item) == company]
+            address = (preferred or candidates)[0]
+        return address, contact_person(text)
+
+    def _text_contact(self, job: Job) -> tuple[str, str]:
+        """Ansprechperson und Adresse aus dem Fliesstext der Anzeige lesen."""
+        raw = job.raw if isinstance(job.raw, dict) else {}
+        parts = [job.description or ""]
+        for key in ("description", "beschreibung", "contact", "kontakt"):
+            value = raw.get(key)
+            if isinstance(value, str):
+                parts.append(value)
+        return self._contact_from_text(" ".join(parts), *self._contact_domains(job))
+
+    def _page_text(self, job: Job) -> str:
+        """Text der Anzeigenseite - einmal je Adresse geholt."""
+        url = job.url or job.apply_url
+        if not url:
+            return ""
+        if url not in self._page_texts:
+            self._page_texts[url] = self._page_fetcher(url)
+        return self._page_texts[url]
+
+    def _find_contact(self, job: Job) -> tuple[str, str]:
+        """Kontakt suchen: Anzeigetext, dann Anzeigenseite, dann Bilder."""
+        address, person = self._text_contact(job)
+        if not address or not person:
+            # Viele Portale betten den Anzeigentext als Seite ein; dort steht
+            # die Adresse oft im Fliesstext.
+            page = self._page_text(job)
+            if page:
+                page_address, page_person = self._contact_from_text(
+                    page, *self._contact_domains(job)
+                )
+                address = address or page_address
+                person = person or page_person
+        if not address or not person:
+            image_address, image_person = self._ocr_contact(job)
+            address = address or image_address
+            person = person or image_person
+        return address, person
 
     def _ocr_contact(self, job: Job) -> tuple[str, str]:
         """Ansprechperson und Adresse aus den Bildern der Anzeige lesen."""
@@ -229,17 +354,24 @@ class Pipeline:
     def contact_check(self, job_id: str) -> list[str]:
         """Vor dem Entwurf melden, welche Kontaktdaten noch fehlen.
 
-        Fehlendes wird zuerst aus Bildern der Anzeige gelesen; was danach
-        fehlt, fragt die Oberflaeche von Hand ab, bevor der Entwurf entsteht.
+        Fehlendes wird zuerst aus dem Anzeigetext und dann aus Bildern der
+        Anzeige gelesen; was danach fehlt, fragt die Oberflaeche von Hand ab,
+        bevor der Entwurf entsteht.
         """
         row = self.store.get_job(job_id)
         if row is None:
             return []
         job = Job.from_row(row)
         address = job.contact_address()
+        portal = domain_of(job.url or job.apply_url)
+        if address and portal and domain_of(address) == portal:
+            # Nur die Adresse des Portals selbst: keine Bewerbungsadresse.
+            address = ""
         person = job.contact_name
         if not address or not person:
-            found_address, found_person = self._ocr_contact(job)
+            # Zuerst der Fliesstext: viele Anzeigen nennen die Adresse nur dort
+            # und verlinken im Kontaktfeld bloss ein Bewerbungsformular.
+            found_address, found_person = self._find_contact(job)
             updates: dict[str, Any] = {}
             if not address and found_address:
                 address = found_address
@@ -360,7 +492,11 @@ class Pipeline:
             self.store.log("hinweis", "Stellensuche übersprungen: API ist ausgeschaltet.")
             return summary
         templates = self.templates()
-        terms = vocabulary(templates) + self.settings.skills()
+        terms = (
+            vocabulary(templates)
+            + self.settings.skills()
+            + self.settings.interests()
+        )
         try:
             jobs = search_jobs(self.settings, client=self._ostjob, now=moment)
         except OstjobError as exc:
@@ -446,8 +582,12 @@ class Pipeline:
         self.store.log("lauf", f"Stellensuche: {summary.as_text()}")
         return summary
 
-    def prepare_application(self, job_id: str) -> int:
-        """Bewerbung fuer eine einzelne Stelle von Hand vorbereiten."""
+    def draft_preview(self, job_id: str) -> dict[str, Any]:
+        """Empfänger, Anrede, Betreff und Text für die Vorschau zusammenstellen.
+
+        Es entsteht noch kein Entwurf; die Zwischenstände bleiben für
+        :meth:`create_draft` liegen, damit die KI nicht zweimal laufen muss.
+        """
         row = self.store.get_job(job_id)
         if row is None:
             raise ValueError("Diese Stelle steht nicht in der Ablage.")
@@ -469,7 +609,10 @@ class Pipeline:
         )
         templates = self.templates()
         keywords = self._ai.keywords(
-            job, vocabulary(templates) + self.settings.skills()
+            job,
+            vocabulary(templates)
+            + self.settings.skills()
+            + self.settings.interests(),
         )
         min_score = int(self.settings.number("matching.min_score", 2) or 2)
         template, score, matches = choose_template(templates, job, keywords, min_score)
@@ -480,6 +623,65 @@ class Pipeline:
                 "ergänzen Sie die Vorlagen."
             )
         subject, body = self._write_mail(template, job, digest)
+        self._previews[job.id] = {
+            "job": job,
+            "digest": digest,
+            "template": template,
+            "keywords": keywords,
+            "score": score,
+            "matches": matches,
+            "subject": subject,
+            "body": body,
+        }
+        return {
+            "job_id": job.id,
+            "email": job.contact_address(),
+            "salutation": salutation(digest.contact_name or job.contact_name),
+            "subject": subject,
+            "body": body,
+        }
+
+    def proofread_available(self) -> bool:
+        """Ist eine KI für die Rechtschreibprüfung eingerichtet?"""
+        method = getattr(self._ai, "proofread", None)
+        if not callable(method):
+            return False
+        available = getattr(self._ai, "available", None)
+        return bool(available()) if callable(available) else True
+
+    def proofread(self, text: str) -> str:
+        """Rechtschreibung prüfen; ohne KI bleibt der Text unverändert."""
+        method = getattr(self._ai, "proofread", None)
+        if not callable(method) or not (text or "").strip():
+            return text
+        try:
+            corrected = method(text)
+        except Exception as exc:  # noqa: BLE001 - Prüfung ist ein Zusatz
+            log.warning("Rechtschreibprüfung fehlgeschlagen: %s", exc)
+            return text
+        return str(corrected or "").strip() or text
+
+    def create_draft(
+        self,
+        job_id: str,
+        *,
+        email: str = "",
+        subject: str = "",
+        body: str = "",
+    ) -> int:
+        """Entwurf anlegen - mit den Angaben aus der Vorschau, falls geändert."""
+        preview = self._previews.get(job_id)
+        if preview is None:
+            self.draft_preview(job_id)
+            preview = self._previews.get(job_id) or {}
+        job = preview.get("job")
+        if job is None or not isinstance(job, Job):
+            raise ValueError("Diese Stelle steht nicht in der Ablage.")
+        digest = preview["digest"]
+        template = preview["template"]
+        subject = (subject or preview.get("subject") or "").strip()
+        body = (body or preview.get("body") or "").strip()
+        address = (email or "").strip() or job.contact_address()
         attachments = self._attachments(job, digest, body)
         tracking = self._tracking_code()
         draft_id = ""
@@ -487,7 +689,7 @@ class Pipeline:
         web_link = ""
         if self.outlook_ready():
             draft = self.outlook().create_draft(
-                subject, body, job.contact_address(), attachments, tracking=tracking
+                subject, body, address, attachments, tracking=tracking
             )
             draft_id = str(draft.get("id") or "")
             conversation_id = str(draft.get("conversationId") or "")
@@ -504,6 +706,9 @@ class Pipeline:
             created_at=now_iso(),
             tracking=tracking,
         )
+        score = int(preview.get("score") or 0)
+        keywords = list(preview.get("keywords") or [])
+        matches = list(preview.get("matches") or [])
         self.store.set_job_analysis(job.id, score, template.id, keywords)
         self.store.update_job(job.id, status="beworben")
         self.store.log(
@@ -515,10 +720,22 @@ class Pipeline:
             "Bewerbung vorbereitet",
             f"{job.company}: {job.title} liegt als Entwurf bereit.",
         )
+        self._previews.pop(job.id, None)
         return application_id
 
-    def prepare_follow_up(self, application_id: int) -> bool:
-        """Nachfrage fuer eine bestimmte Bewerbung vorbereiten."""
+    def prepare_application(self, job_id: str) -> int:
+        """Bewerbung ohne Vorschau anlegen (Aufruf ohne Oberfläche)."""
+        preview = self.draft_preview(job_id)
+        return self.create_draft(
+            job_id, subject=str(preview["subject"]), body=str(preview["body"])
+        )
+
+    def follow_up_preview(self, application_id: int) -> dict[str, Any]:
+        """Empfänger, Anrede, Betreff und Text der Nachfrage zusammenstellen.
+
+        Es entsteht noch kein Entwurf; die Angaben bleiben für
+        :meth:`create_follow_up_draft` liegen.
+        """
         application = self.store.get_application(application_id)
         if application is None:
             raise ValueError("Bewerbung nicht gefunden.")
@@ -533,6 +750,7 @@ class Pipeline:
         if not str(application.get("tracking") or ""):
             self.store.update_application(application_id, tracking=tracking)
         days = int(self.settings.number("automation.follow_up_days", 14) or 14)
+        anrede = salutation(job.contact_name if job else "")
         subject, body = render_mail(
             template,
             self.settings.profile(),
@@ -540,8 +758,47 @@ class Pipeline:
             extra={
                 "bewerbungsdatum": format_date(application.get("sent_at")),
                 "tage": str(days),
-                "anrede": salutation(job.contact_name if job else ""),
+                "anrede": anrede,
             },
+        )
+        preview = {
+            "application_id": application_id,
+            "company": str(application.get("company") or ""),
+            "title": str(application.get("title") or ""),
+            "email": (job.contact_address() if job else "") or "",
+            "salutation": anrede,
+            "subject": subject,
+            "body": body,
+            "tracking": tracking,
+            "days": days,
+        }
+        self._follow_up_previews[application_id] = preview
+        return preview
+
+    def create_follow_up_draft(
+        self,
+        application_id: int,
+        *,
+        email: str = "",
+        subject: str = "",
+        body: str = "",
+    ) -> bool:
+        """Nachfrage anlegen - mit den Angaben aus der Vorschau, falls geändert."""
+        preview = self._follow_up_previews.get(application_id)
+        if preview is None:
+            preview = self.follow_up_preview(application_id)
+        application = self.store.get_application(application_id)
+        if application is None:
+            raise ValueError("Bewerbung nicht gefunden.")
+        job_row = self.store.get_job(str(application.get("job_id") or ""))
+        job = Job.from_row(job_row) if job_row else None
+        subject = (subject or str(preview.get("subject") or "")).strip()
+        body = (body or str(preview.get("body") or "")).strip()
+        address = (email or "").strip() or str(preview.get("email") or "")
+        if not address:
+            address = job.contact_address() if job else ""
+        tracking = str(preview.get("tracking") or "") or str(
+            application.get("tracking") or ""
         )
         draft_id = ""
         conversation_id = ""
@@ -550,7 +807,7 @@ class Pipeline:
             draft = self.outlook().create_draft(
                 subject,
                 body,
-                job.contact_address() if job else "",
+                address,
                 tracking=tracking,
             )
             draft_id = str(draft.get("id") or "")
@@ -570,6 +827,16 @@ class Pipeline:
         self.store.log("nachfrage", f"Nachfrage für {company} vorbereitet.")
         self.notify("Nachfrage vorbereitet", f"{company}: {application.get('title') or ''}")
         return True
+
+    def prepare_follow_up(self, application_id: int) -> bool:
+        """Nachfrage ohne Vorschau anlegen (Tageslauf, Aufruf ohne Oberfläche)."""
+        preview = self.follow_up_preview(application_id)
+        return self.create_follow_up_draft(
+            application_id,
+            email=str(preview.get("email") or ""),
+            subject=str(preview.get("subject") or ""),
+            body=str(preview.get("body") or ""),
+        )
 
     # ------------------------------------------------------------------
     # Versand erkennen
@@ -604,6 +871,114 @@ class Pipeline:
             self.notify(
                 "Bewerbung gesendet",
                 f"{application.get('company') or 'Firma'}: {application.get('title') or ''}",
+            )
+            count += 1
+        return count
+
+    def check_drafts(self) -> int:
+        """Entwürfe prüfen: fehlt die Kennung im Entwurfsordner, gilt die
+        Bewerbung als verschickt.
+
+        Die Kennung macht die Zuordnung eindeutig, auch wenn Betreff oder
+        Empfänger im Mailkonto verändert wurden.
+        """
+        if not self.outlook_ready():
+            return 0
+        client = self.outlook()
+        present = getattr(client, "draft_present", None)
+        if not callable(present):
+            return 0
+        count = 0
+        for application in self.store.list_applications(status=STATUS_ENTWURF):
+            code = str(application.get("tracking") or "")
+            if not code:
+                continue
+            if _recent(str(application.get("created_at") or "")):
+                continue
+            try:
+                still_there = bool(present(code))
+            except (OutlookError, ImapError) as exc:
+                self.store.log("fehler", f"Entwurfsprüfung: {exc}")
+                return count
+            if still_there:
+                continue
+            sent: dict[str, Any] | None = None
+            conversation = str(application.get("conversation_id") or "")
+            if conversation:
+                try:
+                    sent = client.find_sent(conversation)
+                except (OutlookError, ImapError):
+                    sent = None
+            self.store.update_application(
+                int(application["id"]),
+                status=STATUS_GESENDET,
+                sent_at=str((sent or {}).get("sentDateTime") or now_iso()),
+                internet_message_id=str((sent or {}).get("internetMessageId") or ""),
+            )
+            company = application.get("company") or "Firma"
+            self.store.log(
+                "versand",
+                f"Bewerbung an {company} ist nicht mehr im Entwurf "
+                f"({code}) – als gesendet markiert.",
+            )
+            self.notify(
+                "Bewerbung gesendet",
+                f"{company}: {application.get('title') or ''}",
+            )
+            count += 1
+        count += self._check_follow_up_drafts(client, present)
+        return count
+
+    def _check_follow_up_drafts(self, client: Any, present: Any) -> int:
+        """Nachfragen mit derselben Kennung pruefen wie die Bewerbung.
+
+        Fehlt die Kennung im Entwurfsordner, wurde die Nachfrage verschickt.
+        """
+        count = 0
+        for application in self.store.list_applications():
+            if str(application.get("status") or "") != STATUS_NACHGEFASST:
+                continue
+            if not application.get("follow_up_at"):
+                continue
+            if application.get("follow_up_sent_at"):
+                continue
+            # Ohne angelegten Entwurf (Mailkonto war nicht bereit) gibt es
+            # nichts zu pruefen.
+            if not str(application.get("follow_up_draft_id") or ""):
+                continue
+            code = str(application.get("tracking") or "")
+            if not code:
+                continue
+            if _recent(str(application.get("follow_up_at") or "")):
+                continue
+            try:
+                still_there = bool(present(code))
+            except (OutlookError, ImapError) as exc:
+                self.store.log("fehler", f"Nachfrage-Prüfung: {exc}")
+                return count
+            if still_there:
+                continue
+            sent_at = now_iso()
+            conversation = str(application.get("follow_up_conversation_id") or "")
+            if conversation:
+                try:
+                    sent = client.find_sent(conversation)
+                except (OutlookError, ImapError):
+                    sent = None
+                sent_at = str((sent or {}).get("sentDateTime") or sent_at)
+            self.store.update_application(
+                int(application["id"]),
+                follow_up_sent_at=sent_at,
+            )
+            company = application.get("company") or "Firma"
+            self.store.log(
+                "versand",
+                f"Nachfrage an {company} ist nicht mehr im Entwurf "
+                f"({code}) – als verschickt vermerkt.",
+            )
+            self.notify(
+                "Nachfrage gesendet",
+                f"{company}: {application.get('title') or ''}",
             )
             count += 1
         return count
@@ -643,7 +1018,12 @@ class Pipeline:
             sender = sender_address(message)
             subject = str(message.get("subject") or "")
             body = message_body(message)
-            kind = self._ai.classify(subject, body, sender)
+            job_row = self.store.get_job(str(application.get("job_id") or ""))
+            job = Job.from_row(job_row) if job_row else None
+            context = (
+                f"Bewerbung als {job.title} bei {job.company}" if job else ""
+            )
+            kind = self._ai.classify(subject, body, sender, context)
             added = self.store.add_reply(
                 int(application["id"]),
                 message_id,
@@ -652,6 +1032,7 @@ class Pipeline:
                 subject,
                 kind,
                 short(body, 400),
+                body=body[:20000],
             )
             if not added:
                 continue
@@ -748,7 +1129,13 @@ class Pipeline:
             self.store.update_application(app_id, status=STATUS_EINLADUNG)
             self.notify("Einladung", f"{company}: {subject}")
         else:
-            self.store.update_application(app_id, reply_note=subject)
+            # Eine blosse Antwort ist ein eigener Status, damit der Filter
+            # «Antwort» im Tab Bewerbungen etwas zeigt. Absage, Zusage und
+            # Einladung bleiben stehen, wenn danach noch eine Info kommt.
+            changes: dict[str, Any] = {"reply_note": subject}
+            if application.get("status") in {STATUS_GESENDET, STATUS_NACHGEFASST}:
+                changes["status"] = STATUS_ANTWORT
+            self.store.update_application(app_id, **changes)
 
     # ------------------------------------------------------------------
     # Nachfassen
@@ -773,6 +1160,7 @@ class Pipeline:
         moment = now or datetime.now(timezone.utc)
         summary = self.run_search(moment)
         try:
+            self.check_drafts()
             self.sync_sent()
             if self.settings.flag("automation.check_replies", True):
                 self.check_replies()

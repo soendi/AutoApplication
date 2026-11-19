@@ -47,7 +47,9 @@ class FakeAI:
     def keywords(self, job: Job, vocabulary: list[str]) -> list[str]:
         return list(job.keywords)
 
-    def classify(self, subject: str, body: str, sender: str = "") -> str:
+    def classify(
+        self, subject: str, body: str, sender: str = "", context: str = ""
+    ) -> str:
         return "absage" if "Absage" in body or "Absage" in subject else "info"
 
     def job_digest(self, job: Job) -> JobDigest:
@@ -108,6 +110,9 @@ class FakeOutlook:
 
     def find_sent(self, conversation_id: str):
         return self.sent
+
+    def draft_present(self, code: str) -> bool:
+        return any(entry.get("tracking") == code for entry in self.drafts)
 
     def inbox_since(self, since_iso: str, top: int = 50):
         return list(self.messages)
@@ -282,7 +287,7 @@ def test_reply_invitation_notifies(tmp_path) -> None:
         }
     ]
     pipeline._ai = type(
-        "AI", (), {"classify": lambda self, subject, body, sender="": "einladung"}
+        "AI", (), {"classify": lambda self, subject, body, sender="", context="": "einladung"}
     )()
     found = pipeline.check_replies()
     assert found and found[0]["kind"] == "einladung"
@@ -416,3 +421,318 @@ def test_ai_greeting_is_replaced_with_contact(tmp_path) -> None:
     body = outlook.drafts[0]["body"]
     assert body.startswith("Sehr geehrter Herr Müller")
     assert "Sehr geehrte Damen und Herren" not in body
+
+
+def test_info_reply_sets_answer_status(tmp_path) -> None:
+    pipeline, store, outlook, _ = _pipeline(tmp_path)
+    pipeline.run_search()
+    pipeline.prepare_application(MATCHING.id)
+    application = store.list_applications()[0]
+    store.update_application(
+        application["id"], status="gesendet", sent_at="2026-11-16T08:00:00+00:00"
+    )
+    outlook.messages = [
+        {
+            "id": "inbox-info",
+            "conversationId": "conv1",
+            "receivedDateTime": "2026-11-18T09:00:00Z",
+            "subject": "Ihre Unterlagen sind eingegangen",
+            "body": {
+                "contentType": "text",
+                "content": "Wir prüfen Ihre Unterlagen und melden uns.",
+            },
+        }
+    ]
+    found = pipeline.check_replies()
+    assert found and found[0]["kind"] == "info"
+    assert store.get_application(application["id"])["status"] == "info"
+    # Genau diese Bewerbung zeigt der Filter «Antwort».
+    filtered = store.list_applications(statuses=["info"])
+    assert [row["id"] for row in filtered] == [application["id"]]
+
+
+def test_info_reply_keeps_stronger_status(tmp_path) -> None:
+    pipeline, store, outlook, _ = _pipeline(tmp_path)
+    pipeline.run_search()
+    pipeline.prepare_application(MATCHING.id)
+    application = store.list_applications()[0]
+    store.update_application(
+        application["id"], status="einladung", sent_at="2026-11-16T08:00:00+00:00"
+    )
+    outlook.messages = [
+        {
+            "id": "inbox-info2",
+            "conversationId": "conv1",
+            "receivedDateTime": "2026-11-18T09:00:00Z",
+            "subject": "Willkommen im Team",
+            "body": {"contentType": "text", "content": "Wir freuen uns auf Sie."},
+        }
+    ]
+    found = pipeline.check_replies()
+    assert found and found[0]["kind"] == "info"
+    # Eine Einladung wird durch eine blosse Antwort nicht zurückgestuft.
+    assert store.get_application(application["id"])["status"] == "einladung"
+
+
+def test_draft_preview_creates_nothing(tmp_path) -> None:
+    pipeline, store, outlook, _ = _pipeline(tmp_path)
+    pipeline.run_search()
+    preview = pipeline.draft_preview(MATCHING.id)
+    assert preview["email"] == "bewerbung@muster-logistik.ch"
+    assert preview["salutation"]
+    assert preview["subject"] and preview["body"]
+    # Noch kein Entwurf und noch keine Bewerbung.
+    assert store.list_applications() == []
+    assert outlook.drafts == []
+
+
+def test_create_draft_uses_edited_text(tmp_path) -> None:
+    pipeline, store, outlook, _ = _pipeline(tmp_path)
+    pipeline.run_search()
+    pipeline.draft_preview(MATCHING.id)
+    application_id = pipeline.create_draft(
+        MATCHING.id,
+        email="personal@muster-logistik.ch",
+        subject="Bewerbung als Speditionskaufmann",
+        body="Sehr geehrte Frau Meier,\n\nangepasster Text.",
+    )
+    assert application_id > 0
+    draft = outlook.drafts[0]
+    assert draft["to"] == "personal@muster-logistik.ch"
+    assert draft["subject"] == "Bewerbung als Speditionskaufmann"
+    assert "angepasster Text" in draft["body"]
+    stored = store.get_application(application_id)
+    assert stored["body"].startswith("Sehr geehrte Frau Meier")
+
+
+def test_proofread_uses_the_ai(tmp_path) -> None:
+    class CorrectingAI(FakeAI):
+        def proofread(self, text: str) -> str:
+            return text.replace("Sehr geehrte", "Sehr geehrte")
+
+    pipeline, _store, _outlook, _ = _pipeline(tmp_path, ai=CorrectingAI())
+    assert pipeline.proofread_available() is True
+    assert pipeline.proofread("Hallo Welt") == "Hallo Welt"
+
+
+def test_proofread_without_ai_keeps_the_text(tmp_path) -> None:
+    pipeline, _store, _outlook, _ = _pipeline(tmp_path)
+    assert pipeline.proofread_available() is False
+    assert pipeline.proofread("Hallo Welt") == "Hallo Welt"
+
+
+def test_proofread_failure_keeps_the_text(tmp_path) -> None:
+    class BrokenAI(FakeAI):
+        def proofread(self, text: str) -> str:
+            raise RuntimeError("kein Netz")
+
+    pipeline, _store, _outlook, _ = _pipeline(tmp_path, ai=BrokenAI())
+    assert pipeline.proofread("Hallo Welt") == "Hallo Welt"
+
+
+def test_draft_gone_means_sent(tmp_path) -> None:
+    pipeline, store, outlook, _ = _pipeline(tmp_path)
+    pipeline.run_search()
+    pipeline.prepare_application(MATCHING.id)
+    application = store.list_applications()[0]
+    store.update_application(
+        application["id"],
+        created_at=(datetime.now(timezone.utc) - timedelta(minutes=30)).isoformat(),
+    )
+    assert application["status"] == "entwurf"
+    # Solange der Entwurf im Mailkonto liegt, bleibt der Status.
+    assert pipeline.check_drafts() == 0
+    assert store.get_application(application["id"])["status"] == "entwurf"
+    # Der Entwurf verschwindet - also wurde die Mail verschickt.
+    outlook.drafts.clear()
+    assert pipeline.check_drafts() == 1
+    stored = store.get_application(application["id"])
+    assert stored["status"] == "gesendet"
+    assert stored["sent_at"]
+    assert any(
+        "nicht mehr im Entwurf" in event["message"] for event in store.events()
+    )
+
+
+def test_draft_check_needs_a_tracking_code(tmp_path) -> None:
+    pipeline, store, outlook, _ = _pipeline(tmp_path, jobs=[])
+    store.upsert_job(MATCHING)
+    store.add_application(MATCHING.id, "spedition", "Betreff", "Text", status="entwurf")
+    # Ohne Kennung bleibt der Eintrag unangetastet (kein Fehlalarm).
+    assert pipeline.check_drafts() == 0
+    assert store.list_applications()[0]["status"] == "entwurf"
+
+
+def test_fresh_draft_is_not_checked_yet(tmp_path) -> None:
+    pipeline, store, outlook, _ = _pipeline(tmp_path)
+    pipeline.run_search()
+    pipeline.prepare_application(MATCHING.id)
+    # Gerade angelegt: der Entwurf wird beim ersten Lauf noch nicht geprüft.
+    outlook.drafts.clear()
+    assert pipeline.check_drafts() == 0
+    assert store.list_applications()[0]["status"] == "entwurf"
+
+
+def test_reply_goes_to_the_ai_with_text_and_job(tmp_path) -> None:
+    pipeline, store, outlook, _ = _pipeline(tmp_path)
+    pipeline.run_search()
+    pipeline.prepare_application(MATCHING.id)
+    application = store.list_applications()[0]
+    store.update_application(
+        application["id"],
+        status="gesendet",
+        sent_at="2026-11-15T08:00:00+00:00",
+    )
+    body = (
+        "Gerne laden wir Sie zu einem Vorstellungsgespräch ein. Passt Ihnen "
+        "Dienstag, 24. November, um 14 Uhr?"
+    )
+    outlook.messages = [
+        {
+            "id": "inbox9",
+            "conversationId": "conv1",
+            "receivedDateTime": "2026-11-16T09:00:00Z",
+            "subject": "Ihre Bewerbung",
+            "body": {"contentType": "text", "content": body},
+        }
+    ]
+    seen: dict[str, str] = {}
+
+    class CapturingAI:
+        def classify(self, subject, body, sender="", context=""):
+            seen.update(subject=subject, body=body, sender=sender, context=context)
+            return "einladung"
+
+    pipeline._ai = CapturingAI()
+    found = pipeline.check_replies()
+    assert found and found[0]["kind"] == "einladung"
+    assert body in seen["body"]
+    assert "Speditionskaufmann" in seen["context"]
+    assert store.list_applications()[0]["status"] == "einladung"
+
+
+def test_reply_is_stored_with_its_whole_text(tmp_path) -> None:
+    pipeline, store, outlook, _ = _pipeline(tmp_path)
+    pipeline.run_search()
+    pipeline.prepare_application(MATCHING.id)
+    application = store.list_applications()[0]
+    store.update_application(
+        application["id"], status="gesendet", sent_at="2026-11-15T08:00:00+00:00"
+    )
+    body = "Guten Tag\n\nGerne laden wir Sie zu einem Vorstellungsgespräch ein.\n" + "Zeile\n" * 200
+    outlook.messages = [
+        {
+            "id": "inbox10",
+            "conversationId": "conv1",
+            "receivedDateTime": "2026-11-16T09:00:00Z",
+            "subject": "Einladung",
+            "body": {"contentType": "text", "content": body},
+        }
+    ]
+    pipeline._ai = type(
+        "AI", (), {"classify": lambda self, subject, body, sender="", context="": "einladung"}
+    )()
+    assert pipeline.check_replies()
+    replies = store.replies_for(int(application["id"]))
+    assert len(replies) == 1
+    assert replies[0]["body"] == body
+    assert replies[0]["seen"] == 0
+
+
+def test_follow_up_preview_creates_nothing(tmp_path) -> None:
+    pipeline, store, outlook, _ = _pipeline(tmp_path, jobs=[])
+    store.upsert_job(MATCHING)
+    application_id = store.add_application(
+        MATCHING.id, "spedition", "Betreff", "Text", status="gesendet"
+    )
+    store.update_application(application_id, sent_at="2026-11-01T08:00:00+00:00")
+    preview = pipeline.follow_up_preview(application_id)
+    assert outlook.drafts == []
+    assert store.get_application(application_id)["status"] == "gesendet"
+    assert "Nachfrage" in preview["subject"]
+    assert preview["body"].strip()
+    assert preview["salutation"].startswith("Sehr geehrte")
+    assert preview["email"] == "bewerbung@muster-logistik.ch"
+    assert preview["company"] == "Muster Logistik AG"
+    assert preview["title"] == "Speditionskaufmann"
+
+
+def test_follow_up_draft_takes_the_edited_values(tmp_path) -> None:
+    pipeline, store, outlook, _ = _pipeline(tmp_path, jobs=[])
+    store.upsert_job(MATCHING)
+    application_id = store.add_application(
+        MATCHING.id, "spedition", "Betreff", "Text", status="gesendet"
+    )
+    store.update_application(application_id, sent_at="2026-11-01T08:00:00+00:00")
+    pipeline.follow_up_preview(application_id)
+    subject = "Nachfrage zu meiner Bewerbung als Speditionskaufmann"
+    body = "Sehr geehrte Damen und Herren,\n\nich frage nach dem Stand meiner Bewerbung."
+    assert pipeline.create_follow_up_draft(
+        application_id, email="neu@muster-logistik.ch", subject=subject, body=body
+    )
+    draft = outlook.drafts[0]
+    assert draft["to"] == "neu@muster-logistik.ch"
+    assert draft["subject"] == subject
+    assert draft["body"] == body
+    application = store.get_application(application_id)
+    assert application["status"] == "nachgefasst"
+    assert application["follow_up_subject"] == subject
+    assert application["follow_up_body"] == body
+    assert draft["tracking"] == application["tracking"]
+    assert store.get_application(application_id)["follow_up_at"]
+
+
+def test_follow_up_without_preview_still_works(tmp_path) -> None:
+    pipeline, store, outlook, _ = _pipeline(tmp_path, jobs=[])
+    store.upsert_job(MATCHING)
+    application_id = store.add_application(
+        MATCHING.id, "spedition", "Betreff", "Text", status="gesendet"
+    )
+    store.update_application(application_id, sent_at="2026-11-01T08:00:00+00:00")
+    assert pipeline.create_follow_up_draft(application_id)
+    assert len(outlook.drafts) == 1
+    assert outlook.drafts[0]["to"] == "bewerbung@muster-logistik.ch"
+    assert store.get_application(application_id)["status"] == "nachgefasst"
+
+
+def test_check_drafts_marks_follow_up_as_sent(tmp_path) -> None:
+    pipeline, store, outlook, _ = _pipeline(tmp_path, jobs=[])
+    store.upsert_job(MATCHING)
+    application_id = store.add_application(
+        MATCHING.id, "spedition", "Betreff", "Text", status="gesendet"
+    )
+    store.update_application(application_id, sent_at="2026-11-01T08:00:00+00:00")
+    pipeline.prepare_follow_up(application_id)
+    assert outlook.drafts
+    old = (datetime.now(timezone.utc) - timedelta(minutes=30)).isoformat(
+        timespec="seconds"
+    )
+    store.update_application(application_id, follow_up_at=old)
+
+    # Entwurf liegt noch im Ordner: nichts vermerken.
+    assert pipeline.check_drafts() == 0
+    assert not store.get_application(application_id)["follow_up_sent_at"]
+
+    # Nach dem Versand fehlt die Kennung im Entwurfsordner.
+    outlook.drafts.clear()
+    assert pipeline.check_drafts() == 1
+    application = store.get_application(application_id)
+    assert application["follow_up_sent_at"]
+    assert application["status"] == "nachgefasst"
+    assert pipeline.check_drafts() == 0
+    messages = [entry["message"] for entry in store.events()]
+    assert any("Nachfrage" in text and "verschickt" in text for text in messages)
+
+
+def test_check_drafts_ignores_follow_up_shortly_after_preparation(tmp_path) -> None:
+    pipeline, store, outlook, _ = _pipeline(tmp_path, jobs=[])
+    store.upsert_job(MATCHING)
+    application_id = store.add_application(
+        MATCHING.id, "spedition", "Betreff", "Text", status="gesendet"
+    )
+    store.update_application(application_id, sent_at="2026-11-01T08:00:00+00:00")
+    pipeline.prepare_follow_up(application_id)
+    outlook.drafts.clear()
+    # Gerade eben angelegt - Karenzzeit gilt auch fuer Nachfragen.
+    assert pipeline.check_drafts() == 0
+    assert not store.get_application(application_id)["follow_up_sent_at"]

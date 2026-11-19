@@ -33,7 +33,7 @@ from ..core.store import Store
 from ..core.text import now_iso
 from .applications import ApplicationsPage
 from .branding import app_icon, logo_pixmap
-from .dialogs import ContactDialog
+from .dialogs import ContactDialog, DraftPreviewDialog
 from .jobs import JobsPage
 from .log_page import LogPage
 from .overview import OverviewPage
@@ -60,6 +60,7 @@ class MainWindow(QMainWindow):
         self._tasks: set[Task] = set()
         self._daily_running = False
         self._update_running = False
+        self._drafts_running = False
 
         self.setWindowTitle(f"{APP_NAME} {APP_VERSION}")
         self.setWindowIcon(app_icon())
@@ -182,6 +183,12 @@ class MainWindow(QMainWindow):
         self.timer.timeout.connect(self._tick)
         self.timer.start(60_000)
 
+        # Alle fünf Minuten nachsehen, ob ein Entwurf verschickt wurde.
+        self.draft_timer = QTimer(self)
+        self.draft_timer.setInterval(5 * 60 * 1000)
+        self.draft_timer.timeout.connect(self.check_drafts)
+        self.draft_timer.start()
+
     # ------------------------------------------------------------------
     def refresh_all(self) -> None:
         for page in getattr(self, "pages", []):
@@ -293,18 +300,43 @@ class MainWindow(QMainWindow):
             return
 
         def work() -> tuple[int, int]:
-            sent = self.pipeline.sync_sent()
+            sent = self.pipeline.check_drafts() + self.pipeline.sync_sent()
             replies = self.pipeline.check_replies()
             return sent, len(replies)
 
         def done(result: tuple[int, int]) -> None:
             sent, replies = result
             self.statusBar().showMessage(
-                f"{sent} gesendete Bewerbungen erkannt, {replies} Antworten ausgewertet.",
+                f"{sent} verschickte Mail(s) erkannt, {replies} Antworten ausgewertet.",
                 15_000,
             )
 
         self.run_task(work, done=done, busy="Postfach wird geprüft …")
+
+    def check_drafts(self) -> None:
+        """Verschickte Entwürfe erkennen (alle fünf Minuten, still)."""
+        if self._drafts_running or not self.pipeline.mail_ready():
+            return
+        self._drafts_running = True
+
+        def done(count: Any) -> None:
+            self._drafts_running = False
+            if count:
+                self.statusBar().showMessage(
+                    f"{count} verschickte Mail(s) erkannt.", 12_000
+                )
+
+        def failed(message: str) -> None:
+            self._drafts_running = False
+            log.warning("Entwurfsprüfung fehlgeschlagen: %s", message)
+
+        task = Task(self.pipeline.check_drafts, self)
+        self._tasks.add(task)
+        task.done.connect(lambda result: (done(result), self._tasks.discard(task)))
+        task.failed.connect(
+            lambda message: (failed(message), self._tasks.discard(task))
+        )
+        task.start()
 
     def prepare_follow_ups(self) -> None:
         self.run_task(
@@ -344,20 +376,101 @@ class MainWindow(QMainWindow):
             )
             self.refresh_all()
         self.run_task(
-            lambda: self.pipeline.prepare_application(job_id),
-            done=lambda _result: self.statusBar().showMessage(
-                "Bewerbung als Entwurf vorbereitet.", 12_000
-            ),
+            lambda: self.pipeline.draft_preview(job_id),
+            done=lambda preview: self._show_draft_preview(job_id, preview),
             busy="Bewerbung wird vorbereitet …",
         )
 
-    def prepare_follow_up(self, application_id: int) -> None:
+    def _show_draft_preview(self, job_id: str, preview: Any) -> None:
+        """Mail zeigen, rechtschreiben lassen und erst dann den Entwurf anlegen."""
+        row = self.store.get_job(job_id) or {}
+        dialog = DraftPreviewDialog(
+            self,
+            email=str(preview.get("email") or ""),
+            salutation=str(preview.get("salutation") or ""),
+            subject=str(preview.get("subject") or ""),
+            body=str(preview.get("body") or ""),
+            title=str(row.get("title") or ""),
+            company=str(row.get("company") or ""),
+        )
+        self._start_proofreading(dialog)
+        if not dialog.exec():
+            self.statusBar().showMessage("Bewerbung nicht angelegt.", 8000)
+            return
+        email_value, _anrede, subject_value, body_value = dialog.values()
         self.run_task(
-            lambda: self.pipeline.prepare_follow_up(application_id),
-            done=lambda _result: self.statusBar().showMessage(
-                "Nachfrage vorbereitet.", 12_000
+            lambda: self.pipeline.create_draft(
+                job_id,
+                email=email_value,
+                subject=subject_value,
+                body=body_value,
             ),
+            done=lambda _result: self.statusBar().showMessage(
+                "Bewerbung als Entwurf vorbereitet.", 12_000
+            ),
+            busy="Entwurf wird angelegt …",
+        )
+
+    def prepare_follow_up(self, application_id: int) -> None:
+        """Erst die Nachfrage zeigen, dann den Entwurf anlegen."""
+        self.run_task(
+            lambda: self.pipeline.follow_up_preview(application_id),
+            done=lambda preview: self._show_follow_up_preview(application_id, preview),
             busy="Nachfrage wird vorbereitet …",
+        )
+
+    def _start_proofreading(self, dialog: DraftPreviewDialog) -> None:
+        """Rechtschreibprüfung im Hintergrund starten und Ergebnis einsetzen."""
+        if self.pipeline.proofread_available():
+            dialog.set_status("Rechtschreibung wird geprüft …")
+            # Text im Hauptthread abholen: der Auftrag läuft in einem eigenen
+            # Thread und darf kein Widget anfassen.
+            text = dialog.body()
+            task = Task(lambda: self.pipeline.proofread(text), self)
+            task.done.connect(dialog.apply_correction)
+            task.failed.connect(
+                lambda message: dialog.set_status(
+                    f"Rechtschreibprüfung fehlgeschlagen: {message}"
+                )
+            )
+            dialog.track(task)
+            task.start()
+        else:
+            dialog.set_status("Ohne KI keine Rechtschreibprüfung.")
+
+    def _show_follow_up_preview(self, application_id: int, preview: Any) -> None:
+        """Nachfrage zeigen, rechtschreiben lassen und erst dann anlegen."""
+        dialog = DraftPreviewDialog(
+            self,
+            email=str(preview.get("email") or ""),
+            salutation=str(preview.get("salutation") or ""),
+            subject=str(preview.get("subject") or ""),
+            body=str(preview.get("body") or ""),
+            title=str(preview.get("title") or ""),
+            company=str(preview.get("company") or ""),
+            heading="Nachfrage prüfen",
+            intro=(
+                "Empfänger, Anrede, Betreff und Text der Nachfrage lassen sich "
+                "hier noch ändern. Erst mit „Entwurf erstellen“ entsteht die "
+                "Mail im Mailkonto."
+            ),
+        )
+        self._start_proofreading(dialog)
+        if not dialog.exec():
+            self.statusBar().showMessage("Nachfrage nicht angelegt.", 8000)
+            return
+        email_value, _anrede, subject_value, body_value = dialog.values()
+        self.run_task(
+            lambda: self.pipeline.create_follow_up_draft(
+                application_id,
+                email=email_value,
+                subject=subject_value,
+                body=body_value,
+            ),
+            done=lambda _result: self.statusBar().showMessage(
+                "Nachfrage als Entwurf vorbereitet.", 12_000
+            ),
+            busy="Nachfrage wird angelegt …",
         )
 
     def run_daily(self) -> None:

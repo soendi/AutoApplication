@@ -43,6 +43,8 @@ def _pipeline(tmp_path, job: Job) -> tuple[Pipeline, Store]:
         store,
         ai_client=FakeAI(),
         templates_file=tmp_path / "vorlagen.json",
+        # Kein Netz im Test: die Anzeigenseite wird nur auf Wunsch geliefert.
+        page_fetcher=lambda url: "",
     )
     return pipeline, store
 
@@ -109,3 +111,145 @@ def test_contact_check_keeps_known_data(tmp_path) -> None:
     )
     pipeline, _store = _pipeline(tmp_path, job)
     assert pipeline.contact_check("ostjob:77") == []
+
+
+def test_contact_from_ad_text_is_read_before_images(tmp_path, monkeypatch) -> None:
+    job = _image_job(
+        contact_email="",
+        description=(
+            "Ihre vollständigen Unterlagen senden Sie bitte an "
+            "personal@progresspersonal.ch. Ansprechpartnerin: Frau Keller."
+        ),
+    )
+    pipeline, store = _pipeline(tmp_path, job)
+    monkeypatch.setattr(ocr, "available", lambda: True)
+
+    def not_used(html: str, base: str = "") -> str:
+        raise AssertionError("Bilder dürfen nicht gelesen werden, wenn der Text reicht")
+
+    monkeypatch.setattr(ocr, "text_from_html", not_used)
+    assert pipeline.contact_check("ostjob:77") == []
+    row = store.get_job("ostjob:77")
+    assert row["contact_email"] == "personal@progresspersonal.ch"
+    assert row["contact_name"] == "Frau Keller"
+    assert Job.from_row(row).contact_address() == "personal@progresspersonal.ch"
+
+
+def test_ad_text_address_without_person_asks_only_for_salutation(
+    tmp_path, monkeypatch
+) -> None:
+    job = _image_job(
+        contact_email="",
+        description="Bewerbung an personal@progresspersonal.ch",
+    )
+    pipeline, store = _pipeline(tmp_path, job)
+    monkeypatch.setattr(ocr, "available", lambda: False)
+    assert pipeline.contact_check("ostjob:77") == ["anrede"]
+    assert store.get_job("ostjob:77")["contact_email"] == "personal@progresspersonal.ch"
+
+
+def test_portal_address_is_not_taken_as_contact(tmp_path, monkeypatch) -> None:
+    job = _image_job(
+        contact_email="",
+        description=(
+            "Fragen zur Anzeige: info@ostjob.ch. Bewerbung an "
+            "personal@progresspersonal.ch"
+        ),
+    )
+    pipeline, store = _pipeline(tmp_path, job)
+    monkeypatch.setattr(ocr, "available", lambda: False)
+    pipeline.contact_check("ostjob:77")
+    assert store.get_job("ostjob:77")["contact_email"] == (
+        "personal@progresspersonal.ch"
+    )
+
+
+def test_person_from_image_fills_the_rest(tmp_path, monkeypatch) -> None:
+    job = _image_job(
+        contact_email="",
+        description="Bewerbung an personal@progresspersonal.ch",
+    )
+    pipeline, store = _pipeline(tmp_path, job)
+    monkeypatch.setattr(ocr, "available", lambda: True)
+    monkeypatch.setattr(
+        ocr,
+        "text_from_html",
+        lambda html, base="": "Ihre Ansprechpartnerin: Frau Keller",
+    )
+    assert pipeline.contact_check("ostjob:77") == []
+    row = store.get_job("ostjob:77")
+    assert row["contact_email"] == "personal@progresspersonal.ch"
+    assert row["contact_name"] == "Frau Keller"
+
+
+def test_address_from_the_linked_ad_page_is_used(tmp_path) -> None:
+    job = _image_job(
+        contact_email="",
+        description="",
+        raw={
+            "contact": (
+                '<p>Apply to this job offer by clicking here:<br />'
+                '<a href="https://careers.example/job/1">https://careers.example/job/1</a></p>'
+            )
+        },
+    )
+    settings = Settings(tmp_path / "einstellungen.json")
+    store = Store(tmp_path / "daten.db")
+    store.upsert_job(job)
+    page = (
+        '<div class="job"><p>Ihre Bewerbung richten Sie bitte an '
+        "marina.peter@progresspersonal.ch.</p></div>"
+    )
+    pipeline = Pipeline(
+        settings,
+        store,
+        ai_client=FakeAI(),
+        templates_file=tmp_path / "vorlagen.json",
+        page_fetcher=lambda url: page,
+    )
+    assert pipeline.contact_check("ostjob:77") == ["anrede"]
+    assert store.get_job("ostjob:77")["contact_email"] == (
+        "marina.peter@progresspersonal.ch"
+    )
+
+
+def test_technical_and_portal_addresses_are_ignored_in_page_text(tmp_path) -> None:
+    job = _image_job(contact_email="", description="")
+    settings = Settings(tmp_path / "einstellungen.json")
+    store = Store(tmp_path / "daten.db")
+    store.upsert_job(job)
+    page = (
+        "Fragen: info@ostjob.ch, inserate@ostjob.ch, "
+        "73996f9349b9426fa79ea6c2c7ff62bc@sentry.example, "
+        "marina.peter@progresspersonal.ch"
+    )
+    pipeline = Pipeline(
+        settings,
+        store,
+        ai_client=FakeAI(),
+        templates_file=tmp_path / "vorlagen.json",
+        page_fetcher=lambda url: page,
+    )
+    pipeline.contact_check("ostjob:77")
+    assert store.get_job("ostjob:77")["contact_email"] == (
+        "marina.peter@progresspersonal.ch"
+    )
+
+
+def test_escaped_line_break_does_not_glue_to_the_address(tmp_path) -> None:
+    job = _image_job(contact_email="", description="")
+    settings = Settings(tmp_path / "einstellungen.json")
+    store = Store(tmp_path / "daten.db")
+    store.upsert_job(job)
+    page = '<script>var text = "Kontakt:\\nmarina.peter@progresspersonal.ch";</script>'
+    pipeline = Pipeline(
+        settings,
+        store,
+        ai_client=FakeAI(),
+        templates_file=tmp_path / "vorlagen.json",
+        page_fetcher=lambda url: page,
+    )
+    pipeline.contact_check("ostjob:77")
+    assert store.get_job("ostjob:77")["contact_email"] == (
+        "marina.peter@progresspersonal.ch"
+    )

@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 FOLLOW_UP_ID = "nachfassen"
 # Fassung der Standardvorlagen. Steht in der Datei eine aeltere Fassung,
 # werden die mitgelieferten Vorlagen nachgezogen (Revision je Vorlage).
-TEMPLATES_VERSION = 3
+TEMPLATES_VERSION = 4
 
 
 @dataclass
@@ -300,6 +300,11 @@ def context_for(
         "telefon": profile.get("telefon", ""),
         "email": profile.get("email", ""),
         "erfahrung": profile.get("erfahrung_jahre", ""),
+        # Jahre in Spedition und Export - nicht die Gesamterfahrung.
+        "erfahrung_spedition": (
+            profile.get("erfahrung_spedition")
+            or profile.get("erfahrung_jahre", "")
+        ),
         "verfuegbar": profile.get("verfuegbar", ""),
         "interessen": profile.get("interessen", ""),
         "faehigkeiten": profile.get("faehigkeiten", ""),

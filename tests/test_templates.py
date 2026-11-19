@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 
+from autoapplication.core.config import Settings
 from autoapplication.core.models import Job
 from autoapplication.core.templates import (
     Template,
@@ -128,7 +129,7 @@ def test_first_load_seeds_file(tmp_path) -> None:
     assert path.exists()
     assert loaded
     payload = json.loads(path.read_text(encoding="utf-8"))
-    assert payload["version"] == 3
+    assert payload["version"] == 4
 
 
 def test_broken_file_uses_defaults(tmp_path) -> None:
@@ -226,3 +227,43 @@ def test_edited_default_template_is_kept(tmp_path) -> None:
     loaded = load_templates(path)
     kept = next(item for item in loaded if item.id == "spedition")
     assert kept.body == "{anrede}\n\nEigener Text"
+
+
+def test_spedition_templates_use_the_logistics_years(tmp_path) -> None:
+    profile = Settings(tmp_path / "einstellungen.json").profile()
+    templates = {item.id: item for item in load_defaults()}
+    for key in ("spedition", "export_zoll"):
+        _subject, body = render_mail(templates[key], profile, _job())
+        assert "fast neunzehn" in body
+        assert "über zwanzig" not in body
+    # Wo die Gesamterfahrung gemeint ist, bleibt "über zwanzig" stehen.
+    _subject, body = render_mail(templates["tapetenwechsel"], profile, _job())
+    assert "über zwanzig" in body
+
+
+def test_own_years_are_used_for_spedition(tmp_path) -> None:
+    profile = {"erfahrung_jahre": "zwölf", "erfahrung_spedition": "sechs"}
+    template = next(item for item in load_defaults() if item.id == "spedition")
+    _subject, body = render_mail(template, profile, _job())
+    assert "Seit sechs Jahren" in body
+
+
+def test_old_spedition_template_gets_the_corrected_years(tmp_path) -> None:
+    path = tmp_path / "vorlagen.json"
+    payload = {
+        "version": 3,
+        "templates": [
+            {
+                "id": "spedition",
+                "name": "Spedition und Logistik",
+                "keywords": ["Spedition"],
+                "subject": "S",
+                "body": "{anrede}\n\nSeit {erfahrung} Jahren arbeite ich in Logistik.",
+                "revision": 3,
+            }
+        ],
+    }
+    path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    loaded = next(item for item in load_templates(path) if item.id == "spedition")
+    assert "{erfahrung_spedition}" in loaded.body
+    assert loaded.revision == 4

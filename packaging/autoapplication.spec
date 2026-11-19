@@ -11,6 +11,10 @@ datas = [
         str(SRC / "autoapplication" / "data" / "templates.json"),
         "autoapplication/data",
     ),
+    (
+        str(SRC / "autoapplication" / "data" / "ocr-test.png"),
+        "autoapplication/data",
+    ),
 ]
 
 OCR_MODULES = (

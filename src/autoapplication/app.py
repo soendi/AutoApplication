@@ -110,6 +110,15 @@ def _self_test() -> int:
         assert pipeline.templates(), "Vorlagen müssen geladen werden"
         assert AiClient(settings).available() is False
 
+        from .core import ocr
+
+        assert ocr.test_image_path().exists(), "Testbild der Texterkennung fehlt"
+        info = ocr.diagnose()
+        print(f"OCR: {ocr.status_line(info)}")
+        if info["available"] and not info["ok"]:
+            print("SELFTEST FEHLER - Windows-Texterkennung liest das Testbild nicht")
+            return 4
+
         assert is_newer("0.9.9", "1.0.0")
         assert not is_newer("1.0.0", "1.0.0")
         release = Release(
@@ -150,6 +159,21 @@ def _apply_update(argv: list[str]) -> int:
     return 0
 
 
+def _log_ocr_status(store: Store) -> str:
+    """Texterkennung ins Protokoll schreiben, solange sie sich nicht aendert."""
+    from .core import ocr
+
+    message = ocr.status_line()
+    for event in store.events(80):
+        if event.get("kind") != "ocr":
+            continue
+        if event.get("message") == message:
+            return message
+        break
+    store.log("ocr", message)
+    return message
+
+
 def _run_daily() -> int:
     """Tageslauf ohne Fenster (z. B. aus der Windows-Aufgabenplanung)."""
     from .core.config import database_path
@@ -159,6 +183,7 @@ def _run_daily() -> int:
     settings = Settings().load()
     store = Store(database_path())
     pipeline = Pipeline(settings, store, notifier=_print_notice)
+    print(_log_ocr_status(store))
     summary = pipeline.run_daily()
     print(summary.as_text())
     return 0
@@ -208,6 +233,7 @@ def main(argv: list[str] | None = None) -> int:
     apply_theme(app)
 
     pipeline = Pipeline(settings, store)
+    _log_ocr_status(store)
     window = MainWindow(settings=settings, store=store, pipeline=pipeline)
     pipeline.notifier = window.notify
     window.show()

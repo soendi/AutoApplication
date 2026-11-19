@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -20,7 +21,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..core.matching import personal_match, priority_key
 from ..core.text import format_date
+from .theme import FIT_COLORS, FIT_LABELS, fit_level
 
 STATUS_LABELS = {
     "neu": "Neu",
@@ -29,10 +32,20 @@ STATUS_LABELS = {
     "beworben": "Beworben",
     "ignoriert": "Ignoriert",
     "archiviert": "Archiviert",
-    "zusage": "Zusage",
+    "zusage": "Zusage (Stelle)",
 }
 
-COLUMNS = ("Datum", "Titel", "Firma", "Ort", "Pensum", "Weg", "Passung", "Status")
+COLUMNS = (
+    "Datum",
+    "Titel",
+    "Firma",
+    "Ort",
+    "Pensum",
+    "Weg",
+    "Interesse",
+    "Fähigkeit",
+    "Status",
+)
 
 
 class JobsPage(QWidget):
@@ -56,9 +69,12 @@ class JobsPage(QWidget):
         self.status.currentIndexChanged.connect(self.refresh)
         # Zuerst die passenden Stellen zeigen; fremde Branchen stehen unter
         # "Ohne Passung" und lassen sich bewusst einblenden.
+        # Noch keine Aktualisierung ausloesen: die Tabelle entsteht erst unten.
+        self.status.blockSignals(True)
         index = self.status.findData("passend")
         if index >= 0:
             self.status.setCurrentIndex(index)
+        self.status.blockSignals(False)
         filters.addWidget(self.search, 1)
         filters.addWidget(self.status)
         layout.addLayout(filters)
@@ -91,6 +107,13 @@ class JobsPage(QWidget):
         buttons.addStretch(1)
         self.hint = QLabel("")
         self.hint.setObjectName("Hint")
+        self.hint.setToolTip(
+            "Farbe der Zeile nach Passung:\n"
+            "Grün: deutlich über der Schwelle der Vorlage\n"
+            "Gelb: Schwelle erreicht\n"
+            "Orange: knapp darunter\n"
+            "Rot: kein Stichwort passt"
+        )
         buttons.addWidget(self.hint)
         layout.addLayout(buttons)
 
@@ -99,11 +122,31 @@ class JobsPage(QWidget):
     # ------------------------------------------------------------------
     def refresh(self) -> None:
         status = self.status.currentData() or None
-        self._rows = self.window.store.list_jobs(
+        jobs = self.window.store.list_jobs(
             status=status or None, search=self.search.text()
         )
-        self.table.setRowCount(len(self._rows))
-        for row, job in enumerate(self._rows):
+        interests = self.window.settings.interests()
+        skills = self.window.settings.skills()
+        decorated = []
+        for job in jobs:
+            hits = personal_match(job, interests, skills)
+            decorated.append((job, hits[0], hits[1]))
+        # Interessen zuerst, dann Faehigkeiten, dann die Passung der Vorlage.
+        decorated.sort(
+            key=lambda item: priority_key(
+                item[1],
+                item[2],
+                int(item[0].get("score") or 0),
+                str(item[0].get("published") or ""),
+            ),
+            reverse=True,
+        )
+        self._rows = [item[0] for item in decorated]
+        min_score = int(self.window.settings.number("matching.min_score", 2) or 2)
+        self.table.setRowCount(len(decorated))
+        for row, (job, found_interests, found_skills) in enumerate(decorated):
+            level = fit_level(int(job.get("score") or 0), min_score)
+            tint = QColor(FIT_COLORS[level])
             values = (
                 format_date(job.get("published") or job.get("first_seen")),
                 job.get("title") or "",
@@ -115,16 +158,32 @@ class JobsPage(QWidget):
                     if job.get("distance_km") is not None
                     else ""
                 ),
-                str(job.get("score") or 0),
+                str(len(found_interests)) if found_interests else "–",
+                str(len(found_skills)) if found_skills else "–",
                 STATUS_LABELS.get(str(job.get("status") or ""), str(job.get("status") or "")),
             )
             for column, value in enumerate(values):
                 item = QTableWidgetItem(str(value))
+                item.setBackground(tint)
                 if column == 6:
                     item.setTextAlignment(Qt.AlignCenter)
                     item.setToolTip(
-                        f"Passende Stichworte: {job.get('keywords') or ''}\n"
-                        f"Vorlage: {job.get('template_id') or '—'}"
+                        (
+                            "Interessen in der Anzeige: "
+                            + ", ".join(found_interests)
+                            if found_interests
+                            else "Kein Interesse aus dem Profil in der Anzeige"
+                        )
+                        + f"\n\nVorlage: {job.get('template_id') or '—'} "
+                        f"({FIT_LABELS[level]}, Schwelle {min_score})\n"
+                        f"Stichworte: {job.get('keywords') or ''}"
+                    )
+                elif column == 7:
+                    item.setTextAlignment(Qt.AlignCenter)
+                    item.setToolTip(
+                        "Fähigkeiten in der Anzeige: " + ", ".join(found_skills)
+                        if found_skills
+                        else "Keine Fähigkeit aus dem Profil in der Anzeige"
                     )
                 if column == 0:
                     item.setData(Qt.UserRole, job.get("id"))

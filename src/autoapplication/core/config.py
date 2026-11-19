@@ -26,6 +26,21 @@ DEFAULTS: dict[str, Any] = {
         "telefon": "",
         "email": "",
         "erfahrung_jahre": "über zwanzig",
+        "erfahrung_spedition": "fast neunzehn",
+        "werdegang": (
+            "seit 07/2026: Techniker, Keller & Dürr Kassensysteme AG – Installation, "
+            "Konfiguration und Betreuung von Kassensystemen (POS), Fernwartung, "
+            "Fehlersuche, Schulung von Anwendern\n"
+            "2014–2026: Shipping Officer, Escatec Switzerland AG – Versand- und "
+            "Exportadministration, Exportkontrollen, Zoll- und Lieferdokumente, "
+            "Transportofferten, ERP (Infor Cloud Suite), interne Schulungen\n"
+            "2011–2013: Speditionssachbearbeiter Zoll und Disposition, Emons "
+            "Transporte AG\n"
+            "2005–2011: Exportsachbearbeiter Luftfracht, Schenker Schweiz AG\n"
+            "2003–2004: User Help Desk, Hilti AG\n"
+            "1999–2002: Ausbildung zum Speditionskaufmann\n"
+            "1997–1998: Ausbildung zum Informatiker, Leica Geosystems"
+        ),
         "verfuegbar": "sofort",
         "interessen": [],
         "faehigkeiten": [],

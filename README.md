@@ -35,8 +35,13 @@ stillen Updates.
    Unterlagenordner (Lebenslauf, Zeugnisse, Diplome). Die Adresse steht schon im
    Feld „An“ des Entwurfs; die Anrede lautet „Sehr geehrter Herr …“ oder
    „Sehr geehrte Frau …“, wenn die Anzeige eine Ansprechperson mit Herr/Frau
-   nennt. Steht der Kontakt in der Anzeige nur als Bild, liest ihn die
-   Texterkennung aus dem Bild. Fehlt danach immer noch etwas, fragt vor dem
+   nennt. Fehlt sie im Kontaktfeld, sucht das Programm sie zuerst im
+   Anzeigetext und im Text der verlinkten Anzeigenseite (viele Portale betten
+   die Anzeige dort ein); Adressen des Portals selbst und technische Kennungen
+   bleiben dabei aussen vor. Steht der Kontakt in der Anzeige nur als Bild,
+   liest ihn die Texterkennung – aus allen Bildern der Anzeige, nicht nur den
+   ersten; Logos, Icons und SVG-Dateien werden an Adresse und Bildbeschreibung
+   erkannt und übersprungen. Fehlt danach immer noch etwas, fragt vor dem
    Entwurf ein Fenster nach E-Mail-Adresse und Ansprechperson. Der Entwurf
    landet in Outlook oder Gmail und wird von Hand gesendet.
 5. **Versand erkennen.** Taucht die Mail in „Gesendete Elemente“ auf, steht das
@@ -46,17 +51,34 @@ stillen Updates.
    (weisser Text in Schriftgrösse 0, dazu HTML-Kommentar und Mailkopf
    `X-AutoApplication-Ref`). Das Postfach wird auf Antworten der Firma geprüft –
    zuerst über diese Kennung, dann über die Unterhaltung, die Absenderdomain,
-   den Firmennamen oder den Stellentitel. Eine **Absage** archiviert die Bewerbung, eine **Zusage** oder
-   **Einladung** erscheint als Hinweis. Im Tab **Bewerbungen** filtern Häkchen
-   nach Status – jeder Status einzeln oder mehrere kombiniert; ohne Häkchen
-   stehen alle Bewerbungen in der Liste. Bei schmalem Fenster oder grösserer
-   Schrift bricht die Häkchenzeile um, statt rechts abgeschnitten zu werden.
+   den Firmennamen oder den Stellentitel. Die KI liest die ganze Antwort und
+   unterscheidet **Zusage (Stelle)** – Vertrag oder feste Einstellung – von
+   **Einladung (Gespräch)** – Vorstellungsgespräch, Kennenlernen, Terminwunsch.
+   Eine Absage archiviert die Bewerbung, Zusage und Einladung erscheinen als
+   Hinweis.
+
+   Im Tab **Bewerbungen** stehen drei Tabellen: **Entwurf/Gesendet/Nachgefragt**,
+   **Antworten** (Antwort, Einladung, Zusage) und **Absagen und Archiv**. Jede
+   Tabelle hat eigene Häkchen für ihre Status; ohne Häkchen ist die Gruppe
+   ausgeblendet. Zeilenfarbe: Entwurf weiss, Gesendet grün, Nachgefragt orange,
+   Antwort orange, Einladung und Zusage grün, Absage rot, Archiviert grau.
+   Doppelklick zeigt je Tabelle die eigene Mail, alle Antworten der Firma in
+   einem Fenster oder die Absage. Ein Umschlag in der ersten Spalte markiert
+   neue, noch nicht gelesene Antworten: geschlossen und orange pulsierend;
+   nach dem Öffnen offen und grau. Bei schmalem Fenster oder grösserer Schrift
+   brechen die Häkchenzeilen um, statt rechts abgeschnitten zu werden.
    Der Knopf „E-Mail-Eingang jetzt prüfen“ stösst den Abgleich sofort an, und
    unter „Anschreiben anzeigen“ steht die Kennung der Bewerbung zum Nachschauen;
    im Protokoll steht bei jeder Antwort, wodurch sie zugeordnet wurde.
 7. **Nachfassen.** Ohne Antwort nach 14 Tagen zeigt die Übersicht die
-   Bewerbung als fällig; auf Klick entsteht die Nachfrage nach Vorlage als
-   Entwurf – einmal je Bewerbung.
+   Bewerbung als fällig; auf Klick entsteht die Nachfrage nach Vorlage – einmal
+   je Bewerbung. Vor dem Entwurf erscheint dasselbe Prüffenster wie bei der
+   Bewerbung: Empfänger, Anrede, Betreff und Text sind änderbar, die
+   Rechtschreibprüfung läuft beim Öffnen, und erst mit „Entwurf erstellen“
+   entsteht die Mail im Mailkonto. Die Kennung der Bewerbung steht auch in der
+   Nachfrage: Verschwindet der Entwurf aus dem Entwurfsordner, vermerkt die
+   Fünf-Minuten-Prüfung die Nachfrage als verschickt; im Tab **Bewerbungen**
+   steht dann das Versanddatum in der Spalte „Fällig“.
 
 ## Installation
 
@@ -97,6 +119,13 @@ Stichworte: **Interessen** (wofür Sie sich eher interessieren) und
 sie müssen sich nicht decken. Die KI bekommt beides als Zusatz zur
 Stellenbeschreibung; in Vorlagen stehen sie als `{interessen}` und
 `{faehigkeiten}` bereit.
+
+Das Feld **Werdegang** nimmt die Stationen auf, eine pro Zeile im Muster
+`Zeitraum: Funktion, Firma – Aufgaben`. Die KI erhält den Werdegang für den
+Mailtext und das Anschreiben und darf Firmen, Jahre und Aufgaben nur von dort
+übernehmen. Zwei weitere Felder nennen die Erfahrung in Worten: **Jahre
+Erfahrung gesamt** (`{erfahrung}`, Standard `über zwanzig`) und **Jahre in
+Spedition/Export** (`{erfahrung_spedition}`, Standard `fast neunzehn`).
 
 ### E-Mail-Anbindung
 
@@ -248,7 +277,7 @@ Alles im Benutzerordner `%USERPROFILE%\AutoApplication` (Linux/macOS:
 | Datei | Inhalt |
 | --- | --- |
 | `einstellungen.json` | Profil, Suche, KI, E-Mail, Automatik |
-| `daten.db` | Stellen, Bewerbungen, Antworten, Protokoll (SQLite) |
+| `daten.db` | Stellen, Bewerbungen, Antworten (mit vollem Text und Gelesen-Kennzeichen), Protokoll (SQLite) |
 | `vorlagen.json` | Vorlagen |
 | `anschreiben/` | erzeugte Anschreiben als PDF |
 | `outlook_token.json` | Anmeldung bei Microsoft (nur eigener Benutzer) |
@@ -266,6 +295,13 @@ PYTHONPATH=src .venv/bin/python -m autoapplication --self-test
 PYTHONPATH=src .venv/bin/python -m autoapplication
 ```
 
+Der Selbsttest meldet auch die Texterkennung, z. B.
+`OCR: Windows-Texterkennung (winrt) liest das Testbild, Adresse anna.muster@example.ch erkannt.`
+Fehlt sie ganz, steht dort `keine Windows-Texterkennung: Kontakte aus Bildern werden
+übersprungen.` – dann fragt das Programm die Angaben wie bisher von Hand ab. Ist eine
+Texterkennung vorhanden, das Testbild aber nicht lesbar, endet der Selbsttest mit Code 4.
+Derselbe Satz steht beim Start und im Tageslauf im Protokoll (Art `ocr`, nur bei Änderung).
+
 Aufbau:
 
 ```
@@ -273,6 +309,7 @@ src/autoapplication/
   app.py              Start, Selbsttest, Tageslauf ohne Fenster
   core/               Konfiguration, Ablage, ostjob.ch, KI, Vorlagen, Outlook, Gmail (IMAP), Ablauf, Updater
   data/templates.json Standardvorlagen
+  data/ocr-test.png  Testbild für die Diagnose der Texterkennung
   ui/                 Oberfläche (PySide6)
 packaging/            PyInstaller-Spec, Inno-Setup, Build-Skript, Symbol
 .github/workflows/    Installer bauen, Tag und Release anlegen
@@ -310,8 +347,10 @@ Das Skript braucht Python und Inno Setup 6 (`ISCC.exe`).
 - Nicht jede Anzeige nennt eine E-Mail-Adresse. Dann bleibt der Entwurf ohne
   Empfänger stehen und die Adresse wird von Hand ergänzt (oder die
   Online-Bewerbung im Feld „Stelle öffnen“ benutzt).
-- Die Antwortauswertung ist eine Einordnung, keine Rechtsauskunft: Absagen und
-  Zusagen werden erkannt, Sonderfälle bleiben als „Antwort“ stehen.
+- Die Antwortauswertung ist eine Einordnung, keine Rechtsauskunft: Absagen,
+  Einladungen und Zusagen werden erkannt, Sonderfälle bleiben als „Antwort“
+  stehen. Ein Gesprächstermin gilt auch dann als Einladung, wenn die Mail das
+  Wort «Zusage» enthält («Zusage zum Vorstellungsgespräch»).
 - Die Kennung reist im zitierten Mailtext mit. Antwortet jemand in reinem Text
   und ohne Zitat der ursprünglichen Mail, fehlt sie – dann greifen wieder
   Unterhaltung, Absenderdomain, Firmenname und Stellentitel.

@@ -128,6 +128,9 @@ def test_write_application_uses_ai(tmp_path) -> None:
     assert "Ich disponiere" in body
     prompt = calls[0][1]["messages"]
     assert "Faehigkeiten: Disposition, SAP" in prompt[1]["content"]
+    assert "Werdegang (Stationen mit Zeitraum und Aufgabe)" in prompt[1]["content"]
+    assert "Keller & Dürr Kassensysteme AG" in prompt[1]["content"]
+    assert "Werdegang" in prompt[0]["content"]
 
 
 def test_write_application_ignores_placeholders(tmp_path) -> None:
@@ -141,11 +144,17 @@ def test_write_application_ignores_placeholders(tmp_path) -> None:
 
 
 def test_cover_letter_uses_ai(tmp_path) -> None:
+    calls: list = []
     settings = _settings(tmp_path)
     client = AiClient(
         settings,
-        transport=_transport({"anschreiben": "Sehr geehrte Damen und Herren,\n\n" + "Absatz. " * 20}, []),
+        transport=_transport({"anschreiben": "Sehr geehrte Damen und Herren,\n\n" + "Absatz. " * 20}, calls),
     )
-    letter = client.cover_letter(PROFILE, _job(), None)
+    profile = dict(PROFILE, werdegang="2014–2026: Shipping Officer, Escatec AG")
+    letter = client.cover_letter(profile, _job(), None)
     assert letter is not None
     assert letter.startswith("Sehr geehrte")
+    prompt = calls[0][1]["messages"]
+    assert "Werdegang (Stationen mit Zeitraum und Aufgabe)" in prompt[1]["content"]
+    assert "Escatec AG" in prompt[1]["content"]
+    assert "Werdegang" in prompt[0]["content"]

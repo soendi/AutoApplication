@@ -351,6 +351,22 @@ class OutlookClient:
         items = body.get("value") or []
         return items[0] if items else None
 
+    def draft_present(self, code: str) -> bool:
+        """Steckt der Entwurf mit dieser Kennung noch im Ordner Entwuerfe?"""
+        token = (code or "").strip()
+        if not token:
+            return False
+        body = self._call(
+            "GET",
+            "/me/mailFolders/drafts/messages",
+            params={
+                "$search": f'"{token}"',
+                "$select": "id,subject",
+                "$top": "1",
+            },
+        )
+        return bool(body.get("value"))
+
     def inbox_since(self, since_iso: str, top: int = 50) -> list[dict[str, Any]]:
         """Nachrichten im Posteingang ab einem Zeitpunkt."""
         body = self._call(
