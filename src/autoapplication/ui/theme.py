@@ -165,6 +165,10 @@ QScrollBar::add-line, QScrollBar::sub-line { width: 0; height: 0; }
 QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }
 QStatusBar { background: #10131a; color: #8b95a5; border-top: 1px solid #23272f; }
 QStatusBar::item { border: none; }
+QLabel#StatusTimer {
+    background: #171a20; color: #a7b0bf; border: 1px solid #262b34;
+    border-radius: 9px; padding: 1px 10px;
+}
 QMenuBar { background: #171a20; border-bottom: 1px solid #23272f; }
 QMenuBar::item { padding: 5px 10px; background: transparent; }
 QMenuBar::item:selected { background: #262b34; border-radius: 5px; }

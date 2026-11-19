@@ -10,7 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
-from PySide6.QtCore import QTimer, QUrl
+from PySide6.QtCore import QEvent, Qt, QTimer, QUrl
 from PySide6.QtGui import QAction, QDesktopServices
 from PySide6.QtWidgets import (
     QApplication,
@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
 from .. import APP_NAME, APP_TAGLINE, APP_VERSION
 from ..core import updater
 from ..core.config import Settings, database_path
-from ..core.pipeline import Pipeline
+from ..core.pipeline import Pipeline, next_run_at
 from ..core.store import Store
 from ..core.text import now_iso
 from .applications import ApplicationsPage
@@ -42,6 +42,21 @@ from .templates_page import TemplatesPage
 from .workers import Task
 
 log = logging.getLogger(__name__)
+
+
+def mail_countdown_text(upcoming: datetime, now: datetime | None = None) -> str:
+    """Kurztext fuer die Statusleiste: wie lange bis zum Postfach-Abruf."""
+    seconds = int((upcoming - (now or datetime.now())).total_seconds())
+    if seconds < 60:
+        return "Postfach-Abruf in Kürze"
+    minutes = seconds // 60
+    if minutes < 60:
+        return f"Postfach-Abruf in {minutes} Min."
+    hours, rest = divmod(minutes, 60)
+    if hours < 24:
+        return f"Postfach-Abruf in {hours} Std. {rest:02d} Min."
+    days, hours = divmod(hours, 24)
+    return f"Postfach-Abruf in {days} Tg. {hours:02d} Std."
 
 
 class MainWindow(QMainWindow):
@@ -69,6 +84,7 @@ class MainWindow(QMainWindow):
         self._build_tabs()
         self._build_menu()
         self.statusBar().showMessage("Bereit.")
+        self._build_mail_timer()
         self._setup_tray()
         self._start_timer()
         self.refresh_all()
@@ -191,6 +207,65 @@ class MainWindow(QMainWindow):
         self.draft_timer.setInterval(5 * 60 * 1000)
         self.draft_timer.timeout.connect(self.check_drafts)
         self.draft_timer.start()
+
+    def _build_mail_timer(self) -> None:
+        """Countdown mittig in der Statusleiste: naechster Postfach-Abruf."""
+        self.mail_timer_label = QLabel(self.statusBar())
+        self.mail_timer_label.setObjectName("StatusTimer")
+        self.mail_timer_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.mail_timer_label.hide()
+        self.statusBar().installEventFilter(self)
+        # Jede Sekunde neu rechnen, damit der Countdown laeuft.
+        self.mail_clock = QTimer(self)
+        self.mail_clock.setInterval(1000)
+        self.mail_clock.timeout.connect(self._update_mail_countdown)
+        self.mail_clock.start()
+        self._update_mail_countdown()
+
+    def eventFilter(self, watched: Any, event: Any) -> bool:
+        if watched is self.statusBar() and event.type() in (
+            QEvent.Type.Resize,
+            QEvent.Type.Show,
+        ):
+            self._place_mail_timer()
+        return super().eventFilter(watched, event)
+
+    def _place_mail_timer(self) -> None:
+        """Die Anzeige in der Mitte der Statusleiste halten."""
+        label = getattr(self, "mail_timer_label", None)
+        if label is None or not label.isVisible():
+            return
+        bar = self.statusBar()
+        label.adjustSize()
+        label.move(
+            max(6, (bar.width() - label.width()) // 2),
+            max(0, (bar.height() - label.height()) // 2),
+        )
+        label.raise_()
+
+    def _update_mail_countdown(self) -> None:
+        label = getattr(self, "mail_timer_label", None)
+        if label is None:
+            return
+        if not self.pipeline.mail_ready() or not self.settings.flag(
+            "automation.check_replies", True
+        ):
+            label.hide()
+            return
+        daily = self.settings.text("automation.daily_time", "07:30")
+        upcoming = next_run_at(daily)
+        if upcoming is None:
+            label.hide()
+            return
+        label.setText(mail_countdown_text(upcoming))
+        label.setToolTip(
+            "Nächster automatischer Postfach-Abruf beim Tageslauf: "
+            f"{upcoming.strftime('%d.%m.%Y %H:%M')} Uhr,\n"
+            "solange AutoApplication läuft. Die Zeit steht unter "
+            "Einstellungen > KI & Automatisierung."
+        )
+        label.show()
+        self._place_mail_timer()
 
     def _probe_ocr(self) -> None:
         """Texterkennung im Hintergrund prüfen und ins Protokoll schreiben."""

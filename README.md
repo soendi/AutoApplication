@@ -1,4 +1,4 @@
-# AutoApplication 1.0.30
+# AutoApplication 1.0.31
 
 Stellen von ostjob.ch suchen, Bewerbungen als Entwurf in Outlook oder Gmail
 vorbereiten und Antworten bis zur Zusage verfolgen – als Windows-Programm mit
@@ -132,7 +132,7 @@ vorhandene Adressen werden bei späteren Läufen nachgetragen.
 
 ## Installation
 
-`AutoApplication-1.0.30-Setup.exe` von der
+`AutoApplication-1.0.31-Setup.exe` von der
 [Release-Seite](https://github.com/soendi/AutoApplication/releases/latest)
 herunterladen und ausführen. Windows 10 und 11, kein Administrator- und kein
 Python-Zubehör nötig.
@@ -384,6 +384,10 @@ Platzhalter in Betreff und Text:
 - **Postfach prüfen** und **Nachfragen vorbereiten** gehen auch von Hand. Die
   Statusleiste nennt dabei die Schritte: «Prüfe gesendete E-Mails …», «Prüfe
   Entwürfe …» und «Prüfe Posteingang …».
+- **Countdown in der Statusleiste.** In der Mitte steht, wann der nächste
+  Postfach-Abruf ansteht («Postfach-Abruf in 3 Std. 12 Min.»); der Mauszeiger
+  nennt Datum und Uhrzeit. Ist die E-Mail-Anbindung nicht eingerichtet oder
+  die regelmässige Prüfung ausgeschaltet, bleibt die Anzeige weg.
 
 Der Tageslauf lässt sich ohne Fenster starten – etwa aus der
 Windows-Aufgabenplanung:

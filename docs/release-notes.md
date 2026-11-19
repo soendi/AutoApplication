@@ -1,3 +1,17 @@
+## AutoApplication 1.0.31
+
+Die Statusleiste zeigt, wann der nächste Postfach-Abruf ansteht.
+
+### Neu
+
+- **Countdown in der Statusleiste.** In der Mitte steht zum Beispiel
+  «Postfach-Abruf in 10 Std. 52 Min.» und zaehlt bis zum naechsten
+  automatischen Lauf herunter, der das Postfach prueft. Unter einer Stunde
+  zeigt die Anzeige Minuten, kurz vor dem Lauf «Postfach-Abruf in Kürze».
+  Der Mauszeiger nennt Datum und Uhrzeit sowie den Ort der Einstellung. Ist
+  die E-Mail-Anbindung nicht eingerichtet oder «Posteingang regelmässig
+  prüfen» ausgeschaltet, bleibt die Anzeige weg.
+
 ## AutoApplication 1.0.30
 
 Die Trefferquote in der Stellenliste versteht verwandte Begriffe, gewichtet
