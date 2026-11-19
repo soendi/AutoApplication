@@ -128,6 +128,17 @@ class JobsPage(QWidget):
         if index >= 0:
             self.status.setCurrentIndex(index)
         self.status.blockSignals(False)
+        # Stellen mit Bewerbungsformular (F) ausblenden. Der Zustand wird beim
+        # Umschalten gespeichert und gilt beim naechsten Start wieder.
+        self.hide_forms = QCheckBox("ohne Bewerbungsformulare")
+        self.hide_forms.setToolTip(
+            "Stellen mit einem Bewerbungsformular (F in der Spalte F) "
+            "in der Tabelle ausblenden."
+        )
+        self.hide_forms.setChecked(
+            self.window.settings.flag("search.hide_forms", False)
+        )
+        self.hide_forms.toggled.connect(self._hide_forms_changed)
         # Firmen aus der Jobvermittler-Liste ausblenden. Der Zustand wird
         # beim Umschalten gespeichert und gilt beim naechsten Start wieder.
         self.hide_brokers = QCheckBox("ohne Jobvermittler")
@@ -140,6 +151,7 @@ class JobsPage(QWidget):
         )
         self.hide_brokers.toggled.connect(self._hide_brokers_changed)
         filters.addWidget(self.search, 1)
+        filters.addWidget(self.hide_forms)
         filters.addWidget(self.hide_brokers)
         filters.addWidget(self.status)
         self.search_button = QPushButton("Jetzt Stellen neu suchen")
@@ -282,6 +294,17 @@ class JobsPage(QWidget):
         self.refresh()
 
     # ------------------------------------------------------------------
+    def _hide_forms_changed(self, checked: bool) -> None:
+        """Haekchen sofort merken - auch ohne «Speichern» in den Einstellungen."""
+        self.window.settings.set("search.hide_forms", checked)
+        try:
+            self.window.settings.save()
+        except OSError:
+            # Eine nicht schreibbare Einstellungsdatei darf die Ansicht nicht
+            # blockieren; dann gilt beim naechsten Start wieder der alte Wert.
+            pass
+        self.refresh()
+
     def _hide_brokers_changed(self, checked: bool) -> None:
         """Haekchen sofort merken - auch ohne «Speichern» in den Einstellungen."""
         self.window.settings.set("search.hide_job_brokers", checked)
@@ -298,6 +321,8 @@ class JobsPage(QWidget):
         jobs = self.window.store.list_jobs(
             status=status or None, search=self.search.text()
         )
+        if self.hide_forms.isChecked():
+            jobs = [job for job in jobs if not job.get("has_form")]
         if self.hide_brokers.isChecked():
             brokers = {
                 normalize(name) for name in self.window.settings.job_brokers()

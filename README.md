@@ -1,4 +1,4 @@
-# AutoApplication 1.0.26
+# AutoApplication 1.0.27
 
 Stellen von ostjob.ch suchen, Bewerbungen als Entwurf in Outlook oder Gmail
 vorbereiten und Antworten bis zur Zusage verfolgen – als Windows-Programm mit
@@ -88,10 +88,11 @@ Datum, Titel, Ansprechperson, E-Mail, Firma, Ort, Adresse und PLZ sowie Pensum,
 Weg, Interesse, Fähigkeit und Status. Das **F** steht auch dann, wenn das
 Formular nicht auf der Anzeige selbst liegt, sondern auf einer eingebetteten
 Seite des Arbeitgebers oder hinter «Jetzt bewerben». Die Suchzeile darüber
-findet auch Adresse und Postleitzahl. Die Checkbox **ohne Jobvermittler** blendet alle Firmen aus
-der Liste **Einstellungen → Ostjob → Jobvermittler** aus; der Knopf
-**Als Jobvermittler eintragen** nimmt die Firma der markierten oder angehakten
-Zeilen in diese Liste auf. Doppelte Einträge werden übersprungen, und der
+findet auch Adresse und Postleitzahl. Die Checkbox **ohne Bewerbungsformulare**
+blendet alle Stellen aus, die in der Spalte **F** markiert sind. Die Checkbox
+**ohne Jobvermittler** blendet alle Firmen aus der Liste **Einstellungen →
+Ostjob → Jobvermittler** aus; der Knopf **Als Jobvermittler eintragen** nimmt
+die Firma der markierten oder angehakten Zeilen in diese Liste auf. Doppelte Einträge werden übersprungen, und der
 Zustand der Checkbox bleibt für den nächsten Start erhalten.
 
 - **Ansprechperson mit Anrede.** Nennt die Anzeige „Herr …“ oder „Frau …“, wird
@@ -109,7 +110,7 @@ vorhandene Adressen werden bei späteren Läufen nachgetragen.
 
 ## Installation
 
-`AutoApplication-1.0.26-Setup.exe` von der
+`AutoApplication-1.0.27-Setup.exe` von der
 [Release-Seite](https://github.com/soendi/AutoApplication/releases/latest)
 herunterladen und ausführen. Windows 10 und 11, kein Administrator- und kein
 Python-Zubehör nötig.
@@ -265,7 +266,10 @@ ersetzt: `{vorname}`, `{nachname}`, `{name}`, `{strasse}`, `{plz}`,
 `{datum}`, `{ort_datum}`, `{verfuegbar}`, `{erfahrung}`,
 `{erfahrung_spedition}` und `{text}` (der ganze Brieftext ab der Anrede, ohne
 Schlussformel). Mit `{fett}` am Zeilenanfang wird die Zeile fett, mit
-`{rechts}` rechtsbündig gesetzt – so steht das Datum rechts.
+`{rechts}` am Zeilenanfang rechtsbündig gesetzt – so steht das Datum rechts.
+Steht `{rechts}` **mitten** in der Zeile, bleibt der vordere Teil links und der
+Rest steht rechts, etwa `{firma_plz_ort} {rechts} {ort_datum}`: PLZ und Ort
+links, Ort und Datum rechts auf derselben Zeile.
 
 Die Mail-Vorschau vor dem Entwurf zeigt unter **„Anschrift im Anschreiben“**
 den Empfängerblock so, wie er im PDF steht: Firma, Strasse, PLZ und Ort.

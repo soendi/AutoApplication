@@ -172,6 +172,8 @@ class Text:
     align: str = "left"
     gap: float = 0.0
     color: tuple[float, float, float] = BLACK
+    # Zweiter Text am rechten Rand, auf derselben Grundlinie (z. B. Datum).
+    right: str = ""
 
     def height(self) -> float:
         return self.size * LINE_FACTOR + self.gap
@@ -309,10 +311,8 @@ def _paginate(flow: list[Text]) -> list[list[tuple[Text, float]]]:
     return pages
 
 
-def _text_commands(item: Text, baseline: float) -> bytes:
-    x = MARGIN_X
-    if item.align == "right":
-        x = PAGE_WIDTH - MARGIN_X - _text_width(item.text, item.size, item.bold)
+def _line_command(item: Text, text: str, x: float, baseline: float) -> bytes:
+    """Eine Textzeile an der Stelle ``x`` setzen."""
     font = "F2" if item.bold else "F1"
     red, green, blue = item.color
     prefix = (
@@ -320,12 +320,28 @@ def _text_commands(item: Text, baseline: float) -> bytes:
         f"BT /{font} {item.size:.2f} Tf "
         f"1 0 0 1 {x:.2f} {baseline:.2f} Tm ("
     ).encode("ascii")
-    return prefix + _pdf_escape(item.text) + b") Tj ET"
+    return prefix + _pdf_escape(text) + b") Tj ET"
+
+
+def _text_commands(item: Text, baseline: float) -> bytes:
+    commands: list[bytes] = []
+    if item.text:
+        x = MARGIN_X
+        if item.align == "right":
+            x = PAGE_WIDTH - MARGIN_X - _text_width(item.text, item.size, item.bold)
+        commands.append(_line_command(item, item.text, x, baseline))
+    if item.right:
+        # Rechter Teil auf derselben Grundlinie wie der linke.
+        x = PAGE_WIDTH - MARGIN_X - _text_width(item.right, item.size, item.bold)
+        commands.append(_line_command(item, item.right, x, baseline))
+    return b"\n".join(commands)
 
 
 def _page_content(items: list[tuple[Text, float]]) -> bytes:
     commands = [
-        _text_commands(item, baseline) for item, baseline in items if item.text
+        _text_commands(item, baseline)
+        for item, baseline in items
+        if item.text or item.right
     ]
     return b"\n".join(commands)
 
@@ -472,7 +488,10 @@ DEFAULT_LETTER_TEMPLATE = """# AutoApplication — Anschreiben-Vorlage (frei anp
 #
 # Zusätze am Zeilenanfang:
 #   {fett}   diese Zeile fett setzen (z. B. Betreff)
-#   {rechts} diese Zeile rechtsbündig setzen (z. B. Ort und Datum)
+#   {rechts} diese Zeile rechtsbündig setzen (z. B. Ort und Datum).
+#            Steht {rechts} mitten in der Zeile, bleibt der vordere Teil
+#            links und der Rest steht rechts, z. B.
+#            {firma_plz_ort} {rechts} {ort_datum}
 
 {vorname} {nachname}
 {strasse}
@@ -642,10 +661,31 @@ def template_flow(template: str, values: dict[str, str]) -> list[Text]:
         if line.startswith(_MARK_RIGHT):
             align = "right"
             line = line[len(_MARK_RIGHT) :].lstrip()
+        # {rechts} mitten in der Zeile: der vordere Teil steht links, der Rest
+        # am rechten Rand - beides auf derselben Zeile.
+        right_part = ""
+        if _MARK_RIGHT in line and "{text}" not in line:
+            left_part, _, rest = line.partition(_MARK_RIGHT)
+            line = left_part.rstrip()
+            right_part = rest.strip()
+            align = "left"
+            if not line.strip():
+                # Nur rechts: die ganze Zeile steht am rechten Rand.
+                line, right_part, align = right_part, "", "right"
         if not line.strip():
             flow.append(Text("", FONT_SIZE))
             continue
         if drop_plain_city and re.fullmatch(r"\{ort\}\s*[.,]?", line.strip()):
+            continue
+        if right_part:
+            flow.append(
+                Text(
+                    _fill(line, values).strip(),
+                    FONT_SIZE,
+                    bold=bold,
+                    right=_fill(right_part, values).strip(),
+                )
+            )
             continue
         if "{text}" in line:
             used_text = True

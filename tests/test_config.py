@@ -112,6 +112,7 @@ def test_job_brokers_are_unique_and_clean(tmp_path) -> None:
     settings.set("search.job_brokers", "Müller AG; Meier GmbH")
     assert settings.job_brokers() == ["Müller AG", "Meier GmbH"]
     assert DEFAULTS["search"]["hide_job_brokers"] is False
+    assert DEFAULTS["search"]["hide_forms"] is False
 
 
 def test_excluded_and_cantons(tmp_path) -> None:

@@ -1,3 +1,23 @@
+## AutoApplication 1.0.27
+
+Stellen mit Bewerbungsformular lassen sich ausblenden, Bewerberportale zaehlen
+als Formular, und Ort und Datum duerfen auf einer Zeile stehen.
+
+### Neu
+
+- **Checkbox «ohne Bewerbungsformulare».** In der Stellenuebersicht steht sie
+  zwischen Suchfeld und «ohne Jobvermittler». Ist sie angehakt, verschwinden
+  alle Zeilen mit **F** in der Spalte F; der Zustand wird sofort gespeichert
+  und gilt beim naechsten Start wieder.
+- **Bewerberportal gilt als Formular.** Nennt die Ausschreibung ein
+  «Bewerberportal» oder «Bewerbungsportal» (auch «Bewerber-Portal»), erhaelt
+  die Stelle ein **F**, ohne dass eine Seite geholt werden muss. Bereits
+  geprueften Stellen ohne Formular werden dafuer einmal neu nachgesehen.
+- **`{rechts}` mitten in der Zeile.** In der Anschreiben-Vorlage darf der
+  Marker jetzt auch innerhalb einer Zeile stehen: `{firma_plz_ort} {rechts}
+  {ort_datum}` setzt PLZ und Ort links und Ort und Datum rechts auf dieselbe
+  Zeile. Am Zeilenanfang wirkt `{rechts}` wie bisher auf die ganze Zeile.
+
 ## AutoApplication 1.0.26
 
 Zwei Korrekturen: Formulare in eingebetteten Bewerbungsseiten werden erkannt,

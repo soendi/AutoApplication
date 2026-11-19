@@ -68,6 +68,8 @@ DEFAULTS: dict[str, Any] = {
         # Firmen, die nur vermitteln; in der Stellenliste ausblendbar.
         "job_brokers": [],
         "hide_job_brokers": False,
+        # Stellen mit Bewerbungsformular in der Stellenliste ausblenden.
+        "hide_forms": False,
     },
     "matching": {
         "min_score": 2,

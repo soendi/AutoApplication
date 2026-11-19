@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 from autoapplication.core.models import Job
-from autoapplication.core.store import Store
+from autoapplication.core.store import FORM_CHECK_VERSION, Store
 from autoapplication.core.text import now_iso
 
 
@@ -32,7 +32,7 @@ def test_old_form_results_are_checked_again(tmp_path) -> None:
 
     again = Store(path)
     assert again.get_job(job.id)["form_checked"] == 0
-    assert again.meta_get("form_check_version") == "2"
+    assert again.meta_get("form_check_version") == FORM_CHECK_VERSION
 
 
 def test_upsert_job_only_new_once(tmp_path) -> None:

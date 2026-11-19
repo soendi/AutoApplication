@@ -67,7 +67,7 @@ APPLICATION_FIELDS = {
 
 # Wird die Formularerkennung erweitert, steigt diese Nummer und bereits
 # gepruefte Stellen ohne Formular werden noch einmal nachgesehen.
-FORM_CHECK_VERSION = "2"
+FORM_CHECK_VERSION = "3"
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS jobs (

@@ -165,6 +165,24 @@ def test_form_behind_embedded_page_is_detected(tmp_path) -> None:
     assert "https://ats.example/redirect/abc/ats/" in calls
 
 
+def test_portal_words_mark_form_without_page(tmp_path) -> None:
+    pipeline, store, calls = _pipeline(tmp_path, {})
+    for number, word in enumerate(("Bewerberportal", "Bewerbungsportal"), start=2):
+        job = _job(
+            id=f"ostjob:{number}",
+            source_id=str(number),
+            raw={},
+            description=f"Bewerbungen nimmt unser {word} entgegen.",
+        )
+        store.upsert_job(job)
+
+        assert pipeline._mark_form(Job.from_row(store.get_job(job.id)))
+        row = store.get_job(job.id)
+        assert row["has_form"] == 1
+        assert row["form_checked"] == 1
+    assert calls == []
+
+
 def test_unreachable_application_page_is_checked_later(tmp_path) -> None:
     job = _job()
     pipeline, store, _calls = _pipeline(tmp_path, {})

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import date
 
 from autoapplication.core.documents import (
@@ -100,6 +101,57 @@ def test_letter_template_places_placeholders(tmp_path) -> None:
     # einmal Absenderblock oben, einmal als Unterschrift.
     assert data.count(b"Freundliche Gr\xfcsse") == 1
     assert data.count(b"Max Muster") == 2
+
+
+def test_mid_line_right_marker_keeps_one_line() -> None:
+    values = {
+        "firma_plz_ort": "9000 St. Gallen",
+        "ort_datum": "Balgach, 19.11.2026",
+        "text": "",
+    }
+    flow = template_flow("{firma_plz_ort} {rechts} {ort_datum}\n", values)
+    assert [(item.text, item.right, item.align) for item in flow] == [
+        ("9000 St. Gallen", "Balgach, 19.11.2026", "left")
+    ]
+
+
+def test_mid_line_right_marker_sets_both_sides_in_pdf(tmp_path) -> None:
+    template = tmp_path / "zweiteilig.txt"
+    template.write_text(
+        "{firma_plz_ort} {rechts} {ort_datum}\n\n{fett} {betreff}\n\n{text}\n",
+        encoding="utf-8",
+    )
+    profile = {
+        "vorname": "Max",
+        "nachname": "Muster",
+        "strasse": "Dorfstrasse 1",
+        "plz": "9436",
+        "wohnort": "Balgach",
+    }
+    path = write_cover_letter(
+        profile,
+        "Lagermitarbeiter",
+        "Muster AG",
+        "Sehr geehrte Damen und Herren\n\nIch bewerbe mich.\n\n"
+        "Freundliche Gr\xfcsse\nMax Muster",
+        city="St. Gallen",
+        street="Bahnhofstrasse 5",
+        zip_code="9000",
+        folder=tmp_path / "out",
+        day=date(2026, 11, 19),
+        template=template,
+    )
+    data = path.read_bytes()
+    assert b"{rechts}" not in data
+    left = re.search(rb"1 0 0 1 ([\d.]+) ([\d.]+) Tm \(9000 St\. Gallen\)", data)
+    right = re.search(
+        rb"1 0 0 1 ([\d.]+) ([\d.]+) Tm \(Balgach, 19\.11\.2026\)", data
+    )
+    assert left is not None and right is not None
+    # Gleiche Grundlinie, rechter Teil weiter rechts und am rechten Rand.
+    assert float(left.group(2)) == float(right.group(2))
+    assert float(right.group(1)) > float(left.group(1))
+    assert float(right.group(1)) > 400
 
 
 def test_template_preview_shows_placeholders(tmp_path) -> None:

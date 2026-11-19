@@ -148,6 +148,10 @@ _FORM_WORDS_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Nennt die Ausschreibung ein Bewerberportal, gibt es dort ein Formular.
+_PORTAL_WORD_RE = re.compile(r"bewerb(?:er|ungs)-?portal", re.IGNORECASE)
+
+
 # Viele Portale zeigen das Formular nicht selbst, sondern betten die Seite des
 # Arbeitgebers ein oder verlinken sie. Diese Verweise werden mitverfolgt.
 _IFRAME_RE = re.compile(r"<iframe\b[^>]*\bsrc\s*=\s*[\"']([^\"']+)", re.IGNORECASE)
@@ -196,6 +200,11 @@ def _link_target(url: str, base: str) -> str:
     if any(host == item or host.endswith("." + item) for item in _IGNORED_LINK_HOSTS):
         return ""
     return absolute
+
+
+def mentions_application_portal(text: str | None) -> bool:
+    """Steht im Text «Bewerberportal» oder «Bewerbungsportal»?"""
+    return bool(_PORTAL_WORD_RE.search(text or ""))
 
 
 def application_form_links(html: str, base: str = "") -> list[str]:
@@ -806,6 +815,10 @@ class Pipeline:
         if apply_url.lower().startswith("mailto:"):
             # Bewerbung per E-Mail - dort gibt es kein Formular.
             return False
+        if mentions_application_portal(job.description):
+            # Die Ausschreibung nennt ein Bewerberportal: Dort gibt es ein
+            # Formular, ohne dass eine Seite geholt werden muss.
+            return True
         job_url = (job.url or "").strip()
         queue: list[tuple[str, int]] = []
         for candidate in (self._form_source(job), job_url):
